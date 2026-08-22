@@ -68,7 +68,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { toasts, remote, reload, dismissRemote } = useStore()
+  const { toasts, remote, reload, dismissRemote, future } = useStore()
   const ui = useUI()
   const route = useRoute()
   const [palette, setPalette] = useState(false)
@@ -83,6 +83,7 @@ function Shell() {
       else if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); ui.toggleSidebar() }
       else if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setPalette(true) }
       else if (mod && e.key.toLowerCase() === 'j') { e.preventDefault(); setReview(true) }
+      else if (mod && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); ui.toggleZen() }
       else if (e.key === 'Escape' && ui.zen) { ui.setZen(false) }
       else if (!typing && !mod && e.key === 'n') { e.preventDefault(); setAdding(newTask()) }
     }
@@ -127,6 +128,16 @@ function Shell() {
             <Icon name="plus" size={13} /> Tarea
           </button>
         </div>
+        {future && (
+          <div className="notice bar err">
+            <Icon name="x" size={13} />
+            <span>
+              Este <span className="mono">db.json</span> lo escribió una versión más nueva de prolife
+              {typeof future === 'number' ? ` (v${future})` : ''}. Para no estropear nada, aquí no se guarda
+              nada hasta que actualices la app en este ordenador.
+            </span>
+          </div>
+        )}
         {remote && (
           <div className="notice bar">
             <Icon name="refresh" size={13} />

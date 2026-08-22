@@ -18,6 +18,7 @@ export default function Files() {
     { p: 'Universidad', label: 'Universidad' },
     { p: 'Trabajo', label: 'Trabajo' },
     { p: 'Tareas', label: 'Tareas' },
+    { p: 'Deporte', label: 'Deporte' },
     { p: 'Personal', label: 'Personal' },
   ]
 

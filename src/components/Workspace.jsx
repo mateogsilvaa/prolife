@@ -4,6 +4,7 @@ import Icon, { KIND_ICON, KIND_COLOR } from './Icon.jsx'
 import Editor from './Editor.jsx'
 import BrowserPane from './BrowserPane.jsx'
 import CodePane from './CodePane.jsx'
+import Ask from './Ask.jsx'
 import { api } from '../lib/api.js'
 import { useStore, uid } from '../lib/store.jsx'
 import { useUI } from '../lib/ui.jsx'
@@ -12,8 +13,18 @@ marked.setOptions({ breaks: true, gfm: true })
 
 const kb = (n) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`)
 const AUTOSAVE_MS = 1800
+/** Cada cuánto se copia el layout al db.json, que es lo que viaja entre ordenadores. */
+const LAYOUT_SYNC_MS = 1500
 const MAX_PANES = 3
 const emptyPane = () => ({ id: uid('p'), tabs: [], active: null })
+
+/**
+ * Lo que no se puede enseñar aquí dentro sin destrozarlo: se lanza directamente
+ * con el programa del sistema en vez de abrir una pestaña que solo dice eso.
+ */
+const EXTERNAL_KINDS = new Set(['office', 'archive'])
+
+const readJson = (raw) => { try { return JSON.parse(raw || 'null') } catch { return null } }
 
 /**
  * Espacio de trabajo. Un árbol de archivos plegable y hasta tres paneles que
@@ -22,10 +33,13 @@ const emptyPane = () => ({ id: uid('p'), tabs: [], active: null })
  * sitio útil es lo que más escasea.
  */
 export default function Workspace({ root }) {
-  const { toast } = useStore()
+  const { db, update, toast } = useStore()
   const ui = useUI()
 
   const [tree, setTree] = useState(null)
+  const [treeError, setTreeError] = useState(null)
+  const [loadingTree, setLoadingTree] = useState(true)
+  const [ask, setAsk] = useState(null)
   const [open, setOpen] = useState(() => new Set())
   const [docs, setDocs] = useState({})
   const [panes, setPanes] = useState([emptyPane()])
@@ -48,37 +62,102 @@ export default function Workspace({ root }) {
 
   const loadTree = useCallback(async () => {
     if (root == null) return
-    try { setTree(await api.tree(root)) } catch (e) { toast(e.message, 'err') }
+    setLoadingTree(true)
+    try {
+      setTree(await api.tree(root))
+      setTreeError(null)
+    } catch (e) {
+      // Antes esto solo sacaba un aviso que se iba solo y el panel se quedaba
+      // con cara de carpeta vacía: ahora el error se queda a la vista.
+      setTree(null)
+      setTreeError(e.message)
+      toast(e.message, 'err')
+    } finally {
+      setLoadingTree(false)
+    }
   }, [root, toast])
 
-  useEffect(() => { loadTree() }, [loadTree])
+  useEffect(() => { setTree(null); setTreeError(null); loadTree() }, [loadTree])
+
+  /**
+   * Los archivos también llegan por fuera: los dejas desde el explorador, o los
+   * trae la carpeta sincronizada. Al volver a la ventana se relee el árbol para
+   * que aparezcan sin tener que acordarse de recargar.
+   */
+  useEffect(() => {
+    const onFocus = () => loadTree()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [loadTree])
+
+  /** Pide un texto (o una confirmación) con un modal propio; `null` si se cancela. */
+  const askFor = useCallback(
+    (opts) =>
+      new Promise((resolve) => {
+        setAsk({
+          ...opts,
+          onOk: (v) => { setAsk(null); resolve(v) },
+          onCancel: () => { setAsk(null); resolve(null) },
+        })
+      }),
+    []
+  )
 
   /* --------------------------------------------------------- persistencia */
 
+  /**
+   * El layout se guarda en dos sitios y a propósito:
+   *
+   * - `localStorage` es la escritura inmediata, para que arrastrar un panel o
+   *   cambiar de pestaña no dependa de que el servidor conteste.
+   * - `db.json` (dentro de la carpeta sincronizada) recibe lo mismo con retraso,
+   *   y es lo que hace que el otro ordenador se encuentre el espacio como lo
+   *   dejaste. Al abrir gana la copia más reciente de las dos.
+   */
   const storeKey = root == null ? null : 'prolife.ws2:' + root
+  const hydratedKey = useRef(null)
+  const dbRef = useRef(db)
+  useEffect(() => { dbRef.current = db }, [db])
 
   useEffect(() => {
     if (!storeKey) return
-    try {
-      const saved = JSON.parse(localStorage.getItem(storeKey) || 'null')
-      if (saved?.panes?.length) {
-        setPanes(saved.panes)
-        setDir(saved.dir || 'row')
-        setRail(saved.rail !== false)
-        setSizes(saved.sizes?.length === saved.panes.length ? saved.sizes : saved.panes.map(() => 1))
-        for (const p of saved.panes) for (const t of p.tabs) if (t.type === 'file') hydrate(t.file)
-      } else {
-        setPanes([emptyPane()])
-      }
-    } catch {
+    hydratedKey.current = null
+    const local = readJson(localStorage.getItem(storeKey))
+    const remote = dbRef.current?.workspaces?.[root] || null
+    const saved = (remote?.updatedAt || 0) > (local?.updatedAt || 0) ? remote : local
+
+    if (saved?.panes?.length) {
+      setPanes(saved.panes)
+      setDir(saved.dir || 'row')
+      setRail(saved.rail !== false)
+      setSizes(saved.sizes?.length === saved.panes.length ? saved.sizes : saved.panes.map(() => 1))
+      for (const p of saved.panes) for (const t of p.tabs) if (t.type === 'file') hydrate(t.file)
+    } else {
       setPanes([emptyPane()])
     }
+    hydratedKey.current = storeKey
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeKey])
 
   useEffect(() => {
-    if (storeKey) localStorage.setItem(storeKey, JSON.stringify({ panes, dir, rail, sizes }))
-  }, [storeKey, panes, dir, rail, sizes])
+    // Hasta que no se ha leído lo guardado, lo que hay en pantalla es el estado
+    // por defecto: escribirlo pisaría lo que venga del otro ordenador.
+    if (!storeKey || hydratedKey.current !== storeKey) return
+    const state = { panes, dir, rail, sizes, updatedAt: Date.now() }
+    localStorage.setItem(storeKey, JSON.stringify(state))
+
+    // Pasar por una carpeta sin abrir nada no ensucia el db.json de los dos ordenadores.
+    const untouched = panes.length === 1 && !panes[0].tabs.length
+    if (untouched && !dbRef.current?.workspaces?.[root]) return
+
+    const t = setTimeout(() => {
+      update((d) => {
+        if (!d.workspaces || typeof d.workspaces !== 'object') d.workspaces = {}
+        d.workspaces[root] = state
+      })
+    }, LAYOUT_SYNC_MS)
+    return () => clearTimeout(t)
+  }, [storeKey, root, panes, dir, rail, sizes, update])
 
   // los tamaños siguen al número de paneles
   useEffect(() => {
@@ -142,10 +221,19 @@ export default function Workspace({ root }) {
   const openFile = useCallback(
     (file, paneIndex) => {
       if (file.dir) return
+      // Word, Excel y PowerPoint van directos a su programa: una pestaña que solo
+      // dice «ábrelo fuera» es un clic de más para algo que ya estaba decidido.
+      if (EXTERNAL_KINDS.has(file.kind)) {
+        api
+          .openPath(file.path)
+          .then(() => toast(`Abriendo ${file.name} con su programa`))
+          .catch((e) => toast(e.message, 'err'))
+        return
+      }
       hydrate(file)
       addTab({ id: uid('tab'), type: 'file', path: file.path, name: file.name, file }, paneIndex)
     },
-    [hydrate, addTab]
+    [hydrate, addTab, toast]
   )
 
   const openBrowser = (url = '', paneIndex) =>
@@ -200,9 +288,9 @@ export default function Workspace({ root }) {
         Object.entries(docsRef.current).filter(([, d]) => d.dirty).forEach(([p]) => save(p))
         toast('Guardado')
       } else if (mod && e.key.toLowerCase() === 'e') {
+        // Ctrl+E y Ctrl+\ solo tienen sentido donde hay árbol y paneles; el modo
+        // concentración, que sí vale en cualquier pantalla, lo escucha App.jsx.
         e.preventDefault(); setRail((v) => !v)
-      } else if (mod && e.shiftKey && e.key.toLowerCase() === 'z') {
-        e.preventDefault(); ui.toggleZen()
       } else if (mod && e.key === '\\') {
         e.preventDefault()
         setPanes((ps) => {
@@ -215,7 +303,7 @@ export default function Workspace({ root }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [save, toast, ui, focusPane])
+  }, [save, toast, focusPane])
 
   /* ------------------------------------------------------------ acciones */
 
@@ -232,39 +320,56 @@ export default function Workspace({ root }) {
       const r = await api.upload(dirPath, files)
       toast(`${r.files.length} archivo${r.files.length > 1 ? 's' : ''} guardado${r.files.length > 1 ? 's' : ''}`)
       await loadTree()
-      if (r.files.length === 1) openFile(r.files[0])
+      if (r.files.length === 1 && !EXTERNAL_KINDS.has(r.files[0].kind)) openFile(r.files[0])
     } catch (e) { toast(e.message, 'err') }
   }
 
+  /** `currentDir` es '' cuando el espacio apunta a la raíz del directorio. */
+  const inCurrentDir = (name) => (currentDir ? `${currentDir}/${name}` : name)
+
   const newNote = async () => {
-    const name = prompt('Nombre de la nota', 'apuntes.md')
+    const name = await askFor({ title: 'Nota nueva', label: 'Nombre del archivo', value: 'apuntes.md' })
     if (!name) return
     const file = name.includes('.') ? name : `${name}.md`
-    const p = `${currentDir}/${file}`
-    await api.writeText(p, `# ${file.replace(/\.[^.]+$/, '')}\n\n`)
-    await loadTree()
-    openFile({ path: p, name: file, kind: file.endsWith('.md') ? 'markdown' : 'text', editable: true, ext: '.' + file.split('.').pop() })
+    const p = inCurrentDir(file)
+    try {
+      await api.writeText(p, `# ${file.replace(/\.[^.]+$/, '')}\n\n`)
+      await loadTree()
+      openFile({ path: p, name: file, kind: file.endsWith('.md') ? 'markdown' : 'text', editable: true, ext: '.' + file.split('.').pop() })
+    } catch (e) { toast(e.message, 'err') }
   }
 
   const newFolder = async () => {
-    const name = prompt('Nombre de la carpeta')
+    const name = await askFor({ title: 'Carpeta nueva', label: 'Nombre de la carpeta', placeholder: 'Tema 3' })
     if (!name) return
-    await api.mkdir(`${currentDir}/${name.replace(/[\\/:*?"<>|]/g, '-')}`)
-    loadTree()
+    try {
+      await api.mkdir(inCurrentDir(name.replace(/[\\/:*?"<>|]/g, '-')))
+      await loadTree()
+    } catch (e) { toast(e.message, 'err') }
   }
 
   const remove = async (file) => {
-    if (!confirm(`¿Eliminar "${file.name}" del disco?`)) return
-    await api.remove(file.path)
-    setPanes((ps) => ps.map((p) => ({ ...p, tabs: p.tabs.filter((t) => t.path !== file.path) })))
-    loadTree()
+    const ok = await askFor({
+      title: 'Eliminar del disco',
+      message: `"${file.name}" se borra de la carpeta real, no solo de la app.`,
+      okText: 'Eliminar',
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await api.remove(file.path)
+      setPanes((ps) => ps.map((p) => ({ ...p, tabs: p.tabs.filter((t) => t.path !== file.path) })))
+      await loadTree()
+    } catch (e) { toast(e.message, 'err') }
   }
 
   const rename = async (file) => {
-    const name = prompt('Nuevo nombre', file.name)
+    const name = await askFor({ title: 'Renombrar', label: 'Nuevo nombre', value: file.name })
     if (!name || name === file.name) return
-    await api.rename(file.path, name)
-    loadTree()
+    try {
+      await api.rename(file.path, name)
+      await loadTree()
+    } catch (e) { toast(e.message, 'err') }
   }
 
   const dragRail = (e) => {
@@ -304,7 +409,16 @@ export default function Workspace({ root }) {
             <input ref={input} type="file" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
 
             <div className={`ws-tree${over ? ' over' : ''}`}>
-              {tree?.items?.length ? (
+              {treeError ? (
+                <div className="ws-tree-msg">
+                  <Icon name="x" size={16} style={{ color: 'var(--accent)' }} />
+                  <span>No se ha podido leer la carpeta.</span>
+                  <span className="mono dim">{treeError}</span>
+                  <button className="btn sm" onClick={loadTree}><Icon name="refresh" size={12} /> Reintentar</button>
+                </div>
+              ) : !tree && loadingTree ? (
+                <div className="ws-tree-msg dim">Leyendo la carpeta…</div>
+              ) : tree?.items?.length ? (
                 <Tree
                   items={tree.items}
                   filter={filter.toLowerCase()}
@@ -318,10 +432,18 @@ export default function Workspace({ root }) {
                   depth={0}
                 />
               ) : (
-                <button className="ws-empty" onClick={() => input.current?.click()}>
-                  <Icon name="upload" size={18} />
-                  <span>Arrastra aquí tus apuntes, PDFs o entregas</span>
-                </button>
+                <div className="ws-tree-msg">
+                  <button className="ws-empty" onClick={() => input.current?.click()}>
+                    <Icon name="upload" size={18} />
+                    <span>Arrastra aquí tus apuntes, PDFs o entregas</span>
+                  </button>
+                  {/* Si la carpeta debería tener cosas, ver cuál se está mirando ahorra el susto. */}
+                  <span className="mono dim">{tree?.path ? `${tree.path}/` : 'la raíz del directorio'} está vacía</span>
+                  <div className="row" style={{ gap: 6, justifyContent: 'center' }}>
+                    <button className="btn sm ghost" onClick={newNote}><Icon name="edit" size={12} /> Nota</button>
+                    <button className="btn sm ghost" onClick={loadTree}><Icon name="refresh" size={12} /> Recargar</button>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -428,6 +550,8 @@ export default function Workspace({ root }) {
           })}
         </div>
       </div>
+
+      {ask && <Ask {...ask} />}
     </div>
   )
 }

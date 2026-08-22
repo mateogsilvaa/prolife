@@ -7,7 +7,7 @@ import cors from 'cors'
 import multer from 'multer'
 
 import { readConfig, writeConfig, ensureBase, safeJoin, cloudRoots, syncInfo, ROOT } from './config.js'
-import { loadDb, saveDb, backupDb, dbPath } from './db.js'
+import { loadDb, saveDb, scheduleBackups, dbPath, readRaw, isFuture, versionOf, SCHEMA } from './db.js'
 import * as vscode from './code.js'
 import * as assistant from './assistant.js'
 
@@ -50,14 +50,27 @@ export function createApp() {
 
   let cfg = readConfig()
   ensureBase(cfg.baseDir)
-  backupDb(cfg.baseDir)
+  // El directorio puede cambiar en caliente desde Ajustes: la copia mira siempre el actual.
+  scheduleBackups(() => cfg.baseDir)
 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 * 1024 } })
 
+  /**
+   * Todo error de una ruta sale como JSON con su motivo. Sin el `try` de fuera,
+   * lo que se lanza de forma síncrona (`safeJoin`, `saveDb`…) se escapaba al
+   * manejador por defecto de Express, que responde una página HTML: la interfaz
+   * se quedaba con un «Error 403» pelado en vez de con la explicación.
+   */
   const wrap = (fn) => (req, res) => {
-    Promise.resolve(fn(req, res)).catch((err) => {
+    const fail = (err) => {
+      if (res.headersSent) return
       res.status(err.status || 500).json({ error: err.message || 'Error interno' })
-    })
+    }
+    try {
+      Promise.resolve(fn(req, res)).catch(fail)
+    } catch (err) {
+      fail(err)
+    }
   }
 
   function entryInfo(abs, rel, name) {
@@ -111,15 +124,28 @@ export function createApp() {
     }
   }
 
-  app.get('/api/db', wrap((_req, res) => res.json({ ...loadDb(cfg.baseDir), _stamp: stamp() })))
+  /** Versión del fichero en disco cuando es más nueva que la que entiende esta app. */
+  const futureVersion = () => {
+    const raw = readRaw(cfg.baseDir)
+    return raw && isFuture(raw) ? versionOf(raw) : null
+  }
 
-  app.get('/api/db/stamp', (_req, res) => res.json({ stamp: stamp() }))
+  app.get(
+    '/api/db',
+    wrap((_req, res) =>
+      res.json({ ...loadDb(cfg.baseDir), _stamp: stamp(), _schema: SCHEMA, _future: futureVersion() })
+    )
+  )
+
+  app.get('/api/db/stamp', (_req, res) => res.json({ stamp: stamp(), future: futureVersion() }))
 
   app.put(
     '/api/db',
     wrap((req, res) => {
       const body = { ...req.body }
       delete body._stamp
+      delete body._schema
+      delete body._future
       saveDb(cfg.baseDir, body)
       res.json({ ok: true, stamp: stamp() })
     })
@@ -270,13 +296,25 @@ export function createApp() {
 
   /* --------------------------------------------------- abrir cosas fuera --- */
 
+  /**
+   * Un `spawn` que falla emite 'error' fuera de la promesa de la ruta: sin este
+   * manejador, no encontrar el lanzador del sistema tumbaba el servidor entero
+   * y con él la app. Abrir algo por fuera nunca puede costar tanto.
+   */
+  function launch(cmd, args, opts = {}) {
+    const child = spawn(cmd, args, { detached: true, stdio: 'ignore', ...opts })
+    child.on('error', (err) => console.error(`No se pudo abrir con ${cmd}:`, err.message))
+    child.unref()
+    return child
+  }
+
   function openExternal(target) {
     if (process.platform === 'win32') {
-      spawn('cmd', ['/c', 'start', '', target], { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+      launch('cmd', ['/c', 'start', '', target], { windowsHide: true })
     } else if (process.platform === 'darwin') {
-      spawn('open', [target], { detached: true, stdio: 'ignore' }).unref()
+      launch('open', [target])
     } else {
-      spawn('xdg-open', [target], { detached: true, stdio: 'ignore' }).unref()
+      launch('xdg-open', [target])
     }
   }
 
@@ -295,15 +333,13 @@ export function createApp() {
 
       if (application === 'code') {
         const cmd = process.platform === 'win32' ? 'code.cmd' : 'code'
-        const child = spawn(cmd, [abs], { detached: true, stdio: 'ignore', shell: process.platform === 'win32' })
-        child.on('error', () => {})
-        child.unref()
+        launch(cmd, [abs], { shell: process.platform === 'win32' })
         return res.json({ ok: true })
       }
 
       if (application === 'reveal') {
-        if (process.platform === 'win32') exec(`explorer.exe /select,"${abs}"`)
-        else if (process.platform === 'darwin') spawn('open', ['-R', abs], { detached: true, stdio: 'ignore' }).unref()
+        if (process.platform === 'win32') exec(`explorer.exe /select,"${abs}"`, () => {})
+        else if (process.platform === 'darwin') launch('open', ['-R', abs])
         else openExternal(path.dirname(abs))
         return res.json({ ok: true })
       }

@@ -6,7 +6,7 @@ export function dbPath(baseDir) {
   return path.join(baseDir, '.prolife', 'db.json')
 }
 
-export const SCHEMA = 3
+export const SCHEMA = 4
 
 export const DEFAULT_CATEGORIES = [
   { id: 'cat-uni', name: 'Universidad', color: '#3c5a78', area: 'uni' },
@@ -58,13 +58,31 @@ export const EMPTY_DB = {
   sessions: [],
   events: [],
   training: [],
+  /**
+   * Estado del espacio de trabajo por carpeta: qué paneles, pestañas y tamaños
+   * tenías abiertos. Vive aquí, y no solo en el navegador, para que viaje con
+   * la carpeta sincronizada al otro ordenador.
+   */
+  workspaces: {},
 }
 
 /**
  * v1 → v2: aparecen categorías, entrenamientos y uso de IA; desaparece `sports`.
  * v2 → v3: las IAs empotradas se retiran, llegan los exámenes, el horario deja de
  *          ser eterno (cada clase tiene su rango de fechas) y aparece el ayudante local.
+ * v3 → v4: el estado del espacio de trabajo (paneles, pestañas, tamaños) pasa a
+ *          guardarse aquí para que viaje entre ordenadores. No toca datos previos.
  */
+
+/** Versión que trae el fichero tal cual está en disco. */
+export const versionOf = (raw) => Number(raw?.version) || 1
+
+/**
+ * ¿Este fichero lo escribió una versión de prolife más nueva que la nuestra?
+ * En ese caso no se migra «hacia abajo» ni se guarda encima: se avisa.
+ */
+export const isFuture = (raw) => versionOf(raw) > SCHEMA
+
 function migrate(raw) {
   const db = { ...structuredClone(EMPTY_DB), ...raw }
   db.settings = { ...EMPTY_DB.settings, ...(raw.settings || {}) }
@@ -112,19 +130,40 @@ function migrate(raw) {
     schedule: (s.schedule || []).map((sl) => ({ from: '', until: '', ...sl })),
   }))
 
-  db.version = SCHEMA
+  if (!db.workspaces || typeof db.workspaces !== 'object' || Array.isArray(db.workspaces)) db.workspaces = {}
+
+  // Nunca hacia abajo: si el fichero es de una versión más nueva, se respeta su
+  // número. Rebajarlo haría que la próxima app moderna reaplicase migraciones
+  // viejas sobre datos que ya no lo son, y eso sí destruye trabajo.
+  db.version = Math.max(versionOf(raw), SCHEMA)
   return db
 }
 
-export function loadDb(baseDir) {
+/** Lee el JSON crudo del disco, sin migrar. `null` si no hay o no se puede leer. */
+export function readRaw(baseDir) {
   try {
-    return migrate(JSON.parse(fs.readFileSync(dbPath(baseDir), 'utf8')))
+    return JSON.parse(fs.readFileSync(dbPath(baseDir), 'utf8'))
   } catch {
-    return structuredClone(EMPTY_DB)
+    return null
   }
 }
 
+export function loadDb(baseDir) {
+  const raw = readRaw(baseDir)
+  if (!raw) return structuredClone(EMPTY_DB)
+  return migrate(raw)
+}
+
 export function saveDb(baseDir, data) {
+  const disk = readRaw(baseDir)
+  if (disk && isFuture(disk)) {
+    const err = new Error(
+      `El archivo de datos es de una versión más nueva de prolife (v${versionOf(disk)}; esta entiende v${SCHEMA}). ` +
+        'Actualiza la app en este ordenador antes de seguir trabajando aquí: guardar ahora podría estropear los datos.'
+    )
+    err.status = 409
+    throw err
+  }
   const file = dbPath(baseDir)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   const tmp = file + '.tmp'
@@ -143,4 +182,23 @@ export function backupDb(baseDir) {
   if (!fs.existsSync(target)) fs.copyFileSync(file, target)
   const old = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort().slice(0, -14)
   for (const f of old) fs.rmSync(path.join(dir, f), { force: true })
+}
+
+/**
+ * La copia diaria no puede depender de que reinicies la app: si la dejas abierta
+ * una semana, hay que seguir haciéndola. Se comprueba cada hora porque `backupDb`
+ * ya es idempotente dentro del mismo día (y así un cambio de día se recoge solo).
+ */
+export function scheduleBackups(getBaseDir, everyMs = 3600_000) {
+  const tick = () => {
+    try {
+      backupDb(getBaseDir())
+    } catch {
+      /* un fallo de copia no puede tumbar el servidor */
+    }
+  }
+  tick()
+  const timer = setInterval(tick, everyMs)
+  timer.unref?.()
+  return () => clearInterval(timer)
 }

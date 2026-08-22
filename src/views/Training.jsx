@@ -85,9 +85,16 @@ export default function Training() {
             {weekTrainings.length} de {goal} sesiones esta semana · {dur(weekMin * 60, true)} en total.
           </p>
         </div>
-        <button className="btn primary" onClick={() => setForm(byDate.get(today()) || blank(today(), db.settings.trainingTypes))}>
-          <Icon name="plus" size={13} /> Registrar hoy
-        </button>
+        <div className="row" style={{ gap: 6 }}>
+          {/* `Deporte/` existe desde siempre en el disco; hasta ahora no había forma
+              de llegar a ella desde aquí: planes, series y vídeos viven ahí. */}
+          <a className="btn ghost" href="#/archivos" title="Planes, series y vídeos en Deporte/">
+            <Icon name="folder" size={13} /> Documentos
+          </a>
+          <button className="btn primary" onClick={() => setForm(byDate.get(today()) || blank(today(), db.settings.trainingTypes))}>
+            <Icon name="plus" size={13} /> Registrar hoy
+          </button>
+        </div>
       </div>
 
       <div className="grid-3" style={{ marginBottom: 20 }}>

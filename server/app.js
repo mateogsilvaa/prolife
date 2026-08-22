@@ -6,7 +6,10 @@ import express from 'express'
 import cors from 'cors'
 import multer from 'multer'
 
-import { readConfig, writeConfig, ensureBase, safeJoin, cloudRoots, syncInfo, ROOT } from './config.js'
+import {
+  readConfig, writeConfig, ensureBase, safeJoin, cloudRoots, syncInfo, ROOT,
+  ensureToken, newToken, tokenMatches, lanAddresses,
+} from './config.js'
 import { loadDb, saveDb, scheduleBackups, dbPath, readRaw, isFuture, versionOf, SCHEMA } from './db.js'
 import * as vscode from './code.js'
 import * as assistant from './assistant.js'
@@ -54,6 +57,40 @@ export function createApp() {
   scheduleBackups(() => cfg.baseDir)
 
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 * 1024 } })
+
+  /* ------------------------------------------------------------- acceso --- */
+
+  /** ¿La petición sale de este mismo ordenador? */
+  const isLocal = (req) => {
+    const ip = (req.socket?.remoteAddress || '').replace(/^::ffff:/, '')
+    return ip === '127.0.0.1' || ip === '::1' || ip === ''
+  }
+
+  /**
+   * Los archivos de la interfaz son públicos —si no, la tablet no podría ni
+   * cargar la pantalla para escribir la clave—, pero todo lo que toca tus datos
+   * exige clave en cuanto la petición no venga del propio ordenador.
+   *
+   * Sin `remote` activado el servidor ni siquiera escucha fuera de 127.0.0.1;
+   * esto es la segunda cerradura, para que activarlo no dependa de la red.
+   */
+  /**
+   * Nada de la API se guarda en la caché del navegador. Son datos vivos: una
+   * respuesta guardada por Chrome se sirve sin pasar por el service worker, con
+   * lo que la app enseñaría el pasado creyéndolo el presente — y sin conexión
+   * ni siquiera se daría cuenta de que no hay conexión.
+   */
+  app.use('/api', (_req, res, next) => {
+    res.set('Cache-Control', 'no-store')
+    next()
+  })
+
+  app.use('/api', (req, res, next) => {
+    if (isLocal(req)) return next()
+    const given = req.get('x-prolife-key') || req.query.k || ''
+    if (tokenMatches(given, cfg.token)) return next()
+    res.status(401).json({ error: 'Hace falta la clave de acceso de este ordenador.' })
+  })
 
   /**
    * Todo error de una ruta sale como JSON con su motivo. Sin el `try` de fuera,
@@ -109,24 +146,56 @@ export function createApp() {
     res.json({ ok: true, baseDir: cfg.baseDir, platform: process.platform, home: os.homedir() })
   )
 
-  app.get('/api/config', (_req, res) => res.json({ ...cfg, sync: syncInfo(cfg.baseDir) }))
+  /** El token no se devuelve nunca: se enseña solo en el ordenador, en Ajustes. */
+  const publicCfg = () => {
+    const { token, ...rest } = cfg
+    return { ...rest, hasToken: !!token, sync: syncInfo(cfg.baseDir) }
+  }
+
+  app.get('/api/config', (_req, res) => res.json(publicCfg()))
+
+  /* --------------------------------------------------- acceso desde fuera --- */
+
+  /**
+   * Datos para emparejar la tablet. Solo desde el propio ordenador: es lo único
+   * que enseña la clave, y quien ya la tiene no necesita pedirla.
+   */
+  /** Cómo está el acceso desde fuera, y con qué clave. */
+  const remoteState = () => ({
+    enabled: !!cfg.remote,
+    port: cfg.port,
+    token: cfg.token || null,
+    addresses: lanAddresses(),
+  })
+
+  /**
+   * Datos para emparejar la tablet. Solo desde el propio ordenador: es lo único
+   * que enseña la clave, y quien ya la tiene no necesita pedirla.
+   */
+  const onlyHere = (req) => {
+    if (!isLocal(req)) throw Object.assign(new Error('Solo desde el ordenador'), { status: 403 })
+  }
+
+  app.get('/api/remote', wrap((req, res) => { onlyHere(req); res.json(remoteState()) }))
 
   app.put(
-    '/api/config',
+    '/api/remote',
     wrap((req, res) => {
+      onlyHere(req)
       const patch = {}
-      if (typeof req.body.baseDir === 'string' && req.body.baseDir.trim()) {
-        patch.baseDir = path.resolve(req.body.baseDir.trim())
-      }
+      if (typeof req.body.enabled === 'boolean') patch.remote = req.body.enabled
+      // Renovar cambia la clave y echa a los aparatos ya emparejados, que es
+      // justo para lo que sirve: la tablet perdida o el token compartido de más.
+      if (req.body.renew === true) patch.token = newToken()
       cfg = writeConfig(patch)
-      ensureBase(cfg.baseDir)
-      res.json({ ...cfg, sync: syncInfo(cfg.baseDir) })
+      // Encender por primera vez necesita una clave con la que emparejar.
+      if (cfg.remote && !cfg.token) {
+        ensureToken()
+        cfg = readConfig()
+      }
+      // El puerto ya está escuchando donde estaba: el cambio entra al reiniciar.
+      res.json({ ...remoteState(), restart: true })
     })
-  )
-
-  /** Carpetas de nube detectadas, para poder trabajar desde dos ordenadores. */
-  app.get('/api/sync/roots', (_req, res) =>
-    res.json({ roots: cloudRoots(), current: syncInfo(cfg.baseDir), home: os.homedir() })
   )
 
   /* ---------------------------------------------------------- base datos --- */
@@ -162,6 +231,7 @@ export function createApp() {
       delete body._stamp
       delete body._schema
       delete body._future
+      delete body._stale
       saveDb(cfg.baseDir, body)
       res.json({ ok: true, stamp: stamp() })
     })
@@ -283,6 +353,15 @@ export function createApp() {
       if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
         return res.status(404).json({ error: 'No existe' })
       }
+      // Los archivos sí merecen caché, pero validada: un PDF de 30 MB no puede
+      // volver a viajar entero cada vez que se pinta, y a la vez tiene que
+      // notarse si lo has cambiado por fuera.
+      const st = fs.statSync(abs)
+      const lastModified = new Date(Math.floor(st.mtimeMs / 1000) * 1000).toUTCString()
+      res.set('Cache-Control', 'no-cache')
+      res.set('Last-Modified', lastModified)
+      if (req.get('if-modified-since') === lastModified) return res.status(304).end()
+
       const ext = path.extname(abs).toLowerCase()
       if (MIME[ext]) res.type(MIME[ext])
       if (req.query.download) res.attachment(path.basename(abs))
@@ -428,8 +507,13 @@ export function createApp() {
 
 export function startServer() {
   const { app, cfg } = createApp()
+  // Por defecto solo se ve desde este ordenador. Escuchar en toda la red es una
+  // decisión que se toma a mano en Ajustes, y va siempre con clave.
+  const host = cfg.remote ? '0.0.0.0' : '127.0.0.1'
   return new Promise((resolve, reject) => {
-    const server = app.listen(cfg.port, '127.0.0.1', () => resolve({ server, port: cfg.port, baseDir: cfg.baseDir }))
+    const server = app.listen(cfg.port, host, () =>
+      resolve({ server, port: cfg.port, baseDir: cfg.baseDir, host, remote: !!cfg.remote })
+    )
     server.on('error', reject)
   })
 }

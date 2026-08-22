@@ -4,6 +4,176 @@ import { LOGO_PATH, bumpLogo } from '../components/Brand.jsx'
 import { useStore, uid, PALETTE, isDesktop } from '../lib/store.jsx'
 import { api } from '../lib/api.js'
 
+/**
+ * Si esta pantalla se está viendo desde el aparato que se quiere instalar, dice
+ * directamente si va a poder instalarse o no, que es más útil que explicarlo.
+ */
+function SecureHint() {
+  const secure = typeof window !== 'undefined' && window.isSecureContext
+  const sw = typeof navigator !== 'undefined' && 'serviceWorker' in navigator
+  const local = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname)
+
+  // En el ordenador esto no aporta nada: la app ya está donde tiene que estar.
+  if (local) return null
+
+  const ok = secure && sw
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Instalar en este aparato</h3>
+        {ok && <span className="badge">se puede</span>}
+      </div>
+      <div className={`notice${ok ? '' : ' err'}`}>
+        <Icon name={ok ? 'check' : 'x'} size={13} />
+        <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+          {ok
+            ? 'Esta dirección es segura. Usa «Añadir a pantalla de inicio» en el menú del navegador y prolife quedará instalada, con su icono y capaz de abrir aunque el ordenador no esté.'
+            : 'Esta dirección no es segura (http a secas), así que el navegador no deja instalarla ni guardar nada para consultar sin conexión. La app funciona igual, pero solo mientras el ordenador esté encendido y a tu alcance.'}
+        </span>
+      </div>
+      {!ok && (
+        <p className="dim" style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 0 }}>
+          Para arreglarlo, en el ordenador: <span className="mono">tailscale serve --bg 4321</span>, y
+          entra desde la tablet por la dirección <span className="mono">https://…ts.net</span> que te
+          dé. Es también lo que hace que funcione fuera de casa.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Abrir prolife en la tablet. La app se instala desde el navegador —no hay
+ * Play Store de por medio— y habla con este mismo ordenador, así que ve los
+ * mismos archivos y la misma base de datos, sin copias ni sincronizaciones.
+ *
+ * A cambio, el servidor deja de escuchar solo en 127.0.0.1, y por eso desde ese
+ * momento exige una clave a todo lo que no venga de aquí.
+ */
+function Tablet() {
+  const { toast } = useStore()
+  const [state, setState] = useState(null)
+  const [show, setShow] = useState(false)
+
+  useEffect(() => {
+    api.getRemote().then(setState).catch(() => setState({ unavailable: true }))
+  }, [])
+
+  const save = async (body) => {
+    try {
+      setState(await api.setRemote(body))
+      toast('Guardado · reinicia prolife para que tome efecto')
+    } catch (e) {
+      toast(e.message, 'err')
+    }
+  }
+
+  const copy = (text) => {
+    navigator.clipboard?.writeText(text).then(
+      () => toast('Copiado'),
+      () => toast('No se ha podido copiar', 'err')
+    )
+  }
+
+  if (!state || state.unavailable) return null
+
+  const links = (state.addresses || []).map((a) => ({
+    ...a,
+    url: `http://${a.address}:${state.port}/`,
+    pair: `http://${a.address}:${state.port}/?k=${encodeURIComponent(state.token || '')}`,
+  }))
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Abrir en la tablet o el móvil</h3>
+        {state.enabled && <span className="badge hot">encendido</span>}
+      </div>
+
+      <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
+        Con esto encendido, prolife deja de escuchar solo en este ordenador y se puede abrir desde
+        otro aparato de tu red. Ve <strong>los mismos archivos</strong>, porque es este mismo
+        ordenador el que responde: no hay copia que sincronizar ni nada que se pueda desincronizar.
+      </p>
+
+      <label className="row" style={{ gap: 8, cursor: 'pointer', marginBottom: 4 }}>
+        <input type="checkbox" checked={!!state.enabled} onChange={(e) => save({ enabled: e.target.checked })} />
+        <span style={{ fontSize: 13 }}>Permitir el acceso desde otros aparatos de la red</span>
+      </label>
+
+      {state.enabled && (
+        <>
+          <div className="notice" style={{ margin: '12px 0' }}>
+            <Icon name="link" size={13} />
+            <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+              El enlace de emparejamiento lleva la clave dentro: <strong>ábrelo una sola vez</strong> en la
+              tablet y no lo reenvíes por chat. Quien lo tenga entra a todo. Para usarlo fuera de casa,
+              no abras puertos del router: instala <strong>Tailscale</strong> en el ordenador y en la
+              tablet y usa la dirección que empieza por 100.
+            </span>
+          </div>
+
+          {links.length === 0 && (
+            <p className="dim" style={{ fontSize: 12.5 }}>
+              Este ordenador no tiene ninguna dirección de red ahora mismo. Conéctalo a la wifi.
+            </p>
+          )}
+
+          <div className="stack" style={{ gap: 8 }}>
+            {links.map((l) => (
+              <div key={l.address} className="row" style={{ gap: 8 }}>
+                <span className="mono" style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {l.url}
+                </span>
+                {l.vpn && <span className="badge">vale fuera de casa</span>}
+                <button className="btn sm" onClick={() => copy(l.pair)}>
+                  <Icon name="link" size={12} /> Copiar enlace de emparejamiento
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <hr className="hr" style={{ margin: '14px 0' }} />
+
+          <h4 style={{ margin: '0 0 6px', fontSize: 13 }}>Instalarla como app, con su icono</h4>
+          <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
+            Para que Android ofrezca «Instalar app» —y para que abra sin el ordenador delante— hace
+            falta que la dirección sea <strong>https</strong>: por <span className="mono">http://</span> a
+            secas el navegador no lo permite, y no es algo que la app pueda saltarse. La forma sensata
+            de conseguirlo, que además es la misma que sirve para usarla fuera de casa, es Tailscale:
+          </p>
+          <pre className="mono" style={{ fontSize: 11.5, background: 'var(--surface-2)', padding: '10px 12px', borderRadius: 'var(--r)', overflowX: 'auto', margin: '0 0 8px' }}>
+{`tailscale serve --bg ${state.port}`}
+          </pre>
+          <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
+            Eso te da una dirección <span className="mono">https://…ts.net</span> con certificado de
+            verdad. Ábrela en la tablet, añádele <span className="mono">?k=</span> con la clave de abajo
+            una sola vez, y usa «Añadir a pantalla de inicio». Por la red local sin https la app
+            funciona igual en el navegador; lo que no habrá es icono ni consulta sin conexión.
+          </p>
+
+          <hr className="hr" style={{ margin: '14px 0' }} />
+
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn sm ghost" onClick={() => setShow(!show)}>
+              <Icon name={show ? 'eye' : 'link'} size={12} /> {show ? 'Ocultar' : 'Ver'} la clave
+            </button>
+            {show && <span className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>{state.token}</span>}
+            <div className="spacer" />
+            <button
+              className="btn sm danger"
+              title="Los aparatos ya emparejados dejarán de entrar"
+              onClick={() => save({ renew: true })}
+            >
+              Renovar clave
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Settings() {
   const { db, update, config, setConfig, toast } = useStore()
   const [dir, setDir] = useState(config?.baseDir || '')
@@ -37,6 +207,9 @@ export default function Settings() {
         </div>
 
         <Sync dir={dir} setDir={setDir} />
+
+        <Tablet />
+        <SecureHint />
 
         <div className="card">
           <div className="card-head"><h3>Medición automática del tiempo</h3></div>

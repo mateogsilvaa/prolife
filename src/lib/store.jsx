@@ -32,12 +32,17 @@ export function Provider({ children }) {
   /** Marca del db.json que conocemos. Si cambia sola, lo tocó otro ordenador. */
   const stamp = useRef(0)
   const [remote, setRemote] = useState(false)
+  /** Versión del db.json cuando la escribió una app más nueva que esta. */
+  const [future, setFuture] = useState(null)
+  const futureRef = useRef(null)
+  useEffect(() => { futureRef.current = future }, [future])
 
   useEffect(() => {
     ;(async () => {
       try {
         const [d, c] = await Promise.all([api.getDb(), api.getConfig()])
         stamp.current = d._stamp || 0
+        setFuture(d._future || null)
         setDb(d)
         setConfig(c)
       } catch (e) {
@@ -60,10 +65,16 @@ export function Provider({ children }) {
     if (!pending.current) return
     const data = pending.current
     pending.current = null
+    // Con un fichero de una versión más nueva el servidor rechaza cada guardado:
+    // insistir solo llenaría la pantalla de avisos. El cartel de arriba ya lo dice.
+    if (futureRef.current) return
     try {
       const res = await api.putDb(data)
       stamp.current = res.stamp || stamp.current
     } catch (e) {
+      // El servidor se niega a escribir encima de un fichero de una versión más
+      // nueva: no es un fallo pasajero, así que se avisa arriba y no se reintenta.
+      if (/versión más nueva/i.test(e.message)) setFuture((v) => v || true)
       toast('No se pudo guardar: ' + e.message, 'err')
     }
   }, [toast])
@@ -78,7 +89,8 @@ export function Provider({ children }) {
     const int = setInterval(async () => {
       if (pending.current || document.hidden) return
       try {
-        const { stamp: disk } = await api.dbStamp()
+        const { stamp: disk, future: diskFuture } = await api.dbStamp()
+        if (diskFuture) setFuture(diskFuture)
         // margen de un segundo: el mtime del disco no es exacto
         if (disk && Math.abs(disk - stamp.current) > 1500) setRemote(true)
       } catch {
@@ -120,8 +132,12 @@ export function Provider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ db, config, setConfig, error, update, toast, toasts, remote, reload, dismissRemote: () => setRemote(false) }),
-    [db, config, error, update, toast, toasts, remote, reload]
+    () => ({
+      db, config, setConfig, error, update, toast, toasts, remote, reload,
+      dismissRemote: () => setRemote(false),
+      future,
+    }),
+    [db, config, error, update, toast, toasts, remote, reload, future]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

@@ -590,6 +590,12 @@ a { color: inherit; text-decoration: none; }
 .ws-node-actions button { padding: 2px; color: var(--ink-3); border-radius: 2px; }
 .ws-node-actions button:hover { color: var(--accent); background: var(--surface); }
 
+.ws-tree-msg {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 18px 14px; text-align: center; font-size: 12px; line-height: 1.4;
+}
+.ws-tree-msg .ws-empty { margin: 0; width: 100%; }
+
 .ws-empty {
   display: flex; flex-direction: column; align-items: center; gap: 8px;
   margin: 18px 12px; padding: 26px 14px; width: calc(100% - 24px);
@@ -768,6 +774,7 @@ a { color: inherit; text-decoration: none; }
 }
 .notice.err { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .notice.bar { border-radius: 0; border-width: 0 0 1px; background: var(--amber-soft); color: var(--amber); padding: 8px 22px; }
+.notice.bar.err { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .linkish { text-decoration: underline; color: inherit; font: inherit; }
 
 .cal-ev.hot, .cal-block.hot { font-weight: 600; }

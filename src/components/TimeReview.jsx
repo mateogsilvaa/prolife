@@ -13,6 +13,7 @@ export default function TimeReview({ onClose }) {
   const { db, update } = useStore()
   const [date, setDate] = useState(today())
   const [editing, setEditing] = useState(null)
+  const [splitting, setSplitting] = useState(null)
 
   const rows = useMemo(
     () => db.sessions.filter((s) => s.date === date).sort((a, b) => (a.start || 0) - (b.start || 0)),
@@ -70,6 +71,14 @@ export default function TimeReview({ onClose }) {
               </div>
               <span className="mono" style={{ width: 52, textAlign: 'right' }}>{dur(s.seconds)}</span>
               <button className="btn ghost icon" title="Editar" onClick={() => setEditing(s)}><Icon name="edit" size={12} /></button>
+              <button
+                className="btn ghost icon"
+                title={s.seconds < 120 ? 'Demasiado corto para partirlo' : 'Partir en dos'}
+                disabled={s.seconds < 120}
+                onClick={() => setSplitting(s)}
+              >
+                <Icon name="layers" size={12} />
+              </button>
               <button className="btn ghost icon" title="Eliminar" onClick={() => del(s.id)}><Icon name="trash" size={12} /></button>
             </div>
           ))}
@@ -77,6 +86,7 @@ export default function TimeReview({ onClose }) {
       )}
 
       {editing && <SegmentForm segment={editing} onClose={() => setEditing(null)} />}
+      {splitting && <SplitForm segment={splitting} onClose={() => setSplitting(null)} />}
     </Modal>
   )
 }
@@ -85,6 +95,88 @@ const blank = (date) => ({
   id: uid('s'), area: 'uni', refId: null, taskId: null, label: '', date,
   start: Date.now(), end: Date.now(), seconds: 1800, source: 'manual',
 })
+
+/**
+ * Partir un tramo en dos. Pasa constantemente: media hora seguida delante del
+ * ordenador que en realidad fueron veinte minutos de una asignatura y diez de
+ * otra. Se corta por donde digas y la segunda mitad se reasigna después con el
+ * botón de editar, que ya sabe hacer eso.
+ */
+function SplitForm({ segment, onClose }) {
+  const { db, update } = useStore()
+  const totalMin = Math.round(segment.seconds / 60)
+  const [first, setFirst] = useState(Math.max(1, Math.round(totalMin / 2)))
+
+  const firstMin = Math.min(totalMin - 1, Math.max(1, Number(first) || 1))
+  const secondMin = totalMin - firstMin
+  const refs = segment.area === 'uni' ? db.subjects : segment.area === 'work' ? db.projects : []
+  const [refId, setRefId] = useState(segment.refId || '')
+
+  const at = (min) =>
+    segment.start ? new Date(segment.start + min * 60000).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : null
+
+  const save = () => {
+    const start = segment.start || null
+    const head = {
+      ...segment,
+      seconds: firstMin * 60,
+      end: start ? start + firstMin * 60000 : segment.end,
+      source: segment.source === 'auto' ? 'fixed' : segment.source,
+    }
+    const tail = {
+      ...segment,
+      id: uid('s'),
+      start: start ? start + firstMin * 60000 : null,
+      end: segment.end,
+      seconds: secondMin * 60,
+      refId: refId || null,
+      label: refs.find((r) => r.id === refId)?.name || segment.label,
+      source: 'fixed',
+    }
+    update((d) => {
+      const i = d.sessions.findIndex((x) => x.id === segment.id)
+      if (i < 0) return
+      d.sessions.splice(i, 1, head, tail)
+    })
+    onClose()
+  }
+
+  return (
+    <Modal
+      title="Partir el tramo"
+      subtitle={`${dur(segment.seconds, true)} · ${segment.label || refLabel(db, segment)}`}
+      onClose={onClose}
+      foot={<><button className="btn ghost" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Partir</button></>}
+    >
+      <div className="stack">
+        <div className="field">
+          <label>Minutos del primer tramo</label>
+          <input
+            className="input"
+            type="number"
+            min="1"
+            max={totalMin - 1}
+            value={first}
+            onChange={(e) => setFirst(e.target.value)}
+          />
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+            {dur(firstMin * 60)} {at(0) && `(${at(0)}–${at(firstMin)})`} · después {dur(secondMin * 60)}
+            {at(firstMin) && ` (${at(firstMin)}–${at(totalMin)})`}
+          </div>
+        </div>
+        {refs.length > 0 && (
+          <div className="field">
+            <label>El segundo tramo pasa a</label>
+            <select className="select" value={refId} onChange={(e) => setRefId(e.target.value)}>
+              <option value="">— igual que ahora —</option>
+              {refs.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}
 
 function SegmentForm({ segment, onClose }) {
   const { db, update } = useStore()

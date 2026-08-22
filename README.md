@@ -32,13 +32,18 @@ ProLife/
   Universidad/<Asignatura>/   apuntes, PDFs, prácticas
   Trabajo/<Proyecto>/         documentación, entregas
   Tareas/<Tarea>/             documentos de tareas sueltas
+  Deporte/                    planes de entrenamiento, series, vídeos de técnica
+                              (botón «Documentos» en Atletismo)
   Personal/
   .prolife/db.json            la base de datos entera, en JSON legible
   .prolife/logo.png           el logo de la app, si has puesto uno
-  .prolife/backups/           copia diaria, las 14 últimas
+  .prolife/backups/           copia diaria, las 14 últimas (también si la dejas abierta días)
 ```
 
-Borrar algo en la app no borra tus archivos del disco.
+Borrar algo en la app no borra tus archivos del disco. Y al revés: la app **no crea
+carpetas por el hecho de mirarlas**. Si mueves o renombras la carpeta de una asignatura
+desde el explorador, su espacio te dirá que ya no está —con la ruta exacta que esperaba—
+en vez de enseñarte una carpeta nueva y vacía como si no hubiera pasado nada.
 
 ## Dos ordenadores, el mismo trabajo
 
@@ -54,6 +59,10 @@ funciona sin internet y tus archivos siguen siendo archivos normales del disco.
 > `db.json` y el último en guardar gana. Ciérrala en uno, deja que Drive termine,
 > y ábrela en el otro. Si la app detecta que el fichero ha cambiado por fuera, te
 > ofrece recargar en vez de pisarlo.
+>
+> Si abres un `db.json` escrito por una versión **más nueva** de prolife que la instalada en
+> ese ordenador, la app lo detecta, te lo dice y **no guarda nada** hasta que la actualices:
+> es preferible perder una tarde de apuntes a que se corrompa la base entera.
 
 Con `PROLIFE_DIR=/otra/ruta` se abre contra otro directorio sin tocar la configuración.
 
@@ -78,9 +87,12 @@ medir el tiempo ya no obliga a trabajar aquí dentro.
 - Ocultar el árbol de archivos (`Ctrl+E`) y el menú lateral (`Ctrl+B`).
 - **Modo concentración** (`Ctrl+Shift+Z`): desaparece todo menos el trabajo. `Esc` para salir.
 - **Maximizar** un panel con doble clic en su barra de pestañas.
-- Word, Excel y PowerPoint se abren con su programa: convertirlos aquí destrozaría el formato.
+- Word, Excel y PowerPoint se abren directamente con su programa al pulsarlos en el árbol
+  (igual que los `.zip`): convertirlos aquí destrozaría el formato.
 - Se arrastran archivos sobre la ventana para subirlos. El filtro del árbol busca por nombre.
-- Disposición, tamaños y pestañas se recuerdan por espacio.
+- Disposición, tamaños y pestañas se recuerdan por espacio, y viajan al otro ordenador
+  dentro del `db.json`: abres la asignatura en la universidad y te encuentras los mismos
+  paneles que dejaste en casa.
 
 ## VS Code dentro de la app
 
@@ -180,8 +192,8 @@ post-entreno como indicador de fatiga neuromuscular.
 | Tecla | Acción |
 |---|---|
 | `Ctrl+B` | Ocultar o mostrar el menú lateral |
-| `Ctrl+E` | Ocultar o mostrar el árbol de archivos |
-| `Ctrl+\` | Dividir en otro panel |
+| `Ctrl+E` | Ocultar o mostrar el árbol de archivos *(dentro de un espacio de trabajo)* |
+| `Ctrl+\` | Dividir en otro panel *(dentro de un espacio de trabajo)* |
 | `Ctrl+Shift+Z` | Modo concentración |
 | `Ctrl+I` | Ayudante |
 | `Ctrl+K` | Enlaces y portales |

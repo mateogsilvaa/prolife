@@ -73,6 +73,22 @@ export function createApp() {
     }
   }
 
+  const exists = (abs) => {
+    try {
+      return fs.statSync(abs).isDirectory()
+    } catch {
+      return false
+    }
+  }
+
+  /** Respuesta para una carpeta que la app espera pero que ya no está en el disco. */
+  const gone = (rel, abs) => ({
+    path: String(rel).split(path.sep).join('/'),
+    absolute: abs,
+    missing: true,
+    items: [],
+  })
+
   function entryInfo(abs, rel, name) {
     const st = fs.statSync(abs)
     return {
@@ -158,7 +174,7 @@ export function createApp() {
     wrap((req, res) => {
       const rel = req.query.p || ''
       const abs = safeJoin(cfg.baseDir, rel)
-      fs.mkdirSync(abs, { recursive: true })
+      if (!exists(abs)) return res.json({ ...gone(rel, abs) })
       const items = fs
         .readdirSync(abs, { withFileTypes: true })
         .filter((d) => !d.name.startsWith('.'))
@@ -181,7 +197,10 @@ export function createApp() {
     wrap((req, res) => {
       const rel = req.query.p || ''
       const root = safeJoin(cfg.baseDir, rel)
-      fs.mkdirSync(root, { recursive: true })
+      // Leer NO crea. Cuando esto creaba la carpeta que faltaba, mover o renombrar
+      // una carpeta desde el explorador dejaba a la app mirando una carpeta nueva
+      // y vacía —con los archivos de verdad al lado— sin decir una palabra.
+      if (!exists(root)) return res.json({ ...gone(rel, root) })
 
       const walk = (abs, relPath, depth) => {
         if (depth > 5) return []

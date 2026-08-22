@@ -363,6 +363,15 @@ export default function Workspace({ root }) {
     } catch (e) { toast(e.message, 'err') }
   }
 
+  /** La carpeta del espacio ya no existe: se rehace, con lo que el árbol vuelve. */
+  const createRoot = async () => {
+    try {
+      await api.mkdir(root)
+      await loadTree()
+      toast('Carpeta creada')
+    } catch (e) { toast(e.message, 'err') }
+  }
+
   const rename = async (file) => {
     const name = await askFor({ title: 'Renombrar', label: 'Nuevo nombre', value: file.name })
     if (!name || name === file.name) return
@@ -418,6 +427,20 @@ export default function Workspace({ root }) {
                 </div>
               ) : !tree && loadingTree ? (
                 <div className="ws-tree-msg dim">Leyendo la carpeta…</div>
+              ) : tree?.missing ? (
+                <div className="ws-tree-msg">
+                  <Icon name="folder" size={18} style={{ opacity: 0.5 }} />
+                  <span>Esta carpeta no está en el disco.</span>
+                  <span className="mono dim" style={{ wordBreak: 'break-all' }}>{tree.absolute}</span>
+                  <span className="dim">
+                    Si la moviste o le cambiaste el nombre desde el explorador, tus archivos siguen
+                    donde los dejaste: apunta ahí el proyecto, o créala de nuevo aquí.
+                  </span>
+                  <div className="row" style={{ gap: 6, justifyContent: 'center' }}>
+                    <button className="btn sm" onClick={createRoot}><Icon name="folder" size={12} /> Crearla</button>
+                    <button className="btn sm ghost" onClick={loadTree}><Icon name="refresh" size={12} /> Recargar</button>
+                  </div>
+                </div>
               ) : tree?.items?.length ? (
                 <Tree
                   items={tree.items}
@@ -438,7 +461,9 @@ export default function Workspace({ root }) {
                     <span>Arrastra aquí tus apuntes, PDFs o entregas</span>
                   </button>
                   {/* Si la carpeta debería tener cosas, ver cuál se está mirando ahorra el susto. */}
-                  <span className="mono dim">{tree?.path ? `${tree.path}/` : 'la raíz del directorio'} está vacía</span>
+                  <span className="mono dim" title={tree?.absolute}>
+                    {tree?.path ? `${tree.path}/` : 'la raíz del directorio'} está vacía
+                  </span>
                   <div className="row" style={{ gap: 6, justifyContent: 'center' }}>
                     <button className="btn sm ghost" onClick={newNote}><Icon name="edit" size={12} /> Nota</button>
                     <button className="btn sm ghost" onClick={loadTree}><Icon name="refresh" size={12} /> Recargar</button>

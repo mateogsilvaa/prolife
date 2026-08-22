@@ -39,7 +39,10 @@ ProLife/
   .prolife/backups/           copia diaria, las 14 últimas (también si la dejas abierta días)
 ```
 
-Borrar algo en la app no borra tus archivos del disco.
+Borrar algo en la app no borra tus archivos del disco. Y al revés: la app **no crea
+carpetas por el hecho de mirarlas**. Si mueves o renombras la carpeta de una asignatura
+desde el explorador, su espacio te dirá que ya no está —con la ruta exacta que esperaba—
+en vez de enseñarte una carpeta nueva y vacía como si no hubiera pasado nada.
 
 ## Dos ordenadores, el mismo trabajo
 

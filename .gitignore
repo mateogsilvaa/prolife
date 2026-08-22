@@ -1,0 +1,6 @@
+node_modules
+dist
+prolife.config.json
+.DS_Store
+*.log
+release

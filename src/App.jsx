@@ -1,0 +1,172 @@
+import React, { useEffect, useState } from 'react'
+import Sidebar from './components/Sidebar.jsx'
+import StatusBar from './components/StatusBar.jsx'
+import TimeReview from './components/TimeReview.jsx'
+import Assistant from './components/Assistant.jsx'
+import Icon from './components/Icon.jsx'
+import Modal from './components/Modal.jsx'
+import Launcher from './components/Launcher.jsx'
+import TaskEditor, { newTask } from './components/TaskEditor.jsx'
+import { useStore } from './lib/store.jsx'
+import { TrackerProvider } from './lib/tracker.jsx'
+import { UIProvider, useUI } from './lib/ui.jsx'
+
+import Dashboard from './views/Dashboard.jsx'
+import Uni from './views/Uni.jsx'
+import SubjectDetail from './views/SubjectDetail.jsx'
+import Work from './views/Work.jsx'
+import ProjectDetail from './views/ProjectDetail.jsx'
+import Tasks from './views/Tasks.jsx'
+import Training from './views/Training.jsx'
+import Calendar from './views/Calendar.jsx'
+import Stats from './views/Stats.jsx'
+import Files from './views/Files.jsx'
+import Settings from './views/Settings.jsx'
+import Space from './views/Space.jsx'
+
+function useRoute() {
+  const read = () => {
+    const path = (window.location.hash || '#/').slice(1).split('?')[0] || '/'
+    return { path, parts: path.split('/').filter(Boolean).map(decodeURIComponent) }
+  }
+  const [route, setRoute] = useState(read)
+  useEffect(() => {
+    const on = () => { setRoute(read()); document.querySelector('.view')?.scrollTo(0, 0) }
+    window.addEventListener('hashchange', on)
+    return () => window.removeEventListener('hashchange', on)
+  }, [])
+  return route
+}
+
+export default function App() {
+  const { db, error } = useStore()
+
+  if (error) {
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', height: '100%', padding: 40, textAlign: 'center' }}>
+        <div>
+          <h2 className="display" style={{ fontSize: 30 }}>El servidor local no responde</h2>
+          <p className="muted" style={{ maxWidth: '46ch' }}>
+            prolife necesita su servidor interno para leer y escribir en tus carpetas.
+          </p>
+          <p className="dim mono" style={{ fontSize: 12 }}>{error}</p>
+          <button className="btn primary" onClick={() => location.reload()}>Reintentar</button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!db) return <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}><span className="dim">cargando…</span></div>
+
+  return (
+    <TrackerProvider>
+      <UIProvider>
+        <Shell />
+      </UIProvider>
+    </TrackerProvider>
+  )
+}
+
+function Shell() {
+  const { toasts, remote, reload, dismissRemote } = useStore()
+  const ui = useUI()
+  const route = useRoute()
+  const [palette, setPalette] = useState(false)
+  const [adding, setAdding] = useState(null)
+  const [review, setReview] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.closest?.('.cm-editor')
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); ui.toggleDock() }
+      else if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); ui.toggleSidebar() }
+      else if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setPalette(true) }
+      else if (mod && e.key.toLowerCase() === 'j') { e.preventDefault(); setReview(true) }
+      else if (e.key === 'Escape' && ui.zen) { ui.setZen(false) }
+      else if (!typing && !mod && e.key === 'n') { e.preventDefault(); setAdding(newTask()) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [ui])
+
+  const p = route.parts
+  const isSpace = p[0] === 'espacio'
+  // vistas que ocupan todo el alto y gestionan su propio desplazamiento
+  const flush = isSpace || p[0] === 'archivos'
+  let view
+  if (p.length === 0) view = <Dashboard />
+  else if (isSpace) view = <Space kind={p[1]} id={p[2]} />
+  else if (p[0] === 'uni') view = p[1] ? <SubjectDetail id={p[1]} /> : <Uni />
+  else if (p[0] === 'trabajo') view = p[1] ? <ProjectDetail id={p[1]} /> : <Work />
+  else if (p[0] === 'tareas') view = <Tasks />
+  else if (p[0] === 'atletismo') view = <Training />
+  else if (p[0] === 'calendario') view = <Calendar />
+  else if (p[0] === 'estadisticas') view = <Stats />
+  else if (p[0] === 'archivos') view = <Files />
+  else if (p[0] === 'ajustes') view = <Settings />
+  else view = <Dashboard />
+
+  return (
+    <div className={`shell${ui.sidebar ? '' : ' no-sidebar'}${ui.zen ? ' zen' : ''}`}>
+      {ui.sidebar && <Sidebar route={route} onAI={ui.toggleDock} dockOpen={ui.dock} />}
+
+      <div className="main">
+        <div className="topbar">
+          {!ui.sidebar && (
+            <button className="btn ghost icon" title="Mostrar menú (Ctrl+B)" onClick={ui.toggleSidebar}>
+              <Icon name="chevronR" size={15} />
+            </button>
+          )}
+          <StatusBar onReview={() => setReview(true)} />
+          <div className="spacer" />
+          <button className={`btn sm ${ui.dock ? 'primary' : 'ghost'}`} onClick={ui.toggleDock} title="Ayudante (Ctrl+I)">
+            <Icon name="sparkle" size={14} /> Ayudante
+          </button>
+          <button className="btn sm primary" onClick={() => setAdding(newTask())}>
+            <Icon name="plus" size={13} /> Tarea
+          </button>
+        </div>
+        {remote && (
+          <div className="notice bar">
+            <Icon name="refresh" size={13} />
+            <span>
+              Los datos han cambiado fuera de esta ventana — normalmente porque los tocaste en el otro
+              ordenador y Drive los ha traído. Recarga para verlos.
+            </span>
+            <div className="spacer" />
+            <button className="btn sm primary" onClick={reload}>Recargar</button>
+            <button className="btn sm ghost icon" onClick={dismissRemote}><Icon name="x" size={12} /></button>
+          </div>
+        )}
+        <div className={`view${flush ? ' flush' : ''}`}>
+          <div className="view-narrow">{view}</div>
+        </div>
+      </div>
+
+      {ui.zen && (
+        <button className="zen-exit" onClick={() => ui.setZen(false)} title="Salir del modo concentración (Esc)">
+          <Icon name="x" size={13} /> concentración
+        </button>
+      )}
+
+      <Assistant open={ui.dock} onClose={() => ui.setDock(false)} width={ui.dockWidth} setWidth={ui.setDockWidth} />
+
+      {palette && (
+        <Modal title="Accesos rápidos" onClose={() => setPalette(false)}>
+          <Launcher onOpenDock={() => { setPalette(false); ui.setDock(true) }} />
+        </Modal>
+      )}
+      {adding && <TaskEditor task={adding} onClose={() => setAdding(null)} />}
+      {review && <TimeReview onClose={() => setReview(false)} />}
+
+      <div className="toasts">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast${t.kind === 'err' ? ' err' : ''}`}>
+            <Icon name={t.kind === 'err' ? 'x' : 'check'} size={12} /> {t.msg}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

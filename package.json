@@ -1,0 +1,59 @@
+{
+  "name": "prolife",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "main": "electron/main.js",
+  "description": "Gestor personal: universidad, RFEA, atletismo y vida. App de escritorio local.",
+  "author": "Mateo González Silva",
+  "scripts": {
+    "dev": "concurrently -n vite,app -c cyan,magenta \"vite\" \"node electron/dev.js\"",
+    "start": "npm run build && electron .",
+    "build": "vite build",
+    "server": "node server/index.js",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@codemirror/lang-cpp": "^6.0.2",
+    "@codemirror/lang-css": "^6.3.0",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-java": "^6.0.1",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/lang-markdown": "^6.3.0",
+    "@codemirror/lang-python": "^6.1.6",
+    "@codemirror/lang-sql": "^6.8.0",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.34.1",
+    "codemirror": "^6.0.1",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "marked": "^12.0.2",
+    "multer": "^2.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "vite": "^5.4.0"
+  },
+  "build": {
+    "appId": "com.mateo.prolife",
+    "productName": "prolife",
+    "directories": { "output": "release" },
+    "files": ["dist/**", "electron/**", "server/**", "package.json"],
+    "win": { "target": ["nsis", "portable"] },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "prolife"
+    },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" }
+  }
+}

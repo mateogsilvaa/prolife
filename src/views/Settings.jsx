@@ -1,0 +1,558 @@
+import React, { useEffect, useRef, useState } from 'react'
+import Icon from '../components/Icon.jsx'
+import { LOGO_PATH, bumpLogo } from '../components/Brand.jsx'
+import { useStore, uid, PALETTE, isDesktop } from '../lib/store.jsx'
+import { api } from '../lib/api.js'
+
+export default function Settings() {
+  const { db, update, config, setConfig, toast } = useStore()
+  const [dir, setDir] = useState(config?.baseDir || '')
+  const s = db.settings
+
+  const setS = (patch) => update((d) => Object.assign(d.settings, patch))
+  const setP = (patch) => update((d) => Object.assign(d.profile, patch))
+
+  const totalSecs = db.sessions.reduce((a, x) => a + x.seconds, 0)
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <div className="eyebrow">Ajustes</div>
+          <h2>Configuración</h2>
+          <p>Todo vive en un JSON dentro de tu carpeta. Nada sale de tu ordenador.</p>
+        </div>
+      </div>
+
+      <div className="stack" style={{ gap: 16, maxWidth: 780 }}>
+        <div className="card">
+          <div className="card-head"><h3>Perfil</h3></div>
+          <div className="grid-3">
+            <div className="field"><label>Nombre</label><input className="input" value={db.profile?.name || ''} placeholder="Mateo" onChange={(e) => setP({ name: e.target.value })} /></div>
+            <div className="field"><label>Curso</label><input className="input" value={db.profile?.course || ''} onChange={(e) => setP({ course: e.target.value })} /></div>
+            <div className="field"><label>Organización</label><input className="input" value={s.orgName || ''} placeholder="RFEA" onChange={(e) => setS({ orgName: e.target.value })} /></div>
+          </div>
+          <hr className="hr" style={{ margin: '14px 0' }} />
+          <LogoPicker />
+        </div>
+
+        <Sync dir={dir} setDir={setDir} />
+
+        <div className="card">
+          <div className="card-head"><h3>Medición automática del tiempo</h3></div>
+          <label className="row" style={{ gap: 8, cursor: 'pointer', marginBottom: 12 }}>
+            <input type="checkbox" checked={s.autoTrack !== false} onChange={(e) => setS({ autoTrack: e.target.checked })} />
+            <span style={{ fontSize: 13 }}>Medir sola el tiempo de trabajo</span>
+          </label>
+          <div className="grid-4">
+            <div className="field">
+              <label>Objetivo diario (min)</label>
+              <input className="input" type="number" step="30" value={s.dailyGoalMin} onChange={(e) => setS({ dailyGoalMin: Number(e.target.value) })} />
+            </div>
+            <div className="field">
+              <label>Horas por semana</label>
+              <input className="input" type="number" step="1" min="1" value={s.weeklyGoalHours || 25} onChange={(e) => setS({ weeklyGoalHours: Number(e.target.value) })} />
+            </div>
+            <div className="field">
+              <label>Pausa por inactividad (s)</label>
+              <input className="input" type="number" step="30" min="30" value={s.idleTimeoutSec} onChange={(e) => setS({ idleTimeoutSec: Number(e.target.value) })} />
+            </div>
+            <div className="field">
+              <label>Tramo mínimo (s)</label>
+              <input className="input" type="number" step="15" min="15" value={s.minSegmentSec} onChange={(e) => setS({ minSegmentSec: Number(e.target.value) })} />
+            </div>
+          </div>
+
+          <div className="field" style={{ maxWidth: 300, marginTop: 12 }}>
+            <label>Cortar una sesión tras (min sin tocar el ordenador)</label>
+            <input
+              className="input"
+              type="number"
+              step="5"
+              min="0"
+              value={Math.round((s.manualIdleSec ?? 1800) / 60)}
+              onChange={(e) => setS({ manualIdleSec: Math.max(0, Number(e.target.value)) * 60 })}
+            />
+            <span className="dim" style={{ fontSize: 11 }}>
+              0 = no cortarla nunca. Solo afecta a las sesiones que empiezas tú.
+            </span>
+          </div>
+
+          <p className="dim" style={{ fontSize: 12.5, margin: '14px 0 0', lineHeight: 1.6 }}>
+            Hay dos formas de medir y conviven. Si pulsas <strong>«Trabajar en…»</strong>, la sesión
+            cuenta hasta que la pares: da igual la pantalla en la que estés, si te vas al Word o si
+            trabajas en papel. Si no hay ninguna sesión en marcha, se cae en la detección
+            automática: el tiempo va al espacio de trabajo abierto y solo mientras la ventana tenga
+            el foco y {isDesktop ? 'el sistema detecte' : 'haya'} actividad de teclado o ratón.
+            Todo se corrige después desde <span className="kbd">Ctrl J</span>.
+          </p>
+        </div>
+
+        <Assistant />
+
+        <div className="card">
+          <div className="card-head"><h3>Universidad</h3></div>
+          <div className="stack">
+            <div className="grid-2">
+              <div className="field"><label>Nombre del portal</label><input className="input" value={s.portalName || ''} onChange={(e) => setS({ portalName: e.target.value })} /></div>
+              <div className="field"><label>URL del portal</label><input className="input" value={s.portalUrl || ''} placeholder="https://…" onChange={(e) => setS({ portalUrl: e.target.value })} /></div>
+            </div>
+            <div className="grid-3">
+              <div className="field"><label>Inicio del curso</label><input className="input" type="date" value={s.termStart || ''} onChange={(e) => setS({ termStart: e.target.value })} /></div>
+              <div className="field"><label>Fin del curso</label><input className="input" type="date" value={s.termEnd || ''} onChange={(e) => setS({ termEnd: e.target.value })} /></div>
+              <div className="field">
+                <label>Asistencia mínima (%)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={Math.round((s.attendanceMin ?? 0.7) * 100)}
+                  onChange={(e) => setS({ attendanceMin: Number(e.target.value) / 100 })}
+                />
+              </div>
+            </div>
+            <p className="dim" style={{ fontSize: 12.5, margin: 0 }}>
+              Las fechas del curso son las que hereda cada clase del horario que no tenga las suyas
+              propias, y de ahí sale cuántas faltas te puedes permitir. Cada asignatura puede pisar
+              el mínimo de asistencia.
+            </p>
+          </div>
+        </div>
+
+        <VsCode />
+
+        <Categories />
+
+        <div className="card">
+          <div className="card-head"><h3>Atletismo</h3></div>
+          <div className="field" style={{ maxWidth: 240, marginBottom: 14 }}>
+            <label>Sesiones por semana (objetivo)</label>
+            <input className="input" type="number" min="1" max="14" value={s.weeklyTrainingGoal || 5} onChange={(e) => setS({ weeklyTrainingGoal: Number(e.target.value) })} />
+          </div>
+          <div className="field">
+            <label>Tipos de entreno</label>
+            <div className="row wrap" style={{ gap: 6 }}>
+              {(s.trainingTypes || []).map((t, i) => (
+                <span key={t} className="chip">
+                  {t}
+                  <button onClick={() => setS({ trainingTypes: s.trainingTypes.filter((_, j) => j !== i) })} style={{ opacity: 0.5 }}>
+                    <Icon name="x" size={10} />
+                  </button>
+                </span>
+              ))}
+              <AddChip onAdd={(v) => setS({ trainingTypes: [...new Set([...(s.trainingTypes || []), v])] })} placeholder="Nuevo tipo…" />
+            </div>
+          </div>
+        </div>
+
+        <LinkEditor
+          title="Otros enlaces"
+          hint="Correo de la universidad, bibliografía, Notion, GitHub…"
+          items={s.links || []}
+          onChange={(links) => setS({ links })}
+        />
+
+        <div className="card">
+          <div className="card-head"><h3>Datos</h3></div>
+          <div className="row wrap" style={{ gap: 20, marginBottom: 14 }}>
+            <Metric n={db.subjects.length} l="asignaturas" />
+            <Metric n={db.projects.length} l="proyectos" />
+            <Metric n={db.tasks.length} l="tareas" />
+            <Metric n={(db.exams || []).length} l="exámenes" />
+            <Metric n={db.training.length} l="entrenos" />
+            <Metric n={`${(totalSecs / 3600).toFixed(0)}h`} l="registradas" />
+          </div>
+          <div className="row wrap" style={{ gap: 6 }}>
+            <a className="btn sm" href={api.raw('.prolife/db.json', true)} download="prolife-db.json"><Icon name="download" size={12} /> Exportar copia</a>
+            <button className="btn sm ghost" onClick={() => api.openPath('.prolife')}><Icon name="folder" size={12} /> Carpeta de datos</button>
+          </div>
+          <p className="dim" style={{ fontSize: 12, margin: '12px 0 0' }}>
+            Copia de seguridad automática cada día; se conservan las últimas 14.
+          </p>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const Metric = ({ n, l }) => (
+  <div><div className="num" style={{ fontSize: 26 }}>{n}</div><div className="eyebrow">{l}</div></div>
+)
+
+/**
+ * Dónde vive todo y cómo llegar a lo mismo desde dos ordenadores.
+ *
+ * No hay integración con la API de Google: la app apunta a la carpeta que Google
+ * Drive para escritorio ya sincroniza sola. Es más simple, no pide permisos de
+ * nube, funciona igual sin internet y los archivos siguen siendo archivos.
+ */
+function Sync({ dir, setDir }) {
+  const { config, setConfig, toast } = useStore()
+  const [roots, setRoots] = useState(null)
+  const sync = config?.sync
+
+  useEffect(() => { api.syncRoots().then(setRoots).catch(() => setRoots({ roots: [] })) }, [])
+
+  const move = async (target) => {
+    if (!target?.trim()) return
+    if (!confirm(`El directorio de trabajo pasará a:\n\n${target}\n\nNo se mueve nada: los archivos que ya tienes se quedan donde están. Si quieres llevártelos, cópialos tú a la carpeta nueva antes de reiniciar.\n\n¿Seguir?`)) return
+    try {
+      const c = await api.setConfig({ baseDir: target })
+      setConfig(c)
+      setDir(c.baseDir)
+      toast('Directorio cambiado. Reinicia la app para releer los datos.')
+    } catch (e) {
+      toast(e.message, 'err')
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Directorio de trabajo y sincronización</h3>
+        {sync?.synced && <span className="badge">se sincroniza · {sync.label}</span>}
+      </div>
+
+      <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
+        La carpeta real donde viven documentos, apuntes y la base de datos. Si la pones dentro de
+        Google Drive, el mismo trabajo aparece en el ordenador de casa y en el de la universidad,
+        sin cuentas ni permisos: lo sincroniza el propio Drive y los archivos siguen siendo archivos
+        normales de tu disco.
+      </p>
+
+      <div className="row">
+        <input className="input mono" style={{ fontSize: 12 }} value={dir} onChange={(e) => setDir(e.target.value)} />
+        <button className="btn" onClick={() => move(dir)}>Cambiar</button>
+        <button className="btn ghost icon" title="Abrir en el explorador" onClick={() => api.openPath('')}><Icon name="external" size={14} /></button>
+      </div>
+
+      {roots && (
+        <div style={{ marginTop: 12 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Carpetas de nube detectadas</div>
+          {roots.roots?.length ? (
+            <div className="stack" style={{ gap: 5 }}>
+              {roots.roots.map((r) => (
+                <div className="link-tile" key={r.path} style={{ cursor: 'default' }}>
+                  <span className="glyph" style={{ background: 'var(--blue)' }}><Icon name="folder" size={11} /></span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5 }}>{r.label}</div>
+                    <div className="mono dim" style={{ fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.suggested}</div>
+                  </div>
+                  <button className="btn sm" onClick={() => move(r.suggested)}>Usar</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="dim" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.6 }}>
+              No se ve ninguna carpeta de Drive, OneDrive ni Dropbox montada. Instala{' '}
+              <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl('https://www.google.com/intl/es/drive/download/') }} style={{ textDecoration: 'underline' }}>
+                Google Drive para escritorio
+              </a>{' '}
+              en los dos ordenadores, deja que monte tu unidad, y vuelve aquí: aparecerá para
+              elegirla con un botón.
+            </p>
+          )}
+        </div>
+      )}
+
+      {sync?.synced && (
+        <div className="notice" style={{ marginTop: 12 }}>
+          <Icon name="clock" size={13} />
+          <span>
+            Con la carpeta compartida, <strong>no abras la app en los dos ordenadores a la vez</strong>:
+            los dos escriben el mismo <span className="mono">db.json</span> y el último en guardar
+            gana. Ciérrala en uno antes de abrirla en el otro y espera a que Drive termine de
+            sincronizar. Hay copia diaria en <span className="mono">.prolife/backups</span> por si acaso.
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** El logo de la app. Se guarda en tu carpeta, así que también viaja con la nube. */
+function LogoPicker() {
+  const { toast } = useStore()
+  const file = useRef(null)
+  const [preview, setPreview] = useState(() => api.raw(LOGO_PATH) + `&v=${localStorage.getItem('prolife.logoV') || '0'}`)
+  const [has, setHas] = useState(null)
+
+  useEffect(() => {
+    const img = new Image()
+    img.src = preview
+    img.onload = () => setHas(true)
+    img.onerror = () => setHas(false)
+  }, [preview])
+
+  const upload = async (files) => {
+    const f = files?.[0]
+    if (!f) return
+    if (!/^image\//.test(f.type)) return toast('Tiene que ser una imagen', 'err')
+    try {
+      // El nombre importa: la app siempre lee `.prolife/logo.png`.
+      await api.remove(LOGO_PATH).catch(() => {})
+      await api.upload('.prolife', [new File([f], 'logo.png', { type: f.type })])
+      bumpLogo()
+      setPreview(api.raw(LOGO_PATH) + `&v=${Date.now()}`)
+      toast('Logo actualizado')
+    } catch (e) {
+      toast(e.message, 'err')
+    }
+  }
+
+  const clear = async () => {
+    try {
+      await api.remove(LOGO_PATH)
+      bumpLogo()
+      setHas(false)
+      toast('Logo quitado')
+    } catch (e) {
+      toast(e.message, 'err')
+    }
+  }
+
+  return (
+    <div className="field">
+      <label>Logo</label>
+      <div className="row" style={{ gap: 10 }}>
+        <div
+          style={{
+            width: 74, height: 46, borderRadius: 'var(--r)', border: '1px dashed var(--line-strong)',
+            display: 'grid', placeItems: 'center', background: 'var(--surface-2)', overflow: 'hidden', flex: '0 0 auto',
+          }}
+        >
+          {has ? (
+            <img src={preview} alt="logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          ) : (
+            <span className="dim" style={{ fontSize: 10 }}>sin logo</span>
+          )}
+        </div>
+        <div className="stack" style={{ gap: 5, flex: 1 }}>
+          <div className="row" style={{ gap: 6 }}>
+            <button className="btn sm" onClick={() => file.current?.click()}><Icon name="upload" size={12} /> Subir imagen</button>
+            {has && <button className="btn sm ghost" onClick={clear}>Quitar</button>}
+            <input ref={file} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files)} />
+          </div>
+          <span className="dim" style={{ fontSize: 11 }}>
+            Sustituye al nombre escrito del menú lateral. Se guarda como{' '}
+            <span className="mono">.prolife/logo.png</span> dentro de tu directorio, así que viaja
+            con la nube a tus dos ordenadores. Un PNG con fondo transparente queda mejor.
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** El ayudante local: qué Ollama y qué modelo, y hasta dónde le dejas llegar. */
+function Assistant() {
+  const { db, update, toast } = useStore()
+  const a = db.settings.assistant || {}
+  const [status, setStatus] = useState(null)
+  const setA = (patch) => update((d) => { d.settings.assistant = { ...d.settings.assistant, ...patch } })
+
+  const load = () => api.aiStatus(a.url).then(setStatus).catch((e) => setStatus({ running: false, models: [], error: e.message }))
+  useEffect(() => { load() }, [a.url])
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Ayudante local</h3>
+        <button className="btn sm ghost" onClick={load}><Icon name="refresh" size={12} /></button>
+      </div>
+
+      <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
+        El panel de <span className="kbd">Ctrl I</span> habla con un{' '}
+        <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl('https://ollama.com') }} style={{ textDecoration: 'underline' }}>Ollama</a>{' '}
+        que corre en este mismo ordenador. Conoce tus asignaturas, tu horario, tus faltas y tus
+        horas, y puede apuntarte tareas y exámenes. Nada de lo que le digas sale de la máquina.
+      </p>
+
+      <div className="row wrap" style={{ gap: 16, marginBottom: 12 }}>
+        <div>
+          <div className="num" style={{ fontSize: 22, color: status?.running ? 'var(--green)' : 'var(--ink-3)' }}>
+            {!status ? '…' : status.running ? 'activo' : 'parado'}
+          </div>
+          <div className="eyebrow">ollama</div>
+        </div>
+        <div>
+          <div className="num" style={{ fontSize: 22 }}>{status?.models?.length ?? '—'}</div>
+          <div className="eyebrow">modelos</div>
+        </div>
+      </div>
+
+      <div className="grid-2">
+        <div className="field">
+          <label>Modelo</label>
+          {status?.models?.length ? (
+            <select className="select" value={a.model || ''} onChange={(e) => setA({ model: e.target.value })}>
+              <option value="">— el primero disponible —</option>
+              {status.models.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+            </select>
+          ) : (
+            <input className="input mono" style={{ fontSize: 12 }} placeholder="llama3.1:8b" value={a.model || ''} onChange={(e) => setA({ model: e.target.value })} />
+          )}
+        </div>
+        <div className="field">
+          <label>Dirección de Ollama</label>
+          <input className="input mono" style={{ fontSize: 12 }} placeholder="http://127.0.0.1:11434" value={a.url || ''} onChange={(e) => setA({ url: e.target.value })} />
+          <span className="dim" style={{ fontSize: 11 }}>Solo se permiten direcciones locales.</span>
+        </div>
+      </div>
+
+      <label className="row" style={{ gap: 8, cursor: 'pointer', marginTop: 10 }}>
+        <input type="checkbox" checked={a.allowWrite !== false} onChange={(e) => setA({ allowWrite: e.target.checked })} />
+        <span style={{ fontSize: 13 }}>Dejarle crear tareas, exámenes y tramos de tiempo</span>
+      </label>
+      <p className="dim" style={{ fontSize: 12, margin: '6px 0 0' }}>
+        Todo lo que cree aparece en el chat con un botón de deshacer. Sin esto, el ayudante solo
+        consulta y responde.
+      </p>
+
+      {status && !status.running && (
+        <pre className="mono" style={{ fontSize: 11.5, background: 'var(--surface-2)', padding: '8px 12px', borderRadius: 6, margin: '12px 0 0' }}>
+          ollama pull llama3.1:8b
+        </pre>
+      )}
+      {status?.error && <p className="dim mono" style={{ fontSize: 11, marginTop: 8 }}>{status.error}</p>}
+    </div>
+  )
+}
+
+function AddChip({ onAdd, placeholder }) {
+  const [v, setV] = useState('')
+  return (
+    <span className="row" style={{ gap: 4 }}>
+      <input
+        className="input"
+        style={{ maxWidth: 150, padding: '3px 8px', fontSize: 12 }}
+        placeholder={placeholder}
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && v.trim()) { onAdd(v.trim()); setV('') } }}
+      />
+      <button className="btn sm ghost" disabled={!v.trim()} onClick={() => { onAdd(v.trim()); setV('') }}><Icon name="plus" size={11} /></button>
+    </span>
+  )
+}
+
+/** Editor integrado: estado del servidor y consentimiento de licencia. */
+function VsCode() {
+  const { toast } = useStore()
+  const [s, setS] = useState(null)
+
+  const load = () => api.codeStatus().then(setS).catch((e) => setS({ error: e.message }))
+  useEffect(() => { load() }, [])
+
+  const setAccepted = async (v) => {
+    await api.codeAccept(v)
+    toast(v ? 'Licencia aceptada' : 'Consentimiento retirado, editor detenido')
+    load()
+  }
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Editor integrado (VS Code)</h3>
+        <button className="btn sm ghost" onClick={load}><Icon name="refresh" size={12} /></button>
+      </div>
+
+      {!s ? (
+        <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Comprobando…</p>
+      ) : !s.installed ? (
+        <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>
+          No se encuentra VS Code en el sistema. El editor empotrado usa tu propia instalación.
+        </p>
+      ) : (
+        <>
+          <div className="row wrap" style={{ gap: 16, marginBottom: 12 }}>
+            <div><div className="num" style={{ fontSize: 22 }}>{s.cli}</div><div className="eyebrow">versión detectada</div></div>
+            <div>
+              <div className="num" style={{ fontSize: 22, color: s.running ? 'var(--green)' : '' }}>{s.running ? 'activo' : 'parado'}</div>
+              <div className="eyebrow">servidor</div>
+            </div>
+          </div>
+
+          <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!s.accepted} onChange={(e) => setAccepted(e.target.checked)} />
+            <span style={{ fontSize: 13 }}>Acepto los términos de licencia del servidor de VS Code</span>
+          </label>
+
+          <p className="dim" style={{ fontSize: 12.5, margin: '10px 0 0', lineHeight: 1.55 }}>
+            Para abrir VS Code dentro de la app hay que arrancar <span className="mono">code serve-web</span>,
+            el servidor web oficial de Microsoft que viene con tu instalación. Exigen aceptar sus{' '}
+            <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl(s.licenseUrl) }} style={{ textDecoration: 'underline' }}>términos</a> y su{' '}
+            <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl(s.privacyUrl) }} style={{ textDecoration: 'underline' }}>declaración de privacidad</a>.
+            Escucha solo en 127.0.0.1, con un testigo aleatorio por sesión y la telemetría desactivada.
+          </p>
+
+          {s.running && (
+            <button className="btn sm ghost" style={{ marginTop: 10 }} onClick={() => api.codeStop().then(load)}>
+              Detener el servidor
+            </button>
+          )}
+          {s.error && <p className="dim mono" style={{ fontSize: 11.5, marginTop: 8 }}>{s.error}</p>}
+        </>
+      )}
+    </div>
+  )
+}
+
+function Categories() {
+  const { db, update } = useStore()
+  const cats = db.categories || []
+
+  const set = (i, patch) => update((d) => Object.assign(d.categories[i], patch))
+  const add = (name) => update((d) => d.categories.push({ id: uid('cat'), name, color: PALETTE[d.categories.length % PALETTE.length], area: 'life' }))
+  const del = (id) => {
+    if (db.events.some((e) => e.categoryId === id) && !confirm('Hay eventos con esta categoría. ¿Eliminarla igualmente?')) return
+    update((d) => { d.categories = d.categories.filter((c) => c.id !== id) })
+  }
+
+  return (
+    <div className="card">
+      <div className="card-head"><h3>Categorías del calendario</h3></div>
+      <div className="stack" style={{ gap: 6 }}>
+        {cats.map((c, i) => (
+          <div className="row" key={c.id}>
+            <input type="color" value={c.color} onChange={(e) => set(i, { color: e.target.value })} style={{ width: 30, height: 30, padding: 2, border: '1px solid var(--line-strong)', borderRadius: 'var(--r)', background: 'var(--surface)' }} />
+            <input className="input" value={c.name} onChange={(e) => set(i, { name: e.target.value })} />
+            <span className="badge">{db.events.filter((e) => e.categoryId === c.id).length}</span>
+            <button className="btn ghost icon" onClick={() => del(c.id)}><Icon name="x" size={13} /></button>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <AddChip onAdd={add} placeholder="Nueva categoría…" />
+      </div>
+      <p className="dim" style={{ fontSize: 12, margin: '10px 0 0' }}>
+        Salud, conducir, papeleo… lo que necesites. También se pueden crear al vuelo al añadir un evento.
+      </p>
+    </div>
+  )
+}
+
+function LinkEditor({ title, hint, items, onChange }) {
+  const set = (i, patch) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x)))
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>{title}</h3>
+        <button className="btn sm ghost" onClick={() => onChange([...items, { id: uid('l'), name: '', url: '' }])}>
+          <Icon name="plus" size={12} /> Añadir
+        </button>
+      </div>
+      <div className="stack" style={{ gap: 6 }}>
+        {items.map((it, i) => (
+          <div className="row" key={it.id}>
+            <input className="input" style={{ maxWidth: 170 }} placeholder="Nombre" value={it.name} onChange={(e) => set(i, { name: e.target.value })} />
+            <input className="input mono" style={{ fontSize: 12 }} placeholder="https://…" value={it.url} onChange={(e) => set(i, { url: e.target.value })} />
+            <button className="btn ghost icon" onClick={() => onChange(items.filter((_, j) => j !== i))}><Icon name="x" size={13} /></button>
+          </div>
+        ))}
+        {items.length === 0 && <p className="dim" style={{ fontSize: 12.5, margin: 0 }}>{hint}</p>}
+      </div>
+    </div>
+  )
+}

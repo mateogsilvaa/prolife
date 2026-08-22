@@ -104,7 +104,7 @@ function Shell() {
   else if (p[0] === 'atletismo') view = <Training />
   else if (p[0] === 'calendario') view = <Calendar />
   else if (p[0] === 'estadisticas') view = <Stats />
-  else if (p[0] === 'archivos') view = <Files />
+  else if (p[0] === 'archivos') view = <Files path={p.slice(1).join('/')} />
   else if (p[0] === 'ajustes') view = <Settings />
   else view = <Dashboard />
 

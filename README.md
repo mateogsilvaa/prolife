@@ -33,6 +33,7 @@ ProLife/
   Trabajo/<Proyecto>/         documentación, entregas
   Tareas/<Tarea>/             documentos de tareas sueltas
   Deporte/                    planes de entrenamiento, series, vídeos de técnica
+                              (botón «Documentos» en Atletismo)
   Personal/
   .prolife/db.json            la base de datos entera, en JSON legible
   .prolife/logo.png           el logo de la app, si has puesto uno

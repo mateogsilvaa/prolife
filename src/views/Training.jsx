@@ -88,7 +88,7 @@ export default function Training() {
         <div className="row" style={{ gap: 6 }}>
           {/* `Deporte/` existe desde siempre en el disco; hasta ahora no había forma
               de llegar a ella desde aquí: planes, series y vídeos viven ahí. */}
-          <a className="btn ghost" href="#/archivos" title="Planes, series y vídeos en Deporte/">
+          <a className="btn ghost" href="#/archivos/Deporte" title="Planes, series y vídeos en Deporte/">
             <Icon name="folder" size={13} /> Documentos
           </a>
           <button className="btn primary" onClick={() => setForm(byDate.get(today()) || blank(today(), db.settings.trainingTypes))}>

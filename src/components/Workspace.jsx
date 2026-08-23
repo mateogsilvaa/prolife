@@ -8,6 +8,7 @@ import Ask from './Ask.jsx'
 import { api } from '../lib/api.js'
 import { useStore, uid } from '../lib/store.jsx'
 import { useUI } from '../lib/ui.jsx'
+import { startDrag } from '../lib/drag.js'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -166,7 +167,6 @@ export default function Workspace({ root }) {
 
   /** Arrastrar la línea entre dos paneles reparte el espacio entre ambos. */
   const dragDivider = (i) => (e) => {
-    e.preventDefault()
     const host = panesRef.current
     if (!host) return
     const horizontal = dir === 'row'
@@ -175,15 +175,12 @@ export default function Workspace({ root }) {
     const a0 = sizes[i] ?? 1
     const b0 = sizes[i + 1] ?? 1
     const sum = a0 + b0
-    const move = (ev) => {
+    startDrag(e, (ev) => {
       const delta = ((horizontal ? ev.clientX : ev.clientY) - start) / total
       const shift = delta * (sizes.reduce((x, y) => x + y, 0) || 1)
       const a = Math.max(0.15, Math.min(sum - 0.15, a0 + shift))
       setSizes((s) => s.map((v, j) => (j === i ? a : j === i + 1 ? sum - a : v)))
-    }
-    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
+    })
   }
 
   /* --------------------------------------------------------- documentos */
@@ -382,13 +379,9 @@ export default function Workspace({ root }) {
   }
 
   const dragRail = (e) => {
-    e.preventDefault()
     const startX = e.clientX
     const startW = railWidth
-    const move = (ev) => setRailWidth(Math.min(460, Math.max(150, startW + ev.clientX - startX)))
-    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
+    startDrag(e, (ev) => setRailWidth(Math.min(460, Math.max(150, startW + ev.clientX - startX))))
   }
 
   const visiblePanes = maximized !== null ? [panes[maximized]].filter(Boolean) : panes
@@ -479,7 +472,7 @@ export default function Workspace({ root }) {
               <button className="btn sm ghost" onClick={loadTree} title="Recargar"><Icon name="refresh" size={12} /></button>
             </div>
           </aside>
-          <div className="ws-drag" onMouseDown={dragRail} />
+          <div className="ws-drag" onPointerDown={dragRail} />
         </>
       )}
 
@@ -542,7 +535,7 @@ export default function Workspace({ root }) {
                 {vi > 0 && (
                   <div
                     className={`ws-divider ${dir}`}
-                    onMouseDown={dragDivider(i - 1)}
+                    onPointerDown={dragDivider(i - 1)}
                     onDoubleClick={() => setSizes(panes.map(() => 1))}
                     title="Arrastra para repartir el espacio · doble clic para igualar"
                   />

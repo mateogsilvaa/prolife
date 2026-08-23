@@ -3,6 +3,7 @@ import Icon from './Icon.jsx'
 import { api } from '../lib/api.js'
 import { useStore } from '../lib/store.jsx'
 import { TOOL_SCHEMA, WRITE_TOOLS, runTool, undoAction, systemPrompt } from '../lib/assistantTools.js'
+import { startDrag } from '../lib/drag.js'
 
 /** Cuántas veces seguidas puede el modelo pedir herramientas antes de rendirse. */
 const MAX_STEPS = 5
@@ -42,13 +43,7 @@ export default function Assistant({ open, onClose, width, setWidth }) {
   useEffect(() => { if (open) check() }, [open, check])
   useEffect(() => { scroller.current?.scrollTo({ top: 9e6, behavior: 'smooth' }) }, [msgs, busy])
 
-  const drag = (e) => {
-    e.preventDefault()
-    const move = (ev) => setWidth(Math.min(760, Math.max(320, window.innerWidth - ev.clientX)))
-    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up) }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
-  }
+  const drag = (e) => startDrag(e, (ev) => setWidth(Math.min(760, Math.max(320, window.innerWidth - ev.clientX))))
 
   const tools = useMemo(
     () => (cfg.allowWrite === false ? TOOL_SCHEMA.filter((t) => !WRITE_TOOLS.has(t.function.name)) : TOOL_SCHEMA),
@@ -122,7 +117,7 @@ export default function Assistant({ open, onClose, width, setWidth }) {
 
   return (
     <>
-      <div className="dock-drag" onMouseDown={drag} />
+      <div className="dock-drag" onPointerDown={drag} />
       <aside className="dock" style={{ width }}>
         <div className="dock-head">
           <span className="glyph" style={{ background: 'var(--ink)', width: 19, height: 19, borderRadius: 5, display: 'grid', placeItems: 'center', color: 'var(--paper)' }}>

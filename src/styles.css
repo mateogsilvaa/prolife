@@ -604,7 +604,7 @@ a { color: inherit; text-decoration: none; }
 }
 .ws-empty:hover { border-color: var(--accent); color: var(--accent); }
 
-.ws-drag, .dock-drag { width: 4px; cursor: col-resize; background: transparent; flex: 0 0 4px; }
+.ws-drag, .dock-drag { width: 4px; cursor: col-resize; background: transparent; flex: 0 0 4px; touch-action: none; }
 .ws-drag:hover, .dock-drag:hover { background: var(--accent); }
 
 .ws-main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -631,7 +631,7 @@ a { color: inherit; text-decoration: none; }
 
 .ws-panes { flex: 1; display: flex; min-width: 0; min-height: 0; }
 .ws-panes[style*="column"] { overflow-y: auto; }
-.ws-divider { flex: 0 0 5px; background: var(--line); background-clip: content-box; position: relative; z-index: 5; }
+.ws-divider { flex: 0 0 5px; background: var(--line); background-clip: content-box; position: relative; z-index: 5; touch-action: none; }
 .ws-divider:hover, .ws-divider:active { background: var(--accent); }
 .ws-divider.row { width: 5px; cursor: col-resize; border-left: 2px solid var(--surface); border-right: 2px solid var(--surface); }
 .ws-divider.column { height: 5px; width: auto; cursor: row-resize; border-top: 2px solid var(--surface); border-bottom: 2px solid var(--surface); }
@@ -831,6 +831,38 @@ a { color: inherit; text-decoration: none; }
 .tl-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-bottom: 1px solid var(--line); margin: 0 -8px; border-radius: var(--r); font-size: 12.5px; }
 .tl-row:hover { background: var(--surface-2); }
 .tl-bar { height: 6px; border-radius: 3px; min-width: 3px; }
+
+/* ==========================================================================
+   PANTALLAS TÁCTILES
+   La app se pensó para un portátil, donde el ratón puede pasar por encima de
+   las cosas. Con el dedo no existe ese estado intermedio: lo que solo aparece
+   al «pasar por encima» sencillamente no se puede tocar. Aquí se saca a la
+   vista y se agrandan las dianas, que a 15 px no se aciertan con un dedo.
+   ========================================================================== */
+
+@media (pointer: coarse) {
+  /* Sin teclado, anunciar «Ctrl K» es ruido: la acción tiene su botón al lado. */
+  .kbd { display: none; }
+
+  .ws-node-actions { display: flex; }
+  .task-actions { opacity: 1; }
+  .ws-tab .ws-x { opacity: 0.6; }
+
+  .ws-node { padding-top: 7px; padding-bottom: 7px; }
+  .ws-node-actions { gap: 4px; }
+  .ws-node-actions button { padding: 8px; }
+  .btn.icon { padding: 10px; }
+  .btn.sm { padding: 7px 12px; }
+  .ws-tab { padding-top: 7px; padding-bottom: 7px; }
+  .ws-tab .ws-x { padding: 5px; }
+  .check { width: 20px; height: 20px; flex: 0 0 20px; }
+
+  /* Un separador de 5 px es invisible para un dedo: se ensancha la zona
+     sensible sin engordar la línea, que sigue pintándose igual. */
+  .ws-drag, .dock-drag { width: 16px; flex: 0 0 16px; margin: 0 -6px; }
+  .ws-divider.row { width: 17px; border-left-width: 8px; border-right-width: 8px; }
+  .ws-divider.column { height: 17px; border-top-width: 8px; border-bottom-width: 8px; }
+}
 
 @media (max-width: 860px) {
   :root { --sidebar-w: 62px; }

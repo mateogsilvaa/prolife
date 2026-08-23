@@ -97,6 +97,8 @@ puertos del router**: eso pondría tus apuntes en internet detrás de una sola c
 Por la red local sin `https` la app funciona igual en el navegador; lo que no habrá es icono ni
 modo sin conexión.
 
+**Paso a paso, con la parte de seguridad y qué hacer si falla:** [INSTALAR-ANDROID.md](INSTALAR-ANDROID.md).
+
 **Sin el ordenador** (apagado, o tú fuera de su alcance) la app abre igualmente y enseña lo
 último que vio, pero **no deja escribir**: te lo dice arriba y rechaza los cambios en vez de
 aceptarlos y perderlos. Cuando el ordenador vuelve, te ofrece recargar. Los archivos no se

@@ -183,6 +183,16 @@ Merece dos minutos de atención:
 - Puedes apagar el acceso cuando quieras desde la misma casilla; al reiniciar, prolife vuelve a
   escucharse solo a sí misma.
 
+Y lo que hace la app por su parte, sin que tengas que configurar nada:
+
+- **Ninguna web puede leer tus datos**, aunque la tengas abierta en el mismo navegador. Solo se
+  atiende a la propia interfaz de prolife.
+- Un dominio de atacante que apunte a tu ordenador (reenlace de DNS) **no hereda** el permiso que
+  tiene el ordenador sobre sí mismo: se le pide la clave como a cualquiera.
+- La clave nunca sale en la cabecera `Referer` hacia sitios externos.
+- Un `.html` o un `.svg` de tu propia carpeta se abre aislado, sin poder ejecutar nada ni leer la
+  clave guardada en el navegador.
+
 ---
 
 ## 9. Si algo falla

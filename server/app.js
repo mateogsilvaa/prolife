@@ -46,9 +46,52 @@ const MIME = {
 const kindOf = (name) => KIND[path.extname(name).toLowerCase()] || 'file'
 const isEditable = (k) => k === 'markdown' || k === 'text' || k === 'code'
 
+/** ¿Este nombre de servidor es el propio ordenador? */
+const loopbackHost = (host) => {
+  const h = String(host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase()
+  return h === 'localhost' || h === '::1' || /^127\./.test(h)
+}
+
+/** Vite en desarrollo sirve la interfaz desde su propio puerto. */
+const DEV_ORIGINS = new Set(['http://localhost:5199', 'http://127.0.0.1:5199'])
+
 export function createApp() {
   const app = express()
-  app.use(cors({ origin: true }))
+
+  /**
+   * `cors({ origin: true })` devolvía el visto bueno a CUALQUIER web. Con eso,
+   * una página cualquiera abierta en el navegador del ordenador podía pedir
+   * `/api/db` y leer la respuesta entera: como salía de 127.0.0.1, además se
+   * saltaba la clave. Comprobado que funcionaba.
+   *
+   * Ahora solo se acepta la propia interfaz: mismo origen (sea por 127.0.0.1,
+   * por la IP de la red o por Tailscale) o el Vite de desarrollo.
+   */
+  app.use(
+    cors((req, cb) => {
+      const origin = req.headers.origin
+      // Sin origen: navegación directa, <img>, <iframe>, curl. No hay web ajena
+      // que pueda leer la respuesta, así que no hay nada que negar.
+      if (!origin) return cb(null, { origin: false })
+      if (DEV_ORIGINS.has(origin)) return cb(null, { origin: true })
+      let same = false
+      try {
+        same = new URL(origin).host === req.headers.host
+      } catch {
+        /* origen ilegible: no es de los nuestros */
+      }
+      cb(null, { origin: same })
+    })
+  )
+
+  // La clave de acceso viaja en la URL de los archivos que se pintan en un
+  // <iframe> o un <img>, donde no se pueden poner cabeceras. Sin esto, esa URL
+  // se filtraría entera en el Referer de cualquier recurso externo.
+  app.use((_req, res, next) => {
+    res.set('Referrer-Policy', 'no-referrer')
+    next()
+  })
+
   app.use(express.json({ limit: '25mb' }))
 
   let cfg = readConfig()
@@ -60,10 +103,18 @@ export function createApp() {
 
   /* ------------------------------------------------------------- acceso --- */
 
-  /** ¿La petición sale de este mismo ordenador? */
+  /**
+   * ¿La petición sale de este mismo ordenador, y va dirigida a él por su nombre?
+   *
+   * Las dos condiciones hacen falta. Con solo mirar el socket, un dominio de
+   * atacante que apunte a 127.0.0.1 (reenlace de DNS) llegaría por loopback y se
+   * saltaría la clave; exigiendo además que el `Host` sea el del propio
+   * ordenador, ese truco deja de colar y pasa por la puerta con clave como todos.
+   */
   const isLocal = (req) => {
     const ip = (req.socket?.remoteAddress || '').replace(/^::ffff:/, '')
-    return ip === '127.0.0.1' || ip === '::1' || ip === ''
+    const fromHere = ip === '127.0.0.1' || ip === '::1' || ip === ''
+    return fromHere && loopbackHost(req.headers.host)
   }
 
   /**
@@ -364,6 +415,14 @@ export function createApp() {
 
       const ext = path.extname(abs).toLowerCase()
       if (MIME[ext]) res.type(MIME[ext])
+      res.set('X-Content-Type-Options', 'nosniff')
+      // Un .html o un .svg de tu carpeta se sirven desde el mismo origen que la
+      // app: sin esto, un archivo con un <script> dentro podría leer la clave de
+      // acceso guardada en el navegador. `sandbox` los deja en un origen aparte
+      // y sin poder ejecutar nada. No afecta a PDFs ni imágenes.
+      if (ext === '.html' || ext === '.htm' || ext === '.svg' || ext === '.xml') {
+        res.set('Content-Security-Policy', 'sandbox')
+      }
       if (req.query.download) res.attachment(path.basename(abs))
       else res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(path.basename(abs))}"`)
       const stream = fs.createReadStream(abs)

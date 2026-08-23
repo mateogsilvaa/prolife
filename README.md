@@ -66,6 +66,44 @@ funciona sin internet y tus archivos siguen siendo archivos normales del disco.
 
 Con `PROLIFE_DIR=/otra/ruta` se abre contra otro directorio sin tocar la configuración.
 
+## En la tablet o el móvil
+
+No hay app en la Play Store, y no hace falta: la interfaz de prolife es una página web que
+sirve el propio ordenador, así que la tablet puede abrirla y **ver exactamente los mismos
+archivos y la misma base de datos**. No es una copia que haya que sincronizar —es el mismo
+`db.json`, contestado por el mismo ordenador—, así que no hay nada que se pueda desincronizar.
+
+Se activa en **Ajustes → Abrir en la tablet o el móvil**. A partir de ahí:
+
+- El servidor deja de escuchar solo en `127.0.0.1` y **exige una clave** a todo lo que no venga
+  del propio ordenador. La clave se genera sola, vive en `~/.prolife/config.json` (no viaja con
+  la carpeta sincronizada) y se puede renovar, lo que echa a los aparatos ya emparejados.
+- El **enlace de emparejamiento** lleva la clave dentro. Se abre una vez en la tablet: la app la
+  guarda y la borra de la barra de direcciones. No lo reenvíes por chat: quien lo tenga, entra.
+
+**Para que se instale como una app de verdad** —con su icono, y capaz de abrir sin el ordenador
+delante— la dirección tiene que ser `https`. Por `http://192.168.x.x` el navegador no lo permite,
+y eso no es algo que la app pueda saltarse. La forma sensata de conseguirlo es
+[Tailscale](https://tailscale.com), que además es lo que la hace funcionar fuera de casa:
+
+```bash
+tailscale serve --bg 4321
+```
+
+Eso da una dirección `https://…ts.net` con certificado real. Se abre en la tablet, se le añade
+`?k=` con la clave una sola vez, y con «Añadir a pantalla de inicio» queda instalada. **No abras
+puertos del router**: eso pondría tus apuntes en internet detrás de una sola clave.
+
+Por la red local sin `https` la app funciona igual en el navegador; lo que no habrá es icono ni
+modo sin conexión.
+
+**Paso a paso, con la parte de seguridad y qué hacer si falla:** [INSTALAR-ANDROID.md](INSTALAR-ANDROID.md).
+
+**Sin el ordenador** (apagado, o tú fuera de su alcance) la app abre igualmente y enseña lo
+último que vio, pero **no deja escribir**: te lo dice arriba y rechaza los cambios en vez de
+aceptarlos y perderlos. Cuando el ordenador vuelve, te ofrece recargar. Los archivos no se
+guardan en la tablet: para abrir un PDF hace falta el ordenador, porque el PDF está en su disco.
+
 ## Espacio de trabajo
 
 Cada asignatura, proyecto y tarea tiene su **espacio**: el árbol real de su carpeta y hasta

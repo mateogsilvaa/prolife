@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>prolife</title>
+    <meta name="theme-color" content="#f5f3ee" />
+    <meta name="description" content="Universidad, trabajo, atletismo y vida, en la carpeta real de tu ordenador." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -14,5 +20,13 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // El service worker es lo que hace la app instalable en la tablet y lo que
+      // le deja abrir sin el ordenador delante. En desarrollo estorba: serviría
+      // el bundle de la vez anterior en vez del que acaba de recompilar Vite.
+      if ('serviceWorker' in navigator && location.port !== '5199') {
+        addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+      }
+    </script>
   </body>
 </html>

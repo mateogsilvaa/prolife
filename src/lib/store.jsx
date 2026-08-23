@@ -36,18 +36,33 @@ export function Provider({ children }) {
   const [future, setFuture] = useState(null)
   const futureRef = useRef(null)
   useEffect(() => { futureRef.current = future }, [future])
+  /**
+   * La app abierta en la tablet sin el ordenador delante: lo que se ve es la
+   * última copia que guardó el service worker. Se puede consultar todo, pero no
+   * se escribe nada — guardar en una copia vieja sería perder trabajo.
+   */
+  const [offline, setOffline] = useState(false)
+  const offlineRef = useRef(false)
+  useEffect(() => { offlineRef.current = offline }, [offline])
+  const [back, setBack] = useState(false)
 
   useEffect(() => {
     ;(async () => {
       try {
-        const [d, c] = await Promise.all([api.getDb(), api.getConfig()])
+        // Solo la base es imprescindible para pintar algo. La configuración es
+        // del ordenador y no se cachea, así que sin él no llega: pedirlas juntas
+        // hacía que la tablet sin conexión enseñara «el servidor no responde»
+        // en vez de lo último que sí tenía guardado.
+        const d = await api.getDb()
         stamp.current = d._stamp || 0
         setFuture(d._future || null)
+        setOffline(!!d._stale)
         setDb(d)
-        setConfig(c)
       } catch (e) {
-        setError(e.message)
+        setError(e.status === 401 ? { auth: true, message: e.message } : { message: e.message })
+        return
       }
+      api.getConfig().then(setConfig).catch(() => {})
     })()
   }, [])
 
@@ -67,7 +82,7 @@ export function Provider({ children }) {
     pending.current = null
     // Con un fichero de una versión más nueva el servidor rechaza cada guardado:
     // insistir solo llenaría la pantalla de avisos. El cartel de arriba ya lo dice.
-    if (futureRef.current) return
+    if (futureRef.current || offlineRef.current) return
     try {
       const res = await api.putDb(data)
       stamp.current = res.stamp || stamp.current
@@ -91,10 +106,13 @@ export function Provider({ children }) {
       try {
         const { stamp: disk, future: diskFuture } = await api.dbStamp()
         if (diskFuture) setFuture(diskFuture)
+        // Volvió el ordenador: no se recarga solo por si estabas leyendo algo,
+        // pero se ofrece, que es lo mismo que se hace con los cambios de fuera.
+        if (offlineRef.current) setBack(true)
         // margen de un segundo: el mtime del disco no es exacto
-        if (disk && Math.abs(disk - stamp.current) > 1500) setRemote(true)
+        else if (disk && Math.abs(disk - stamp.current) > 1500) setRemote(true)
       } catch {
-        /* el servidor ya se queja por otro lado */
+        /* seguimos sin ordenador; el aviso de arriba ya lo dice */
       }
     }, 20000)
     return () => clearInterval(int)
@@ -108,6 +126,10 @@ export function Provider({ children }) {
   /** update(draft => { ...mutar... }) — persiste con debounce. */
   const update = useCallback(
     (recipe) => {
+      if (offlineRef.current) {
+        toast('Sin conexión con el ordenador: ahora mismo solo se puede consultar.', 'err')
+        return
+      }
       setDb((prev) => {
         if (!prev) return prev
         const next = structuredClone(prev)
@@ -118,14 +140,17 @@ export function Provider({ children }) {
         return next
       })
     },
-    [flush]
+    [flush, toast]
   )
 
   useEffect(() => {
     const onLeave = () => {
-      if (pending.current) {
-        navigator.sendBeacon?.('/api/db', new Blob([JSON.stringify(pending.current)], { type: 'application/json' }))
-      }
+      if (!pending.current) return
+      // `sendBeacon` no admite cabeceras, así que desde la tablet moriría con un
+      // 401 en silencio. `keepalive` sí las lleva y sobrevive igual al cierre;
+      // su límite de 64 KB es el mismo que tenía el beacon, así que no se pierde
+      // nada que antes funcionara.
+      api.putDb(pending.current, { keepalive: true }).catch(() => {})
     }
     window.addEventListener('beforeunload', onLeave)
     return () => window.removeEventListener('beforeunload', onLeave)
@@ -135,9 +160,9 @@ export function Provider({ children }) {
     () => ({
       db, config, setConfig, error, update, toast, toasts, remote, reload,
       dismissRemote: () => setRemote(false),
-      future,
+      future, offline, back,
     }),
-    [db, config, error, update, toast, toasts, remote, reload, future]
+    [db, config, error, update, toast, toasts, remote, reload, future, offline, back]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

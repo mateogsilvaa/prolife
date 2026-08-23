@@ -45,11 +45,15 @@ export default function App() {
     return (
       <div style={{ display: 'grid', placeItems: 'center', height: '100%', padding: 40, textAlign: 'center' }}>
         <div>
-          <h2 className="display" style={{ fontSize: 30 }}>El servidor local no responde</h2>
+          <h2 className="display" style={{ fontSize: 30 }}>
+            {error.auth ? 'Este aparato no está emparejado' : 'El servidor local no responde'}
+          </h2>
           <p className="muted" style={{ maxWidth: '46ch' }}>
-            prolife necesita su servidor interno para leer y escribir en tus carpetas.
+            {error.auth
+              ? 'Para abrir prolife desde la tablet hace falta el enlace de emparejamiento, que se copia en el ordenador desde Ajustes → Abrir en la tablet o el móvil.'
+              : 'prolife necesita su servidor interno para leer y escribir en tus carpetas.'}
           </p>
-          <p className="dim mono" style={{ fontSize: 12 }}>{error}</p>
+          <p className="dim mono" style={{ fontSize: 12 }}>{error.message}</p>
           <button className="btn primary" onClick={() => location.reload()}>Reintentar</button>
         </div>
       </div>
@@ -68,7 +72,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { toasts, remote, reload, dismissRemote, future } = useStore()
+  const { toasts, remote, reload, dismissRemote, future, offline, back } = useStore()
   const ui = useUI()
   const route = useRoute()
   const [palette, setPalette] = useState(false)
@@ -128,6 +132,22 @@ function Shell() {
             <Icon name="plus" size={13} /> Tarea
           </button>
         </div>
+        {offline && (
+          <div className="notice bar">
+            <Icon name="refresh" size={13} />
+            <span>
+              {back
+                ? 'El ordenador ha vuelto a estar disponible. Recarga para poder editar otra vez.'
+                : 'Sin conexión con el ordenador: esto es lo último que se vio. Puedes consultarlo todo, pero no se guarda nada.'}
+            </span>
+            {back && (
+              <>
+                <div className="spacer" />
+                <button className="btn sm primary" onClick={() => location.reload()}>Recargar</button>
+              </>
+            )}
+          </div>
+        )}
         {future && (
           <div className="notice bar err">
             <Icon name="x" size={13} />

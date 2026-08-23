@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -17,6 +18,14 @@ const DEFAULTS = {
   // Directorio REAL del ordenador donde vive todo: documentos + base de datos.
   baseDir: path.join(os.homedir(), 'Documents', 'ProLife'),
   port: 4321,
+  /**
+   * Con esto en falso el servidor solo escucha en 127.0.0.1 y nadie más puede
+   * verlo. Al activarlo escucha en toda la red, que es lo que permite abrir la
+   * app desde la tablet — y por eso entonces hace falta la clave.
+   */
+  remote: false,
+  /** Clave de acceso para todo lo que no venga del propio ordenador. */
+  token: '',
 }
 
 /** Permite abrir la app contra otro directorio sin tocar la configuración. */
@@ -33,11 +42,65 @@ export function readConfig() {
   return { ...DEFAULTS, ...OVERRIDE }
 }
 
+/** Lo que hay escrito en disco, sin defectos ni la variable de entorno. */
+function storedConfig() {
+  for (const file of [CONFIG_FILE, LEGACY_CONFIG]) {
+    try {
+      return JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch {
+      /* siguiente */
+    }
+  }
+  return {}
+}
+
 export function writeConfig(patch) {
-  const next = { ...readConfig(), ...patch }
+  // Se parte de lo guardado, no de `readConfig()`: si no, abrir la app con
+  // PROLIFE_DIR y tocar cualquier ajuste dejaría ese directorio grabado para
+  // siempre, y lo que promete esa variable es justo lo contrario.
+  const stored = { ...storedConfig(), ...patch }
   fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true })
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(next, null, 2), 'utf8')
-  return next
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(stored, null, 2), 'utf8')
+  return { ...DEFAULTS, ...stored, ...OVERRIDE }
+}
+
+/**
+ * La clave se crea sola la primera vez que hace falta y se guarda junto al
+ * resto de la configuración, en el home: no viaja con la carpeta sincronizada,
+ * así que cada ordenador tiene la suya.
+ */
+export const newToken = () => crypto.randomBytes(24).toString('base64url')
+
+export function ensureToken() {
+  const cfg = readConfig()
+  return cfg.token || writeConfig({ token: newToken() }).token
+}
+
+/** Comparación en tiempo constante: una clave no se compara con `===`. */
+export function tokenMatches(given, expected) {
+  if (!expected) return false
+  const a = Buffer.from(String(given || ''))
+  const b = Buffer.from(String(expected))
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
+/**
+ * Direcciones por las que este ordenador es alcanzable desde otro aparato.
+ * Las de Tailscale (100.64.0.0/10) se marcan aparte: son las que siguen valiendo
+ * fuera de casa, que es justo el caso de la tablet en la universidad.
+ */
+export function lanAddresses() {
+  const out = []
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    for (const net of list || []) {
+      if (net.internal || net.family !== 'IPv4') continue
+      const [a, b] = net.address.split('.').map(Number)
+      const vpn = a === 100 && b >= 64 && b <= 127
+      out.push({ address: net.address, iface: name, vpn })
+    }
+  }
+  // Primero las que funcionan desde fuera.
+  return out.sort((x, y) => Number(y.vpn) - Number(x.vpn))
 }
 
 /**

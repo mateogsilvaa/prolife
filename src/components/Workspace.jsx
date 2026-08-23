@@ -9,6 +9,7 @@ import { api } from '../lib/api.js'
 import { useStore, uid } from '../lib/store.jsx'
 import { useUI } from '../lib/ui.jsx'
 import { startDrag } from '../lib/drag.js'
+import { canStore, listSaved, saveFile, removeFile } from '../lib/offline.js'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -28,6 +29,26 @@ const EXTERNAL_KINDS = new Set(['office', 'archive'])
 const readJson = (raw) => { try { return JSON.parse(raw || 'null') } catch { return null } }
 
 /**
+ * Una tablet en vertical y un portátil apaisado no admiten la misma
+ * disposición: lo que en 16" son tres columnas cómodas, en 1024 px de ancho son
+ * tres tiras inservibles.
+ */
+const NARROW = '(max-width: 1024px), (orientation: portrait)'
+
+function useNarrow() {
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(NARROW).matches : false
+  )
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW)
+    const on = () => setNarrow(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return narrow
+}
+
+/**
  * Espacio de trabajo. Un árbol de archivos plegable y hasta tres paneles que
  * pueden contener archivos, un navegador o VS Code empotrado, en columnas o
  * en filas. Todo lo prescindible se puede esconder: en un portátil de 16" el
@@ -37,10 +58,15 @@ export default function Workspace({ root }) {
   const { db, update, toast } = useStore()
   const ui = useUI()
 
+  const narrow = useNarrow()
+  const shape = narrow ? 'narrow' : 'wide'
+
   const [tree, setTree] = useState(null)
   const [treeError, setTreeError] = useState(null)
   const [loadingTree, setLoadingTree] = useState(true)
   const [ask, setAsk] = useState(null)
+  /** Rutas guardadas para poder abrirlas sin el ordenador. */
+  const [saved, setSaved] = useState(() => new Set())
   const [open, setOpen] = useState(() => new Set())
   const [docs, setDocs] = useState({})
   const [panes, setPanes] = useState([emptyPane()])
@@ -56,6 +82,8 @@ export default function Workspace({ root }) {
   const [filter, setFilter] = useState('')
 
   const input = useRef(null)
+  const narrowRef = useRef(narrow)
+  useEffect(() => { narrowRef.current = narrow }, [narrow])
   const docsRef = useRef(docs)
   useEffect(() => { docsRef.current = docs }, [docs])
 
@@ -90,6 +118,28 @@ export default function Workspace({ root }) {
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [loadTree])
+
+  useEffect(() => { listSaved().then((l) => setSaved(new Set(l))) }, [])
+
+  /** Guardar o soltar un archivo de los que se pueden abrir sin conexión. */
+  const toggleSaved = useCallback(
+    async (file) => {
+      try {
+        if (saved.has(file.path)) {
+          await removeFile(file.path)
+          setSaved((s) => { const n = new Set(s); n.delete(file.path); return n })
+          toast('Ya no se guarda sin conexión')
+        } else {
+          await saveFile(file.path, api.raw(file.path))
+          setSaved((s) => new Set(s).add(file.path))
+          toast(`${file.name} disponible sin el ordenador`)
+        }
+      } catch (e) {
+        toast(e.message, 'err')
+      }
+    },
+    [saved, toast]
+  )
 
   /** Pide un texto (o una confirmación) con un modal propio; `null` si se cancela. */
   const askFor = useCallback(
@@ -127,24 +177,32 @@ export default function Workspace({ root }) {
     const remote = dbRef.current?.workspaces?.[root] || null
     const saved = (remote?.updatedAt || 0) > (local?.updatedAt || 0) ? remote : local
 
+    // Las pestañas abiertas sí viajan entre aparatos —es justo para lo que se
+    // guarda esto—, pero la geometría no: la disposición buena en la tablet
+    // descoloca el portátil, y al revés. Si la copia que gana viene de una
+    // pantalla de otra forma, se toman sus pestañas y la geometría de aquí.
+    const geo = [saved, local].find((x) => x && (x.shape || 'wide') === shape)
+
     if (saved?.panes?.length) {
       setPanes(saved.panes)
-      setDir(saved.dir || 'row')
-      setRail(saved.rail !== false)
-      setSizes(saved.sizes?.length === saved.panes.length ? saved.sizes : saved.panes.map(() => 1))
+      setDir(geo?.dir || (narrow ? 'column' : 'row'))
+      setRail(geo ? geo.rail !== false : !narrow)
+      setSizes(geo?.sizes?.length === saved.panes.length ? geo.sizes : saved.panes.map(() => 1))
       for (const p of saved.panes) for (const t of p.tabs) if (t.type === 'file') hydrate(t.file)
     } else {
       setPanes([emptyPane()])
+      setDir(narrow ? 'column' : 'row')
+      setRail(!narrow)
     }
     hydratedKey.current = storeKey
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeKey])
+  }, [storeKey, shape])
 
   useEffect(() => {
     // Hasta que no se ha leído lo guardado, lo que hay en pantalla es el estado
     // por defecto: escribirlo pisaría lo que venga del otro ordenador.
     if (!storeKey || hydratedKey.current !== storeKey) return
-    const state = { panes, dir, rail, sizes, updatedAt: Date.now() }
+    const state = { panes, dir, rail, sizes, shape, updatedAt: Date.now() }
     localStorage.setItem(storeKey, JSON.stringify(state))
 
     // Pasar por una carpeta sin abrir nada no ensucia el db.json de los dos ordenadores.
@@ -158,7 +216,7 @@ export default function Workspace({ root }) {
       })
     }, LAYOUT_SYNC_MS)
     return () => clearTimeout(t)
-  }, [storeKey, root, panes, dir, rail, sizes, update])
+  }, [storeKey, root, panes, dir, rail, sizes, shape, update])
 
   // los tamaños siguen al número de paneles
   useEffect(() => {
@@ -229,6 +287,8 @@ export default function Workspace({ root }) {
       }
       hydrate(file)
       addTab({ id: uid('tab'), type: 'file', path: file.path, name: file.name, file }, paneIndex)
+      // El cajón tapa el panel: dejarlo abierto sería esconder lo que acabas de abrir.
+      if (narrowRef.current) setRail(false)
     },
     [hydrate, addTab, toast]
   )
@@ -388,14 +448,18 @@ export default function Workspace({ root }) {
 
   return (
     <div
-      className="ws"
+      className={`ws${narrow ? ' narrow' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setOver(true) }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); upload(e.dataTransfer.files) }}
     >
+      {rail && narrow && <div className="ws-rail-back" onClick={() => setRail(false)} />}
       {rail && (
         <>
-          <aside className="ws-rail" style={{ width: railWidth, flex: `0 0 ${railWidth}px` }}>
+          <aside
+            className="ws-rail"
+            style={narrow ? undefined : { width: railWidth, flex: `0 0 ${railWidth}px` }}
+          >
             <div className="ws-rail-head">
               <input
                 className="input"
@@ -444,6 +508,7 @@ export default function Workspace({ root }) {
                   onSide={(f) => openFile(f, Math.min(panes.length, MAX_PANES - 1))}
                   onRename={rename}
                   onRemove={remove}
+                  saved={saved}
                   activePaths={panes.flatMap((p) => p.tabs.filter((t) => t.type === 'file').map((t) => t.path))}
                   depth={0}
                 />
@@ -472,7 +537,8 @@ export default function Workspace({ root }) {
               <button className="btn sm ghost" onClick={loadTree} title="Recargar"><Icon name="refresh" size={12} /></button>
             </div>
           </aside>
-          <div className="ws-drag" onPointerDown={dragRail} />
+          {/* De ancho fijo solo cuando es una columna de verdad. */}
+          {!narrow && <div className="ws-drag" onPointerDown={dragRail} />}
         </>
       )}
 
@@ -558,6 +624,8 @@ export default function Workspace({ root }) {
                   onSplit={() => setPanes((ps) => (ps.length >= MAX_PANES ? ps : [...ps, emptyPane()]))}
                   onNewBrowser={() => openBrowser('', i)}
                   onNewCode={() => openCode(i)}
+                  saved={saved}
+                  onToggleSaved={toggleSaved}
                   onUrl={(id, url) =>
                     setPanes((ps) => ps.map((x, j) => (j === i ? { ...x, tabs: x.tabs.map((t) => (t.id === id ? { ...t, url } : t)) } : x)))
                   }
@@ -576,7 +644,7 @@ export default function Workspace({ root }) {
 
 /* ------------------------------------------------------------------ árbol */
 
-function Tree({ items, filter, open, toggle, onOpen, onSide, onRename, onRemove, activePaths, depth }) {
+function Tree({ items, filter, open, toggle, onOpen, onSide, onRename, onRemove, activePaths, saved, depth }) {
   const match = (it) => {
     if (!filter) return true
     if (it.name.toLowerCase().includes(filter)) return true
@@ -596,6 +664,7 @@ function Tree({ items, filter, open, toggle, onOpen, onSide, onRename, onRemove,
           <Icon name={KIND_ICON[it.kind]} size={12} style={{ color: KIND_COLOR[it.kind] }} />
         )}
         <span className="ws-node-name">{it.name}</span>
+        {saved?.has(it.path) && <span className="ws-offline-dot" title="Guardado: se puede abrir sin el ordenador" />}
         <span className="ws-node-actions">
           {!it.dir && <button title="Abrir al lado" onClick={(e) => { e.stopPropagation(); onSide(it) }}><Icon name="layers" size={11} /></button>}
           <button title="Renombrar" onClick={(e) => { e.stopPropagation(); onRename(it) }}><Icon name="edit" size={11} /></button>
@@ -603,7 +672,7 @@ function Tree({ items, filter, open, toggle, onOpen, onSide, onRename, onRemove,
         </span>
       </div>
       {it.dir && (open.has(it.path) || filter) && it.children?.length > 0 && (
-        <Tree items={it.children} {...{ filter, open, toggle, onOpen, onSide, onRename, onRemove, activePaths }} depth={depth + 1} />
+        <Tree items={it.children} {...{ filter, open, toggle, onOpen, onSide, onRename, onRemove, activePaths, saved }} depth={depth + 1} />
       )}
     </div>
   ))
@@ -612,7 +681,7 @@ function Tree({ items, filter, open, toggle, onOpen, onSide, onRename, onRemove,
 /* ----------------------------------------------------------------- panel */
 
 function Pane({
-  pane, index, docs, focused, maximized, canSplit, root, grow = 1,
+  pane, index, docs, focused, maximized, canSplit, root, grow = 1, saved, onToggleSaved,
   onFocus, onActivate, onClose, onEdit, onSave, onMode, onMaximize, onSplit, onNewBrowser, onNewCode, onUrl,
 }) {
   const tab = pane.tabs.find((t) => t.id === pane.active)
@@ -642,6 +711,15 @@ function Pane({
                 <button key={k} className={doc?.mode === k ? 'on' : ''} onClick={() => onMode(tab.path, k)}>{l}</button>
               ))}
             </div>
+          )}
+          {tab?.type === 'file' && canStore() && (
+            <button
+              className="btn ghost icon"
+              title={saved?.has(tab.path) ? 'Guardado para sin conexión · pulsa para soltarlo' : 'Guardar para poder abrirlo sin el ordenador'}
+              onClick={() => onToggleSaved(tab.file)}
+            >
+              <Icon name={saved?.has(tab.path) ? 'check' : 'download'} size={13} style={saved?.has(tab.path) ? { color: 'var(--green)' } : undefined} />
+            </button>
           )}
           {tab?.type === 'file' && (
             <button className="btn ghost icon" title="Abrir con la app del sistema" onClick={() => api.openPath(tab.path)}>

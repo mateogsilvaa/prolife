@@ -101,8 +101,15 @@ modo sin conexión.
 
 **Sin el ordenador** (apagado, o tú fuera de su alcance) la app abre igualmente y enseña lo
 último que vio, pero **no deja escribir**: te lo dice arriba y rechaza los cambios en vez de
-aceptarlos y perderlos. Cuando el ordenador vuelve, te ofrece recargar. Los archivos no se
-guardan en la tablet: para abrir un PDF hace falta el ordenador, porque el PDF está en su disco.
+aceptarlos y perderlos. Cuando el ordenador vuelve, te ofrece recargar.
+
+Los archivos no se guardan solos en la tablet —un cuatrimestre de PDFs son cientos de megas—,
+pero cada archivo abierto tiene un botón para guardarlo, y entonces sí se abre sin el ordenador.
+En Ajustes se ve cuánto ocupan y se pueden vaciar.
+
+En pantalla vertical la disposición se adapta sola: los paneles se apilan en filas y el árbol pasa
+a ser un cajón que se retira al elegir. Las pestañas abiertas viajan entre aparatos; la geometría
+de los paneles no, para que colocarlos en la tablet no te descoloque el portátil.
 
 ## Espacio de trabajo
 

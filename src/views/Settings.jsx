@@ -3,6 +3,50 @@ import Icon from '../components/Icon.jsx'
 import { LOGO_PATH, bumpLogo } from '../components/Brand.jsx'
 import { useStore, uid, PALETTE, isDesktop } from '../lib/store.jsx'
 import { api } from '../lib/api.js'
+import { canStore, usage, clearAll } from '../lib/offline.js'
+
+/**
+ * Los archivos que se han guardado en ESTE aparato para poder abrirlos sin el
+ * ordenador. Se enseña cuánto ocupan porque es lo único que hace que la decisión
+ * de guardar sea informada.
+ */
+function OfflineFiles() {
+  const { toast } = useStore()
+  const [state, setState] = useState(null)
+
+  const refresh = () => usage().then(setState)
+  useEffect(() => { refresh() }, [])
+
+  if (!canStore() || !state || state.files === 0) return null
+
+  const size =
+    state.bytes < 1024 ? `${state.bytes} B`
+    : state.bytes < 1048576 ? `${Math.round(state.bytes / 1024)} KB`
+    : `${(state.bytes / 1048576).toFixed(1)} MB`
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Archivos guardados en este aparato</h3>
+        <span className="badge">{state.files}</span>
+      </div>
+      <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
+        Se pueden abrir aunque el ordenador esté apagado. Ocupan{' '}
+        <strong>{size}</strong> del
+        almacenamiento de este aparato. Se guardan uno a uno, desde el botón de cada archivo abierto.
+      </p>
+      <button
+        className="btn sm danger"
+        onClick={async () => {
+          await clearAll()
+          await refresh()
+          toast('Vaciado')
+        }}
+      >
+        <Icon name="trash" size={12} /> Vaciar
+      </button>
+    </div>
+  )
+}
 
 /**
  * Si esta pantalla se está viendo desde el aparato que se quiere instalar, dice
@@ -210,6 +254,7 @@ export default function Settings() {
 
         <Tablet />
         <SecureHint />
+        <OfflineFiles />
 
         <div className="card">
           <div className="card-head"><h3>Medición automática del tiempo</h3></div>

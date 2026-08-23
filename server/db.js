@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { safeJoin } from './config.js'
 
 /** La base de datos es un único JSON dentro del directorio real del usuario. */
 export function dbPath(baseDir) {
@@ -148,10 +149,32 @@ export function readRaw(baseDir) {
   }
 }
 
+/**
+ * El layout de un espacio deja de tener sentido en cuanto su carpeta no está:
+ * borraste la asignatura, o la renombraste desde el explorador. Nadie leería esa
+ * entrada nunca más, pero seguiría engordando el `db.json` que viaja por Drive
+ * en cada guardado, con la lista entera de pestañas que tuvo aquel día.
+ *
+ * El criterio es la carpeta en el disco, no las asignaturas: por la vista
+ * Archivos se abren espacios sobre carpetas sueltas (`Deporte`, `Universidad`)
+ * que son igual de legítimos y no pertenecen a ninguna entidad.
+ */
+function pruneWorkspaces(db, baseDir) {
+  for (const key of Object.keys(db.workspaces)) {
+    try {
+      if (fs.statSync(safeJoin(baseDir, key)).isDirectory()) continue
+    } catch {
+      /* no está, o la ruta ya no es válida */
+    }
+    delete db.workspaces[key]
+  }
+  return db
+}
+
 export function loadDb(baseDir) {
   const raw = readRaw(baseDir)
   if (!raw) return structuredClone(EMPTY_DB)
-  return migrate(raw)
+  return pruneWorkspaces(migrate(raw), baseDir)
 }
 
 export function saveDb(baseDir, data) {

@@ -141,10 +141,28 @@ Si el ordenador está apagado, o estás sin cobertura:
 | Abrir la app | Sí |
 | Consultar tareas, horario, exámenes, notas, estadísticas | Sí, tal como estaban la última vez |
 | Editar cualquier cosa | **No.** Te avisa arriba y rechaza el cambio |
-| Abrir un PDF o un archivo | **No.** El archivo está en el disco del ordenador |
+| Abrir un PDF o un archivo | Solo los que hayas **guardado** antes (ver abajo) |
 
 Que **rechace** los cambios es a propósito: aceptarlos y no poder guardarlos sería perder trabajo
 sin avisar. Cuando el ordenador vuelve, la app te ofrece recargar y ya se puede editar otra vez.
+
+### Llevarte archivos sueltos
+
+Los archivos no se guardan solos en la tablet, y es deliberado: un cuatrimestre de PDFs son
+cientos de megas, y llenarte el almacenamiento con cosas que quizá no vas a mirar no es una
+decisión que deba tomar la app.
+
+Se guardan **uno a uno**, cuando tú quieras:
+
+1. Abre el archivo en la tablet, con el ordenador encendido.
+2. En la barra de la pestaña, pulsa el botón de **descarga**. Se pone un tic verde.
+3. En el árbol, ese archivo queda marcado con un punto verde.
+
+A partir de ahí se abre aunque el ordenador esté apagado. En **Ajustes → Archivos guardados en
+este aparato** ves cuántos hay, cuánto ocupan y puedes vaciarlos de golpe.
+
+Ojo: se guarda la versión de ese momento. Si luego lo cambias en el ordenador, la tablet seguirá
+enseñando la copia guardada mientras esté sin conexión.
 
 ---
 

@@ -585,6 +585,10 @@ a { color: inherit; text-decoration: none; }
 .ws-node:hover { background: var(--surface-2); color: var(--ink); }
 .ws-node.on { color: var(--ink); font-weight: 600; }
 .ws-node-name { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.ws-offline-dot {
+  width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%;
+  background: var(--green); opacity: 0.8;
+}
 .ws-node-actions { display: none; gap: 1px; }
 .ws-node:hover .ws-node-actions { display: flex; }
 .ws-node-actions button { padding: 2px; color: var(--ink-3); border-radius: 2px; }
@@ -839,6 +843,16 @@ a { color: inherit; text-decoration: none; }
    al «pasar por encima» sencillamente no se puede tocar. Aquí se saca a la
    vista y se agrandan las dianas, que a 15 px no se aciertan con un dedo.
    ========================================================================== */
+
+/* En vertical el árbol no puede permitirse una columna fija: se superpone al
+   panel como un cajón y se retira en cuanto eliges algo. */
+.ws.narrow { position: relative; }
+.ws.narrow .ws-rail {
+  position: absolute; top: 0; bottom: 0; left: 0; z-index: 40;
+  width: min(78vw, 330px); flex: none;
+  box-shadow: 0 0 0 1px var(--line), 12px 0 32px -18px rgba(26, 24, 21, 0.5);
+}
+.ws-rail-back { position: absolute; inset: 0; z-index: 39; background: rgba(26, 24, 21, 0.18); }
 
 @media (pointer: coarse) {
   /* Sin teclado, anunciar «Ctrl K» es ruido: la acción tiene su botón al lado. */

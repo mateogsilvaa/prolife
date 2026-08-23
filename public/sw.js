@@ -14,6 +14,8 @@
 const VERSION = 'v1'
 const SHELL = `prolife-shell-${VERSION}`
 const DATA = `prolife-data-${VERSION}`
+/** La escribe la página (ver `src/lib/offline.js`); aquí solo se consulta. */
+const FILES = 'prolife-files-v1'
 
 self.addEventListener('install', (e) => {
   // El HTML es lo único con nombre fijo, y sin él no hay nada que arrancar.
@@ -24,7 +26,11 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((names) => Promise.all(names.filter((n) => !n.endsWith(VERSION)).map((n) => caches.delete(n))))
+      // Los archivos que el usuario guardó a mano no se tiran en una
+      // actualización: los eligió él y le costaron su descarga.
+      .then((names) =>
+        Promise.all(names.filter((n) => n !== FILES && !n.endsWith(VERSION)).map((n) => caches.delete(n)))
+      )
       .then(() => self.clients.claim())
   )
 })
@@ -83,8 +89,26 @@ self.addEventListener('fetch', (e) => {
     return
   }
 
+  if (sameOrigin && url.pathname === '/api/fs/raw') {
+    // Primero el disco del ordenador, que es la verdad. Si no contesta, y solo
+    // si este archivo se guardó a mano, se sirve la copia. La clave de acceso
+    // se quita de la URL: cambia al renovarla y dejaría lo guardado inservible.
+    const key = `${url.pathname}?p=${encodeURIComponent(url.searchParams.get('p') || '')}`
+    e.respondWith(
+      fetch(request).catch(async () => {
+        const hit = await caches.match(key)
+        if (hit) return markStale(hit)
+        return new Response('Este archivo no está guardado para consultarlo sin el ordenador.', {
+          status: 504,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        })
+      })
+    )
+    return
+  }
+
   // El resto de la API no se cachea nunca: un guardado que falla tiene que
-  // fallar, y un archivo del disco no puede servirse de una copia vieja.
+  // fallar, y una carpeta no puede listarse de una copia vieja.
   if (sameOrigin && url.pathname.startsWith('/api/')) return
 
   // Estáticos (incluidas las tipografías de Google): de la caché si están, y se

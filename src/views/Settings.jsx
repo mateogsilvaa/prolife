@@ -223,6 +223,13 @@ export default function Settings() {
   const [dir, setDir] = useState(config?.baseDir || '')
   const s = db.settings
 
+  // `config` se pide después del `db` (ver store.jsx), así que casi siempre
+  // llega con esta pantalla ya montada: sin esto el cuadro se quedaba vacío
+  // para siempre y «Cambiar» no hacía nada. Solo se rellena si no has escrito.
+  useEffect(() => {
+    if (config?.baseDir) setDir((d) => d || config.baseDir)
+  }, [config?.baseDir])
+
   const setS = (patch) => update((d) => Object.assign(d.settings, patch))
   const setP = (patch) => update((d) => Object.assign(d.profile, patch))
 
@@ -409,8 +416,14 @@ function Sync({ dir, setDir }) {
   const { config, setConfig, toast } = useStore()
   const [roots, setRoots] = useState(null)
   const sync = config?.sync
+  // La carpeta de trabajo se elige donde están los archivos. Desde la tablet el
+  // servidor lo rechaza a propósito, así que aquí no se ofrece.
+  const here = config?.here !== false
 
-  useEffect(() => { api.syncRoots().then(setRoots).catch(() => setRoots({ roots: [] })) }, [])
+  useEffect(() => {
+    if (!config || !here) return
+    api.syncRoots().then(setRoots).catch(() => setRoots({ roots: [] }))
+  }, [config, here])
 
   const move = async (target) => {
     if (!target?.trim()) return
@@ -440,10 +453,33 @@ function Sync({ dir, setDir }) {
       </p>
 
       <div className="row">
-        <input className="input mono" style={{ fontSize: 12 }} value={dir} onChange={(e) => setDir(e.target.value)} />
-        <button className="btn" onClick={() => move(dir)}>Cambiar</button>
+        <input
+          className="input mono"
+          style={{ fontSize: 12 }}
+          value={dir}
+          disabled={!here}
+          onChange={(e) => setDir(e.target.value)}
+        />
+        {here && <button className="btn" onClick={() => move(dir)}>Cambiar</button>}
         <button className="btn ghost icon" title="Abrir en el explorador" onClick={() => api.openPath('')}><Icon name="external" size={14} /></button>
       </div>
+
+      {!here && (
+        <p className="dim" style={{ fontSize: 12.5, margin: '10px 0 0', lineHeight: 1.6 }}>
+          Esta es la carpeta del ordenador que te está sirviendo la app, y se cambia desde él.
+        </p>
+      )}
+
+      {config?.envDir && (
+        <div className="notice" style={{ marginTop: 12 }}>
+          <Icon name="folder" size={13} />
+          <span>
+            La app se ha abierto con <span className="mono">PROLIFE_DIR</span>, que manda sobre esto.
+            Mientras esa variable esté puesta se trabaja en <span className="mono">{config.envDir}</span>{' '}
+            aunque aquí elijas otra cosa: lo que guardes queda para la próxima vez que la abras sin ella.
+          </span>
+        </div>
+      )}
 
       {roots && (
         <div style={{ marginTop: 12 }}>

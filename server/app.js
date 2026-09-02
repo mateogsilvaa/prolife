@@ -46,6 +46,38 @@ const MIME = {
 const kindOf = (name) => KIND[path.extname(name).toLowerCase()] || 'file'
 const isEditable = (k) => k === 'markdown' || k === 'text' || k === 'code'
 
+/**
+ * Un `Range: bytes=…` de un solo tramo, que es lo que pide el reproductor de
+ * vídeo cada vez que mueves la barra —y el visor de PDF para pintar la página
+ * que estás mirando sin tragarse los 30 MB enteros—.
+ *
+ * `null` = no hay cabecera, o hay varios tramos, o no se entiende: entonces se
+ * sirve el archivo completo, que es una respuesta válida. `'unsatisfiable'` = el
+ * tramo cae fuera del archivo, y eso sí hay que contestarlo con un 416.
+ */
+function parseRange(header, size) {
+  if (!header || size <= 0) return null
+  const m = /^bytes=(\d*)-(\d*)$/.exec(String(header).trim())
+  if (!m) return null
+  const [, rawStart, rawEnd] = m
+  let start
+  let end
+  if (rawStart === '') {
+    // «bytes=-500»: los últimos 500. Los últimos cero no existen.
+    if (rawEnd === '') return null
+    const suffix = Number(rawEnd)
+    if (!suffix) return 'unsatisfiable'
+    start = Math.max(0, size - suffix)
+    end = size - 1
+  } else {
+    start = Number(rawStart)
+    end = rawEnd === '' ? size - 1 : Math.min(Number(rawEnd), size - 1)
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null
+  if (start >= size || end < start) return 'unsatisfiable'
+  return { start, end }
+}
+
 /** ¿Este nombre de servidor es el propio ordenador? */
 const loopbackHost = (host) => {
   const h = String(host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase()
@@ -197,20 +229,83 @@ export function createApp() {
     res.json({ ok: true, baseDir: cfg.baseDir, platform: process.platform, home: os.homedir() })
   )
 
-  /** El token no se devuelve nunca: se enseña solo en el ordenador, en Ajustes. */
-  const publicCfg = () => {
-    const { token, ...rest } = cfg
-    return { ...rest, hasToken: !!token, sync: syncInfo(cfg.baseDir) }
+  /**
+   * El token no se devuelve nunca: se enseña solo en el ordenador, en Ajustes.
+   *
+   * `here` dice si quien pregunta es el propio ordenador. Lo necesita la
+   * interfaz para no ofrecer en la tablet botones que el servidor va a rechazar:
+   * el directorio de trabajo se elige donde están los archivos.
+   *
+   * `envDir` es la ruta que impone `PROLIFE_DIR`, si la hay. Manda sobre lo
+   * guardado, así que sin decirlo el ajuste parecería no funcionar: se guarda,
+   * pero la app sigue abriendo contra la de la variable.
+   */
+  const publicCfg = (req, from = cfg) => {
+    const { token, ...rest } = from
+    return {
+      ...rest,
+      hasToken: !!token,
+      sync: syncInfo(from.baseDir),
+      here: isLocal(req),
+      envDir: process.env.PROLIFE_DIR ? path.resolve(process.env.PROLIFE_DIR) : null,
+    }
   }
 
-  app.get('/api/config', (_req, res) => res.json(publicCfg()))
+  app.get('/api/config', (req, res) => res.json(publicCfg(req)))
+
+  /**
+   * Cambiar el directorio de trabajo. Solo desde el propio ordenador: `safeJoin`
+   * encierra a todo el mundo dentro del directorio base, así que quien pueda
+   * moverlo puede ponerlo en la raíz del disco y llevarse por delante esa única
+   * frontera. La clave de la tablet da acceso a tus apuntes, no a tu disco.
+   */
+  app.put(
+    '/api/config',
+    wrap((req, res) => {
+      onlyHere(req)
+      const raw = typeof req.body?.baseDir === 'string' ? req.body.baseDir.trim() : ''
+      if (!raw) throw Object.assign(new Error('Falta el directorio'), { status: 400 })
+      if (!path.isAbsolute(raw)) {
+        throw Object.assign(new Error('El directorio tiene que ser una ruta completa'), { status: 400 })
+      }
+      const dir = path.resolve(raw)
+      // La carpeta se crea, pero la que la contiene tiene que existir ya. Si no,
+      // una letra de unidad mal escrita («H:\Mi unidad», con Drive en la G) se
+      // tragaría el cambio en silencio y fabricaría un árbol vacío en cualquier
+      // sitio, con la app apuntando a él y tus apuntes en otra parte.
+      const parent = path.dirname(dir)
+      if (parent !== dir && !exists(parent)) {
+        throw Object.assign(new Error(`No existe la carpeta que lo contiene: ${parent}`), { status: 400 })
+      }
+      ensureBase(dir)
+
+      /**
+       * El directorio en marcha NO se cambia en caliente. La interfaz tiene en
+       * memoria el `db` de la carpeta vieja, y su siguiente guardado con retraso
+       * lo escribiría en la nueva, encima del `db.json` que muy probablemente ya
+       * está ahí puesto por el otro ordenador. Se guarda la configuración y el
+       * cambio entra al reiniciar, que es lo que la interfaz ya avisa.
+       */
+      const stored = writeConfig({ baseDir: dir })
+      res.json({ ...publicCfg(req, stored), restart: true })
+    })
+  )
+
+  /**
+   * Carpetas que se sincronizan solas y están montadas en ESTE ordenador. Poner
+   * ahí el directorio de trabajo es todo lo que hace falta para tener lo mismo
+   * en casa y en la universidad, así que se ofrecen a un botón.
+   */
+  app.get(
+    '/api/sync/roots',
+    wrap((req, res) => {
+      onlyHere(req)
+      res.json({ roots: cloudRoots(), current: cfg.baseDir })
+    })
+  )
 
   /* --------------------------------------------------- acceso desde fuera --- */
 
-  /**
-   * Datos para emparejar la tablet. Solo desde el propio ordenador: es lo único
-   * que enseña la clave, y quien ya la tiene no necesita pedirla.
-   */
   /** Cómo está el acceso desde fuera, y con qué clave. */
   const remoteState = () => ({
     enabled: !!cfg.remote,
@@ -411,6 +506,9 @@ export function createApp() {
       const lastModified = new Date(Math.floor(st.mtimeMs / 1000) * 1000).toUTCString()
       res.set('Cache-Control', 'no-cache')
       res.set('Last-Modified', lastModified)
+      // Sin esto el navegador ni lo intenta: la barra de posición de un vídeo se
+      // queda muerta y cada salto vuelve a pedir el archivo desde el principio.
+      res.set('Accept-Ranges', 'bytes')
       if (req.get('if-modified-since') === lastModified) return res.status(304).end()
 
       const ext = path.extname(abs).toLowerCase()
@@ -425,7 +523,20 @@ export function createApp() {
       }
       if (req.query.download) res.attachment(path.basename(abs))
       else res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(path.basename(abs))}"`)
-      const stream = fs.createReadStream(abs)
+
+      const range = parseRange(req.get('range'), st.size)
+      if (range === 'unsatisfiable') {
+        res.set('Content-Range', `bytes */${st.size}`)
+        return res.status(416).end()
+      }
+      const { start, end } = range || { start: 0, end: Math.max(0, st.size - 1) }
+      if (range) {
+        res.status(206)
+        res.set('Content-Range', `bytes ${start}-${end}/${st.size}`)
+      }
+      res.set('Content-Length', String(st.size === 0 ? 0 : end - start + 1))
+
+      const stream = fs.createReadStream(abs, range ? { start, end } : undefined)
       stream.on('error', () => { if (!res.headersSent) res.status(500).end(); else res.destroy() })
       stream.pipe(res)
     })

@@ -300,15 +300,20 @@ export default function Workspace({ root }) {
     addTab({ id: uid('tab'), type: 'code', name: 'VS Code' }, paneIndex)
 
   const closeTab = (paneIndex, tabId) => {
-    setPanes((ps) => {
-      let next = ps.map((p) => ({ ...p, tabs: p.tabs.filter((t) => t.id !== tabId) }))
-      const pane = next[paneIndex]
-      if (pane && pane.active === tabId) pane.active = pane.tabs[pane.tabs.length - 1]?.id || null
-      if (next.length > 1) next = next.filter((p) => p.tabs.length > 0)
-      if (!next.length) next = [emptyPane()]
-      return next
+    let next = panes.map((p) => ({ ...p, tabs: p.tabs.filter((t) => t.id !== tabId) }))
+    const pane = next[paneIndex]
+    if (pane && pane.active === tabId) pane.active = pane.tabs[pane.tabs.length - 1]?.id || null
+    if (next.length > 1) next = next.filter((p) => p.tabs.length > 0)
+    if (!next.length) next = [emptyPane()]
+    setPanes(next)
+    // El foco se queda en el panel en el que estabas, y se sigue por su `id`:
+    // recortar por posición te sacaba de un panel que seguía abierto —y como el
+    // foco decide dónde se abre lo siguiente, el archivo aparecía en otro sitio—
+    // y se descolocaba si el que desaparecía era uno anterior al tuyo.
+    setFocusPane((i) => {
+      const at = next.findIndex((p) => p.id === panes[i]?.id)
+      return at >= 0 ? at : Math.max(0, Math.min(i, next.length - 1))
     })
-    setFocusPane((i) => Math.max(0, Math.min(i, panes.length - 2)))
     setMaximized(null)
   }
 
@@ -429,7 +434,18 @@ export default function Workspace({ root }) {
     if (!ok) return
     try {
       await api.remove(file.path)
-      setPanes((ps) => ps.map((p) => ({ ...p, tabs: p.tabs.filter((t) => t.path !== file.path) })))
+      // Si lo borrado es una carpeta, lo que colgaba de ella tampoco existe ya:
+      // comparar solo la ruta exacta dejaba esas pestañas abiertas, editables y
+      // con su contenido en memoria, y el fallo no salía hasta ir a guardar.
+      const borrado = (p) => p === file.path || p.startsWith(file.path + '/')
+      setPanes((ps) =>
+        ps.map((p) => {
+          const tabs = p.tabs.filter((t) => !(t.type === 'file' && borrado(t.path)))
+          const active = tabs.some((t) => t.id === p.active) ? p.active : tabs[tabs.length - 1]?.id || null
+          return { ...p, tabs, active }
+        })
+      )
+      setDocs((d) => Object.fromEntries(Object.entries(d).filter(([p]) => !borrado(p))))
       await loadTree()
     } catch (e) { toast(e.message, 'err') }
   }

@@ -63,7 +63,7 @@ export default function TimeReview({ onClose }) {
                 <div className="tl-bar" style={{ width: `${(s.seconds / max) * 100}%`, background: refColor(db, s) }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.label || refLabel(db, s)}</div>
+                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{refLabel(db, s)}</div>
                 <div className="dim" style={{ fontSize: 11 }}>
                   {AREAS[s.area]?.label}
                   {s.source === 'auto' ? ' · detectado' : s.source === 'manual' ? ' · a mano' : ' · corregido'}
@@ -164,7 +164,7 @@ function SplitForm({ segment, onClose }) {
   return (
     <Modal
       title="Partir el tramo"
-      subtitle={`${dur(segment.seconds, true)} · ${segment.label || refLabel(db, segment)}`}
+      subtitle={`${dur(segment.seconds, true)} · ${refLabel(db, segment)}`}
       onClose={onClose}
       foot={<><button className="btn ghost" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Partir</button></>}
     >
@@ -255,7 +255,13 @@ function SegmentForm({ segment, onClose }) {
           <div className="field"><label>Minutos</label><input className="input" type="number" min="1" value={s.minutes} onChange={(e) => set({ minutes: e.target.value })} /></div>
           <div className="field"><label>Fecha</label><input className="input" type="date" value={s.date} onChange={(e) => set({ date: e.target.value })} /></div>
         </div>
-        <div className="field"><label>Etiqueta</label><input className="input" value={s.label} placeholder="Opcional" onChange={(e) => set({ label: e.target.value })} /></div>
+        <div className="field">
+          <label>Etiqueta</label>
+          <input className="input" value={s.label} placeholder="Opcional" onChange={(e) => set({ label: e.target.value })} />
+          <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+            Solo se usa si el tramo no tiene asignatura ni proyecto: si lo tiene, manda su nombre.
+          </div>
+        </div>
       </div>
     </Modal>
   )

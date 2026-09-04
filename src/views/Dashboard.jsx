@@ -3,7 +3,7 @@ import Icon from '../components/Icon.jsx'
 import TaskList from '../components/TaskList.jsx'
 import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
 import ExamEditor, { ExamRow } from '../components/ExamEditor.jsx'
-import { useStore, AREAS, refColor } from '../lib/store.jsx'
+import { useStore, AREAS, refColor, refLabel } from '../lib/store.jsx'
 import { useTracker } from '../lib/tracker.jsx'
 import { today, dur, fmtDate, daysUntil, DAYS, startOfWeek, addDays, MONTHS, iso } from '../lib/date.js'
 import { weekSummary, weekProgress, delta, pct, classesOn, streak, upcomingExams } from '../lib/stats.js'
@@ -242,10 +242,10 @@ function recent(db) {
     seen.set(key, {
       key,
       href: s.taskId ? `#/espacio/tarea/${s.taskId}` : `#/espacio/${s.area === 'uni' ? 'uni' : 'trabajo'}/${s.refId}`,
-      label: s.label,
+      label: refLabel(db, s),
       seconds: s.seconds,
       color: refColor(db, s),
-      ctx: { area: s.area, refId: s.refId || null, taskId: s.taskId || null, label: s.label },
+      ctx: { area: s.area, refId: s.refId || null, taskId: s.taskId || null, label: refLabel(db, s) },
     })
   }
   return [...seen.values()]

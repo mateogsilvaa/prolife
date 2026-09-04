@@ -3,7 +3,7 @@ import Icon from '../components/Icon.jsx'
 import TaskList from '../components/TaskList.jsx'
 import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
 import { ProjectForm, projectStats } from './Work.jsx'
-import { useStore } from '../lib/store.jsx'
+import { useStore, refLabel } from '../lib/store.jsx'
 import { api } from '../lib/api.js'
 import { dur, fmtDate, iso, addDays, startOfWeek, parseIso } from '../lib/date.js'
 
@@ -106,7 +106,7 @@ export default function ProjectDetail({ id }) {
                 {last.map((s) => (
                   <div key={s.id} className="list-row">
                     <span style={{ width: 84 }} className="dim">{fmtDate(s.date)}</span>
-                    <span style={{ flex: 1, minWidth: 0 }}>{s.label}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{refLabel(db, s)}</span>
                     <span className="badge">{s.source === 'auto' ? 'detectado' : s.source === 'manual' ? 'a mano' : 'corregido'}</span>
                     <span className="mono">{dur(s.seconds)}</span>
                   </div>

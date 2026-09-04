@@ -312,15 +312,23 @@ export default function Workspace({ root }) {
     setMaximized(null)
   }
 
+  /**
+   * Devuelve si el archivo ha llegado al disco. El error se sigue enseñando
+   * aquí porque el autoguardado también usa esto y ahí no hay nadie mirando el
+   * resultado; quien sí lo mira es `Ctrl+S`, que no puede cantar «Guardado»
+   * sin saberlo.
+   */
   const save = useCallback(
     async (path) => {
       const doc = docsRef.current[path]
-      if (!doc?.dirty || doc.content == null) return
+      if (!doc?.dirty || doc.content == null) return true
       try {
         await api.writeText(path, doc.content)
         setDocs((d) => ({ ...d, [path]: { ...d[path], dirty: false } }))
+        return true
       } catch (e) {
         toast(e.message, 'err')
+        return false
       }
     },
     [toast]
@@ -342,8 +350,14 @@ export default function Workspace({ root }) {
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault()
-        Object.entries(docsRef.current).filter(([, d]) => d.dirty).forEach(([p]) => save(p))
-        toast('Guardado')
+        const dirty = Object.entries(docsRef.current).filter(([, d]) => d.dirty).map(([p]) => p)
+        if (!dirty.length) return
+        // «Guardado» solo cuando lo está. Si alguna falla, el aviso de error que
+        // saca `save()` es el único que tiene que verse: decir las dos cosas es
+        // peor que no decir nada, porque la buena llega primero y es la que se lee.
+        Promise.all(dirty.map(save)).then((oks) => {
+          if (oks.every(Boolean)) toast(dirty.length > 1 ? `Guardados ${dirty.length} archivos` : 'Guardado')
+        })
       } else if (mod && e.key.toLowerCase() === 'e') {
         // Ctrl+E y Ctrl+\ solo tienen sentido donde hay árbol y paneles; el modo
         // concentración, que sí vale en cualquier pantalla, lo escucha App.jsx.

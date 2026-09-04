@@ -168,10 +168,15 @@ export function SubjectForm({ subject, onClose }) {
   }
 
   const remove = () => {
-    if (!confirm('¿Eliminar la asignatura? Su carpeta y archivos NO se borran del disco.')) return
+    if (!confirm('¿Eliminar la asignatura? Se borran también sus exámenes y su asistencia.\n\nLas tareas y el tiempo registrado se quedan, y su carpeta y sus archivos NO se borran del disco.')) return
     update((d) => {
       d.subjects = d.subjects.filter((x) => x.id !== s.id)
       d.attendance = d.attendance.filter((a) => a.subjectId !== s.id)
+      // Un examen es DE una asignatura: sin ella no significa nada, y se quedaba
+      // saliendo en el calendario y en inicio como examen de un «?». Las tareas
+      // y las horas sí se quedan: una tarea es tuya aunque la asignatura ya no
+      // esté, y borrar tiempo que de verdad trabajaste sería peor que dejarlo.
+      d.exams = (d.exams || []).filter((e) => e.subjectId !== s.id)
     })
     location.hash = '#/uni'
     onClose()

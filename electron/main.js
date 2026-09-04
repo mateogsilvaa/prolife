@@ -1,7 +1,8 @@
-import { app, BrowserWindow, powerMonitor, ipcMain, shell, Menu } from 'electron'
+import { app, BrowserWindow, powerMonitor, ipcMain, shell, Menu, dialog, session } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer } from '../server/app.js'
+import { readConfig } from '../server/config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEV_URL = 'http://localhost:5199'
@@ -10,11 +11,26 @@ let win = null
 let serverPort = 4321
 
 /**
- * Chrome real en el user-agent de los paneles de IA. Con el UA por defecto de
- * Electron muchos sitios sirven una versión rota o bloquean el login.
+ * Chrome real en el user-agent del navegador empotrado. Con el de Electron
+ * muchos sitios sirven una versión rota o bloquean el login.
  */
 const CHROME_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
+/**
+ * Dos prolife a la vez no pueden: querrían el mismo puerto y el mismo `db.json`.
+ * Sin esto, el segundo no conseguía escuchar, el fallo reventaba antes de crear
+ * la ventana y nadie lo recogía: se quedaba vivo, sin ventana y sin decir nada.
+ * Ahora le pasa el turno al que ya estaba.
+ */
+const primeraInstancia = app.requestSingleInstanceLock()
+if (!primeraInstancia) app.quit()
+
+app.on('second-instance', () => {
+  if (!win) return
+  if (win.isMinimized()) win.restore()
+  win.focus()
+})
 
 async function createWindow() {
   win = new BrowserWindow({
@@ -85,17 +101,45 @@ async function loadWithRetry(url, tries = 40) {
 }
 
 app.whenReady().then(async () => {
-  const info = await startServer()
+  if (!primeraInstancia) return
+
+  let info
+  try {
+    info = await startServer()
+  } catch (err) {
+    // El puerto lo puede tener cogido cualquier otro programa, no solo otro
+    // prolife. Callarse y no abrir la ventana no es una opción: hasta ahora el
+    // proceso se quedaba vivo sin nada en pantalla y sin manera de saber por qué.
+    const puerto = readConfig().port
+    // También por la consola: en una app empaquetada el cuadro es lo que ve el
+    // usuario, pero esto es lo que queda si alguien mira el registro.
+    console.error(`prolife no ha podido arrancar el servidor en el puerto ${puerto}:`, err.message)
+    dialog.showErrorBox(
+      'prolife no ha podido arrancar',
+      err.code === 'EADDRINUSE'
+        ? `Ya hay algo escuchando en el puerto ${puerto} de este ordenador.\n\n` +
+          `Si es otro prolife, usa esa ventana. Si es otro programa, cambia el puerto ` +
+          `en el archivo de configuración (${path.join(app.getPath('home'), '.prolife', 'config.json')}) y vuelve a abrir.`
+        : `No se ha podido arrancar el servidor interno:\n\n${err.message}`
+    )
+    app.quit()
+    return
+  }
   serverPort = info.port
 
-  // El user-agent solo se cambia en las particiones de los paneles de IA.
-  const { session } = await import('electron')
-  session.defaultSession.webRequest.onBeforeSendHeaders((details, cb) => {
-    if (details.webContentsId && details.url.startsWith('http') && !details.url.includes('127.0.0.1')) {
-      details.requestHeaders['User-Agent'] = CHROME_UA
-    }
-    cb({ requestHeaders: details.requestHeaders })
-  })
+  /**
+   * El user-agent va sobre la partición del navegador empotrado, que es la
+   * única que sale a internet. Estaba puesto sobre `session.defaultSession`, y
+   * un <webview> con `partition` tiene su propia sesión: allí no llegaba nunca
+   * —comprobado— y solo afectaba a las peticiones de la propia ventana, que no
+   * pasan de las tipografías de Google.
+   *
+   * `setUserAgent` en vez de un filtro de cabeceras porque cambia también
+   * `navigator.userAgent`, y muchos sitios miran eso desde JavaScript.
+   *
+   * `persist:vscode` se queda como está: habla con un `code serve-web` local.
+   */
+  session.fromPartition('persist:browser').setUserAgent(CHROME_UA)
 
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([

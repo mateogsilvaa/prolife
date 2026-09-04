@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react'
 import Modal from './Modal.jsx'
 import Icon from './Icon.jsx'
 import { useStore, AREAS, uid, refLabel, refColor } from '../lib/store.jsx'
-import { dur, today, fmtDate, iso, addDays } from '../lib/date.js'
+import { dur, today, fmtDate, iso, addDays, parseIso } from '../lib/date.js'
 
 /**
  * Revisión y corrección del tiempo medido automáticamente. La detección se
@@ -93,8 +93,24 @@ export default function TimeReview({ onClose }) {
 
 const blank = (date) => ({
   id: uid('s'), area: 'uni', refId: null, taskId: null, label: '', date,
-  start: Date.now(), end: Date.now(), seconds: 1800, source: 'manual',
+  ...horas(date, Date.now(), 1800), seconds: 1800, source: 'manual',
 })
+
+/**
+ * `start` y `end` de un tramo, dentro del día que dice ser.
+ *
+ * Ponían la hora del momento de crearlo viniera la fecha que viniera, así que
+ * un tramo añadido al martes pasado llevaba la hora de hoy: la revisión ordena
+ * por `start` y enseña esa hora, y `end` ni siquiera cuadraba con la duración,
+ * que es lo que mira el conteo automático para decidir si fusiona dos tramos
+ * cercanos. Se conserva la hora del día que tuviera; si no tenía, las 9.
+ */
+function horas(date, prevStart, seconds) {
+  const previo = prevStart ? new Date(prevStart) : null
+  const start = parseIso(date)
+  start.setHours(previo ? previo.getHours() : 9, previo ? previo.getMinutes() : 0, 0, 0)
+  return { start: start.getTime(), end: start.getTime() + seconds * 1000 }
+}
 
 /**
  * Partir un tramo en dos. Pasa constantemente: media hora seguida delante del
@@ -128,7 +144,11 @@ function SplitForm({ segment, onClose }) {
       id: uid('s'),
       start: start ? start + firstMin * 60000 : null,
       end: segment.end,
-      seconds: secondMin * 60,
+      // Lo que queda de verdad, no `secondMin * 60`: los minutos vienen de
+      // redondear el total, así que las dos mitades sumaban el total redondeado
+      // y partir un tramo se comía hasta 30 segundos. Esta es la pantalla que
+      // arregla el conteo; no puede ser la que lo estropee.
+      seconds: segment.seconds - head.seconds,
       refId: refId || null,
       label: refs.find((r) => r.id === refId)?.name || segment.label,
       source: 'fixed',
@@ -160,7 +180,7 @@ function SplitForm({ segment, onClose }) {
             onChange={(e) => setFirst(e.target.value)}
           />
           <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
-            {dur(firstMin * 60)} {at(0) && `(${at(0)}–${at(firstMin)})`} · después {dur(secondMin * 60)}
+            {dur(firstMin * 60)} {at(0) && `(${at(0)}–${at(firstMin)})`} · después {dur(segment.seconds - firstMin * 60)}
             {at(firstMin) && ` (${at(firstMin)}–${at(totalMin)})`}
           </div>
         </div>
@@ -185,9 +205,14 @@ function SegmentForm({ segment, onClose }) {
   const refs = s.area === 'uni' ? db.subjects : s.area === 'work' ? db.projects : []
 
   const save = () => {
+    const seconds = Math.max(60, Math.round((Number(s.minutes) || 0) * 60))
     const value = {
       ...s,
-      seconds: Math.max(60, Math.round((Number(s.minutes) || 0) * 60)),
+      seconds,
+      // Cambiar la fecha o los minutos tiene que arrastrar el reloj del tramo:
+      // si no, se quedaba diciendo ser de un día con la hora de otro, y con un
+      // `end` que no cuadraba con lo que dura.
+      ...horas(s.date, s.start, seconds),
       label: s.label || refs.find((r) => r.id === s.refId)?.name || AREAS[s.area].label,
       source: s.source === 'auto' ? 'fixed' : s.source,
     }

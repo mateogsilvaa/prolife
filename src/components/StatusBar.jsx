@@ -29,7 +29,12 @@ export default function StatusBar({ onReview }) {
 
   const end = () => {
     const total = stop()
-    toast(total >= 60 ? `Sesión guardada · ${dur(total, true)}` : 'Sesión demasiado corta, no se guarda nada')
+    // El mínimo de un minuto es de la detección automática, no de esto: una
+    // sesión elegida a mano se guarda siempre (ver `tracker.jsx`), «si la
+    // paraste, la querías». Decir que no se guardaba nada era mentira, y el
+    // tiempo aparecía luego en las estadísticas sin saber de dónde salía.
+    // La forma larga solo a partir del minuto: `dur(7, true)` diría «0 min».
+    toast(total > 0 ? `Sesión guardada · ${dur(total, total >= 60)}` : 'La sesión no llegó a contar nada')
   }
 
   return (

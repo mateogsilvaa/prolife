@@ -7,9 +7,9 @@
  * trabajando sin conexión: los datos de verdad viven en el ordenador, así que
  * sin él la app entra en modo consulta y no deja escribir.
  *
- * No hay lista de archivos que precargar: los nombres los pone Vite con un hash
- * en cada compilación. Se cachea lo que se va pidiendo, que además evita
- * guardar cosas que esta instalación no llega a usar.
+ * Los archivos de la app se guardan al instalar, y el resto según se va pidiendo.
+ * No hay lista escrita a mano —los nombres los pone Vite con un hash distinto en
+ * cada compilación—: se sacan del propio `/`, que es lo único con nombre fijo.
  */
 const VERSION = 'v1'
 const SHELL = `prolife-shell-${VERSION}`
@@ -17,9 +17,39 @@ const DATA = `prolife-data-${VERSION}`
 /** La escribe la página (ver `src/lib/offline.js`); aquí solo se consulta. */
 const FILES = 'prolife-files-v1'
 
+/**
+ * Al instalar se guarda la app entera, no solo el HTML.
+ *
+ * Guardando solo `/` quedaba una portada que apunta a un `<script>` que no está:
+ * los archivos de la app se descargan en esa primera carga, ANTES de que este
+ * service worker tome el mando, así que su `fetch` no los ve y no los guarda.
+ * Apagabas el ordenador después de la primera visita y la app abría en blanco —
+ * que es exactamente lo que pasa al instalarla en la tablet y salir de casa.
+ *
+ * Los nombres los pone Vite con un hash distinto en cada compilación, pero no
+ * hace falta una lista escrita a mano: vienen dentro del propio `/`.
+ */
 self.addEventListener('install', (e) => {
-  // El HTML es lo único con nombre fijo, y sin él no hay nada que arrancar.
-  e.waitUntil(caches.open(SHELL).then((c) => c.add('/')).then(() => self.skipWaiting()))
+  e.waitUntil(
+    (async () => {
+      const c = await caches.open(SHELL)
+      try {
+        const res = await fetch('/', { cache: 'reload' })
+        if (res.ok) {
+          const html = await res.clone().text()
+          await c.put('/', res)
+          const refs = [...html.matchAll(/(?:src|href)="(\/[^"]+)"/g)]
+            .map((m) => m[1])
+            .filter((u) => !u.startsWith('/api'))
+          // Uno que falle no puede tumbar la instalación entera.
+          await Promise.all([...new Set(refs)].map((u) => c.add(u).catch(() => {})))
+        }
+      } catch {
+        /* sin red al instalar: se guardará al primer arranque con ordenador */
+      }
+      await self.skipWaiting()
+    })()
+  )
 })
 
 self.addEventListener('activate', (e) => {
@@ -34,6 +64,18 @@ self.addEventListener('activate', (e) => {
       .then(() => self.clients.claim())
   )
 })
+
+/**
+ * Cómo se busca en la caché.
+ *
+ * `ignoreVary` hace falta de verdad: el servidor responde `Vary: Origin` a todo
+ * lo que llega con cabecera `Origin`, y los `<script>` y `<link>` que pone Vite
+ * llevan `crossorigin`, así que la mandan. Lo que se guarda al instalar lo pide
+ * este service worker, que no manda ninguna — y entonces la copia guardada no
+ * se encuentra nunca, aunque esté ahí. Son archivos nuestros del mismo origen:
+ * su contenido no cambia según quién los pida.
+ */
+const BUSCAR = { ignoreVary: true }
 
 /** Copia de una respuesta con una marca de que salió de la caché, no de la red. */
 async function markStale(res) {
@@ -56,11 +98,17 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone()
-          caches.open(SHELL).then((c) => c.put('/', copy))
+          // Solo se guarda lo que está bien. Sin esto, una sola respuesta mala
+          // —una compilación a medias, un proxy que se queja— sustituía a la
+          // portada guardada, y a partir de ahí la app sin ordenador delante
+          // enseñaba ese error para siempre.
+          if (res.ok) {
+            const copy = res.clone()
+            caches.open(SHELL).then((c) => c.put('/', copy))
+          }
           return res
         })
-        .catch(() => caches.match('/', { ignoreSearch: true }))
+        .catch(() => caches.match('/', { ignoreSearch: true, ...BUSCAR }))
     )
     return
   }
@@ -78,7 +126,7 @@ self.addEventListener('fetch', (e) => {
           return res
         })
         .catch(async () => {
-          const hit = await caches.match('/api/db')
+          const hit = await caches.match('/api/db', BUSCAR)
           if (hit) return markStale(hit)
           return new Response(JSON.stringify({ error: 'Sin conexión con el ordenador' }), {
             status: 503,
@@ -96,7 +144,7 @@ self.addEventListener('fetch', (e) => {
     const key = `${url.pathname}?p=${encodeURIComponent(url.searchParams.get('p') || '')}`
     e.respondWith(
       fetch(request).catch(async () => {
-        const hit = await caches.match(key)
+        const hit = await caches.match(key, BUSCAR)
         if (hit) return markStale(hit)
         return new Response('Este archivo no está guardado para consultarlo sin el ordenador.', {
           status: 504,
@@ -114,7 +162,7 @@ self.addEventListener('fetch', (e) => {
   // Estáticos (incluidas las tipografías de Google): de la caché si están, y se
   // refrescan por detrás para la próxima vez.
   e.respondWith(
-    caches.match(request).then((hit) => {
+    caches.match(request, BUSCAR).then((hit) => {
       const live = fetch(request)
         .then((res) => {
           if (res.ok || res.type === 'opaque') {
@@ -123,7 +171,18 @@ self.addEventListener('fetch', (e) => {
           }
           return res
         })
-        .catch(() => hit)
+        // Ni copia ni red: aquí se devolvía `hit`, que en ese caso es
+        // `undefined`. Un `respondWith(undefined)` no es una petición que falla:
+        // es el service worker reventando, y por eso un archivo que faltaba
+        // dejaba la pantalla en blanco en vez de dar un error entendible.
+        .catch(
+          () =>
+            hit ||
+            new Response('Este archivo no está guardado para abrir sin el ordenador.', {
+              status: 504,
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            })
+        )
       return hit || live
     })
   )

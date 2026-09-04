@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api.js'
 import { iso, today } from './date.js'
+import { saveDbSnapshot } from './offline.js'
 
 const Ctx = createContext(null)
 export const useStore = () => useContext(Ctx)
@@ -74,6 +75,10 @@ export function Provider({ children }) {
         setFuture(d._future || null)
         setOffline(!!d._stale)
         setDb(d)
+        // Lo que acaba de llegar del ordenador es lo que se enseñará cuando no
+        // esté. Lo guarda la página porque en la primera visita el service
+        // worker aún no está al mando y esa carga se le escapa.
+        if (!d._stale) saveDbSnapshot(d)
       } catch (e) {
         setError(e.status === 401 ? { auth: true, message: e.message } : { message: e.message })
         return
@@ -108,6 +113,10 @@ export function Provider({ children }) {
       const res = await api.putDb(data)
       stamp.current = res.stamp || stamp.current
       attempt.current = 0
+      // La copia para consultar sin el ordenador se queda al día con lo que
+      // acaba de entrar. Si solo se guardara al cargar, una tarde entera de
+      // trabajo en la tablet no se vería al abrirla luego sin el ordenador.
+      saveDbSnapshot(data)
       if (failing.current) {
         failing.current = false
         setUnsaved(false)

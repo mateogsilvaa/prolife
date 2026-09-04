@@ -72,7 +72,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { toasts, remote, reload, dismissRemote, future, offline, back } = useStore()
+  const { toasts, remote, reload, dismissRemote, future, offline, back, unsaved, retryNow } = useStore()
   const ui = useUI()
   const route = useRoute()
   const [palette, setPalette] = useState(false)
@@ -156,6 +156,17 @@ function Shell() {
               {typeof future === 'number' ? ` (v${future})` : ''}. Para no estropear nada, aquí no se guarda
               nada hasta que actualices la app en este ordenador.
             </span>
+          </div>
+        )}
+        {unsaved && (
+          <div className="notice bar err">
+            <Icon name="clock" size={13} />
+            <span>
+              Lo último que has hecho <strong>todavía no está en el disco</strong>: el guardado no pasó
+              y se sigue intentando. No cierres la app hasta que este aviso desaparezca.
+            </span>
+            <div className="spacer" />
+            <button className="btn sm primary" onClick={retryNow}>Intentar ahora</button>
           </div>
         )}
         {remote && (

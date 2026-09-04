@@ -141,8 +141,15 @@ export function attendanceBudget(db, subjectId) {
     maxAbsences,
     /** Faltas que aún te puedes permitir sin bajar del mínimo. */
     left: Math.max(0, maxAbsences - absences),
-    /** ¿Es ya imposible llegar al mínimo aunque vayas a todo lo que queda? */
-    doomed: attended + upcoming.length < mustAttend,
+    /**
+     * ¿Es ya imposible llegar al mínimo? Solo lo deciden las faltas que
+     * CONSTAN. Una clase pasada sin marcar es una incógnita, no una falta: darla
+     * por perdida hacía que la app dijera «sin margen» —y el ayudante «ya no
+     * llegas»— a quien no ha faltado a ninguna y solo lleva el registro flojo,
+     * contradiciendo al `left` de al lado. Lo que falta por marcar se cuenta
+     * aparte, en `unmarked`, y la pantalla lo avisa por su cuenta.
+     */
+    doomed: totalCounted - absences < mustAttend,
     mustAttend,
     /** Sin fechas de fin no se puede contar el total, así que el cálculo no vale. */
     reliable: (subject?.schedule || []).every((sl) => slotRange(sl, db.settings).until),

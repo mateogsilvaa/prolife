@@ -7,6 +7,11 @@ export const useStore = () => useContext(Ctx)
 
 export const uid = (p = 'x') => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
+/** Primera espera antes de reintentar un guardado que ha fallado. */
+const RETRY_MS = 2000
+/** Se dobla en cada intento hasta este escalón: 2 s, 4 s … 64 s. */
+const RETRY_MAX_STEP = 6
+
 export const PALETTE = [
   '#bf3f24', '#3c5a78', '#4f6b4a', '#a5711b', '#6b4a6b',
   '#2f6f6b', '#8c4a2f', '#43537a', '#77603a', '#5a5a52',
@@ -45,6 +50,17 @@ export function Provider({ children }) {
   const offlineRef = useRef(false)
   useEffect(() => { offlineRef.current = offline }, [offline])
   const [back, setBack] = useState(false)
+  /**
+   * Hay algo escrito que todavía no ha llegado al disco porque el guardado
+   * falló. Se enseña arriba y fijo: un aviso que se va solo dejaría la pantalla
+   * enseñando como guardado algo que no lo está.
+   */
+  const [unsaved, setUnsaved] = useState(false)
+  const retryTimer = useRef(null)
+  const flushRef = useRef(null)
+  /** Racha de fallos en curso: sirve para avisar una vez, no una por intento. */
+  const failing = useRef(false)
+  const attempt = useRef(0)
 
   useEffect(() => {
     ;(async () => {
@@ -80,19 +96,55 @@ export function Provider({ children }) {
     if (!pending.current) return
     const data = pending.current
     pending.current = null
-    // Con un fichero de una versión más nueva el servidor rechaza cada guardado:
-    // insistir solo llenaría la pantalla de avisos. El cartel de arriba ya lo dice.
+    /**
+     * Dos casos en los que el cambio se descarta a propósito y no se reintenta:
+     * con un fichero de una versión más nueva el servidor va a rechazar cada
+     * guardado, y en modo consulta lo que hay en pantalla salió de una copia que
+     * puede estar vieja — escribirla encima sería pisar lo que tenga el
+     * ordenador. Los dos tienen su cartel fijo arriba diciéndolo.
+     */
     if (futureRef.current || offlineRef.current) return
     try {
       const res = await api.putDb(data)
       stamp.current = res.stamp || stamp.current
+      attempt.current = 0
+      if (failing.current) {
+        failing.current = false
+        setUnsaved(false)
+        toast('Guardado: ya está todo en el disco')
+      }
     } catch (e) {
       // El servidor se niega a escribir encima de un fichero de una versión más
       // nueva: no es un fallo pasajero, así que se avisa arriba y no se reintenta.
-      if (/versión más nueva/i.test(e.message)) setFuture((v) => v || true)
-      toast('No se pudo guardar: ' + e.message, 'err')
+      if (/versión más nueva/i.test(e.message)) {
+        setFuture((v) => v || true)
+        toast('No se pudo guardar: ' + e.message, 'err')
+        return
+      }
+      /**
+       * Cualquier otro fallo puede ser pasajero —un parpadeo de la wifi desde la
+       * tablet es el caso normal—. Lo que no puede pasar es que el cambio se
+       * quede solo en la pantalla: vuelve a la cola, para que lo recoja el
+       * reintento y también el guardado de última hora al cerrar. Si mientras
+       * tanto has tocado algo, eso ya lleva esto dentro y manda lo nuevo.
+       */
+      if (!pending.current) pending.current = data
+      // Se espera un poco más en cada intento, hasta un tope: si el ordenador
+      // está apagado de verdad, insistir cada segundo no lo va a encender.
+      attempt.current = Math.min(attempt.current + 1, RETRY_MAX_STEP)
+      clearTimeout(retryTimer.current)
+      retryTimer.current = setTimeout(() => flushRef.current?.(), RETRY_MS * 2 ** (attempt.current - 1))
+      // Un aviso por racha, no uno por intento.
+      if (!failing.current) {
+        failing.current = true
+        setUnsaved(true)
+        toast('No se ha podido guardar: ' + e.message + '. Se sigue intentando.', 'err')
+      }
     }
   }, [toast])
+
+  useEffect(() => { flushRef.current = flush }, [flush])
+  useEffect(() => () => clearTimeout(retryTimer.current), [])
 
   /**
    * Con el directorio dentro de Google Drive, el otro ordenador puede haber
@@ -160,9 +212,10 @@ export function Provider({ children }) {
     () => ({
       db, config, setConfig, error, update, toast, toasts, remote, reload,
       dismissRemote: () => setRemote(false),
-      future, offline, back,
+      future, offline, back, unsaved,
+      retryNow: () => flushRef.current?.(),
     }),
-    [db, config, error, update, toast, toasts, remote, reload, future, offline, back]
+    [db, config, error, update, toast, toasts, remote, reload, future, offline, back, unsaved]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

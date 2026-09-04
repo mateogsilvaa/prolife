@@ -24,6 +24,13 @@ export function repeatLabel(repeat) {
 }
 
 /**
+ * Días enteros entre dos medianoches locales. Con `Math.round` y no una
+ * división a secas: cruzando un cambio de hora la diferencia no da un número
+ * entero de días, y ahí un `ceil` a pelo se saltaría una aparición.
+ */
+const daysBetween = (a, b) => Math.round((b - a) / 86400000)
+
+/**
  * Expande un evento repetido a las fechas concretas que caen dentro del rango.
  * Las fechas en `exceptions` se saltan (sirve para "este día no").
  */
@@ -46,11 +53,19 @@ export function occurrences(event, fromIso, toIso) {
 
   if (r.freq === 'weekly') {
     const days = r.byday?.length ? r.byday : [weekday(start)]
-    // se avanza semana a semana desde el lunes de la semana de inicio
-    let weekStart = addDays(start, -weekday(start))
+    const base = addDays(start, -weekday(start))
+    // Se empieza en la semana de `from`, no en la del primer día de la serie:
+    // recorrerla entera cuesta tantas vueltas como semanas lleve viva, y la
+    // vista de mes pide 42 días uno a uno. Se redondea hacia abajo a un
+    // múltiplo del intervalo para que la comprobación de abajo siga valiendo.
+    // Hacia abajo las dos veces: primero a la semana que CONTIENE `from` (no a
+    // la más cercana, que se saltaría la de en curso), y luego al múltiplo del
+    // intervalo anterior, para no colarse por delante de una semana buena.
+    const weeksAhead = Math.floor(daysBetween(base, from) / 7)
+    let weekStart = weeksAhead > 0 ? addDays(base, Math.floor(weeksAhead / interval) * interval * 7) : base
     let guard = 0
     while (weekStart <= limit && guard++ < MAX) {
-      const weeksApart = Math.round((weekStart - addDays(start, -weekday(start))) / 604800000)
+      const weeksApart = Math.round((weekStart - base) / 604800000)
       if (weeksApart % interval === 0) {
         for (const d of days) {
           const day = addDays(weekStart, d)
@@ -60,7 +75,11 @@ export function occurrences(event, fromIso, toIso) {
       weekStart = addDays(weekStart, 7)
     }
   } else if (r.freq === 'daily') {
-    let d = new Date(start)
+    // Igual: se salta directamente a la primera aparición dentro de la ventana.
+    // Recorriendo desde el principio, el tope de MAX acababa cortando la serie
+    // por el camino y el evento dejaba de salir en el calendario sin avisar.
+    const ahead = daysBetween(start, from)
+    let d = ahead > 0 ? addDays(start, Math.ceil(ahead / interval) * interval) : new Date(start)
     let guard = 0
     while (d <= limit && guard++ < MAX) {
       if (d >= from) out.push(iso(d))

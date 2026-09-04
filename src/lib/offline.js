@@ -10,6 +10,8 @@
  * cuando el ordenador no contesta (ver `public/sw.js`).
  */
 const CACHE = 'prolife-files-v1'
+/** La lee el service worker cuando el ordenador no contesta (ver `public/sw.js`). */
+const DB_CACHE = 'prolife-data-v1'
 
 /**
  * Clave estable de un archivo. La URL real puede llevar la clave de acceso
@@ -73,4 +75,28 @@ export async function usage() {
 export async function clearAll() {
   if (typeof caches === 'undefined') return false
   return caches.delete(CACHE)
+}
+
+/**
+ * Guarda la última copia buena de la base, que es lo que se enseña cuando el
+ * ordenador no está.
+ *
+ * La escribe la página y no el service worker, por el mismo motivo que los
+ * archivos: en la PRIMERA visita el service worker todavía no está al mando, así
+ * que esa carga se le escapa entera. Y esa es justo la visita después de la cual
+ * instalas la app en la tablet y sales de casa — abrías y no había nada que
+ * enseñar. Cuando ya está al mando la guarda él también; escribirla aquí siempre
+ * no molesta y quita el caso raro.
+ */
+export async function saveDbSnapshot(data) {
+  if (!canStore()) return false
+  try {
+    const c = await caches.open(DB_CACHE)
+    await c.put('/api/db', new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } }))
+    return true
+  } catch {
+    // El navegador puede negarse (sin espacio, modo privado). No es crítico:
+    // significa que sin el ordenador no habrá nada que consultar, y ya se dice.
+    return false
+  }
 }

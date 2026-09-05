@@ -23,6 +23,10 @@ Y para generar un instalador (`.exe` en Windows):
 npm run dist
 ```
 
+**Actualizar una instalación que ya tienes en marcha, sin perder nada:**
+[ACTUALIZAR.md](ACTUALIZAR.md). En resumen: los datos no están dentro de la app, así que
+instalar encima no se lleva nada por delante.
+
 ## Dónde vive todo
 
 Por defecto en `Documentos/ProLife`, cambiable en **Ajustes → Directorio de trabajo**.
@@ -199,17 +203,40 @@ asignatura y desglosado en Estadísticas.
 `Ctrl+I` abre un ayudante que habla con [Ollama](https://ollama.com) corriendo en tu propio
 ordenador. Nada de lo que le digas sale de la máquina.
 
-Conoce tus asignaturas, tu horario, tus faltas, tus horas y tus exámenes, así que se le
-puede preguntar de verdad:
+Conoce tus asignaturas, tu horario, tus faltas, tus horas, tus proyectos, tus entrenos y
+los documentos de tus carpetas, así que se le puede preguntar de verdad:
 
 - *«¿cuántas faltas más me puedo permitir?»* → «llevas 1 de 8, quedan 21 clases y exigen el
   70%: puedes faltar a 7 más».
 - *«¿cómo llevo la semana?»*, *«¿qué tengo para los próximos 7 días?»*
-- *«añádeme una tarea de cálculo para el viernes»* → «vale, ¿cómo la llamo y qué hay que
-  hacer?». Con eso, la crea.
+- *«resume el documento que tengo abierto»* → lee el archivo que tienes delante en el
+  espacio de trabajo y te contesta sobre él.
+- *«créame un proyecto que se llame Nautilos»*, *«pon la asistencia de Desarrollo web al
+  80%»*, *«apunta series, 75 minutos, RPE 8»*, *«bórralo»*.
 
-También apunta exámenes y tramos de tiempo. Todo lo que crea aparece en el chat con un
-botón de **deshacer**, y en Ajustes se le puede quitar el permiso de escribir.
+Puede consultar (asignaturas, proyectos, semana, agenda, horario, atletismo, documentos) y
+puede escribir: tareas, exámenes, eventos, proyectos, asignaturas, tiempo, entrenos,
+asistencia, los objetivos de Ajustes, y borrar lo que se haya equivocado.
+
+**Lo que no sabe, lo pregunta.** Un modelo pequeño prefiere rellenar un hueco antes que
+admitir que le falta un dato: si le dices *«añádeme una tarea para el viernes»* se inventa
+que la tarea se llama «Tarea para el viernes» y la cuelga de la primera asignatura que ve.
+Así que la comprobación no está en el modelo, que puede saltársela, sino en la propia
+herramienta:
+
+- Un título que, quitándole las fechas y el relleno, se queda en «tarea» o «cosa» no es un
+  título: no se crea nada y se te pregunta cómo quieres llamarla.
+- Falta el ámbito (uni, trabajo o personal) → se pregunta.
+- Una asignatura o un proyecto que no aparecen por ninguna parte en lo que tú has escrito
+  se descartan: los ha sacado de la lista del contexto, no de ti.
+
+La pregunta la hace la herramienta y se te enseña tal cual, sin pasar por el modelo. Y no
+todo necesita herramienta: una opinión, una duda de temario o ayuda a redactar se contestan
+directamente.
+
+Todo lo que crea, cambia o borra aparece en el chat con un botón de **deshacer** —también
+los borrados, que se restauran enteros—, y en Ajustes se le puede quitar el permiso de
+escribir.
 
 Necesita Ollama instalado y un modelo descargado:
 

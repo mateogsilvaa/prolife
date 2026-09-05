@@ -1,8 +1,9 @@
-import { uid } from './store.jsx'
+import { uid, PALETTE } from './store.jsx'
 import { today, iso, addDays, parseIso, startOfWeek, dur, DAYS_LONG, daysUntil } from './date.js'
+import { api } from './api.js'
 import {
   subjectStats, attendanceBudget, subjectWeek, weekProgress, classesOn,
-  upcomingExams, weeklyGoalHours, termWindow, classOccurrences,
+  upcomingExams, termWindow, classOccurrences,
 } from './stats.js'
 
 /**
@@ -12,27 +13,60 @@ import {
  * de la base de datos que ves en pantalla. El modelo no toca el disco: propone
  * una llamada, esto la valida, la aplica y le devuelve el resultado en texto.
  * Nada sale del ordenador: Ollama también corre en local.
+ *
+ * Dos reglas gobiernan todo lo que escribe:
+ *
+ * 1. **Lo que falta se pregunta, no se inventa.** Cuando una herramienta ve que
+ *    le faltan datos devuelve `ask` con la pregunta ya escrita, y la interfaz
+ *    la enseña tal cual sin dejar seguir al modelo. Un modelo pequeño se salta
+ *    la instrucción de preguntar; esto no puede saltárselo.
+ * 2. **Nada que el usuario no haya dicho.** Si el modelo rellena una asignatura
+ *    o un proyecto que no aparece por ningún lado en la conversación, se tira
+ *    el dato: es una alucinación, no una elección.
  */
 
 /* ------------------------------------------------------------- utilidades */
 
-/** Encuentra una asignatura por nombre, código o trozo de nombre. */
-export function findSubject(db, name) {
-  if (!name) return null
-  const n = String(name).trim().toLowerCase()
-  if (!n) return null
-  // sin tildes: «matemáticas» y «matematicas» tienen que encontrarse igual
-  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  const q = norm(n)
+/** Sin tildes ni mayúsculas: «matemáticas» y «matematicas» son lo mismo. */
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+
+const iniciales = (s) => norm(s).split(/\s+/).map((w) => w[0] || '').join('')
+
+/** Busca por nombre exacto, código, trozo de nombre o iniciales. */
+function porNombre(items, name, extra = () => '') {
+  const q = norm(name)
+  if (!q) return null
   return (
-    db.subjects.find((s) => norm(s.name) === q) ||
-    db.subjects.find((s) => norm(s.code) === q) ||
-    db.subjects.find((s) => norm(s.name).includes(q)) ||
-    db.subjects.find((s) => q.includes(norm(s.name)) && s.name.length > 3) ||
-    // por iniciales: «poo» → Programación Orientada a Objetos
-    db.subjects.find((s) => norm(s.name).split(/\s+/).map((w) => w[0]).join('') === q) ||
+    items.find((x) => norm(x.name) === q) ||
+    items.find((x) => norm(extra(x)) && norm(extra(x)) === q) ||
+    items.find((x) => norm(x.name).includes(q) && q.length > 2) ||
+    items.find((x) => q.includes(norm(x.name)) && String(x.name).length > 3) ||
+    items.find((x) => iniciales(x.name) === q && q.length > 1) ||
     null
   )
+}
+
+export const findSubject = (db, name) => (name ? porNombre(db.subjects, name, (s) => s.code) : null)
+export const findProject = (db, name) => (name ? porNombre(db.projects, name, (p) => p.org) : null)
+
+/**
+ * ¿El usuario ha nombrado esto de verdad?
+ *
+ * `dicho` es todo lo que el usuario ha escrito en la conversación. Si el nombre
+ * que trae la herramienta no aparece por ninguna parte, el modelo se lo ha
+ * sacado del contexto del sistema —donde están listadas las asignaturas— para
+ * rellenar un hueco. Eso no es un dato: es ruido, y se descarta.
+ */
+function loHaDicho(dicho, entidad) {
+  if (!dicho) return true
+  const d = norm(dicho)
+  const nombre = norm(entidad?.name || entidad)
+  if (!nombre) return false
+  if (d.includes(nombre)) return true
+  if (entidad?.code && d.includes(norm(entidad.code))) return true
+  if (iniciales(nombre).length > 1 && new RegExp(`\\b${iniciales(nombre)}\\b`).test(d)) return true
+  // basta con una palabra larga del nombre: «desarrollo» vale por «Desarrollo web»
+  return nombre.split(/\s+/).filter((w) => w.length > 4).some((w) => d.includes(w))
 }
 
 /** Acepta «2026-03-14», «mañana», «viernes», «el 14 de marzo». */
@@ -43,8 +77,8 @@ export function parseWhen(text) {
 
   const base = parseIso(today())
   if (/^hoy$/.test(raw)) return today()
-  if (/^mañana|manana$/.test(raw)) return iso(addDays(base, 1))
-  if (/^pasado\s*mañana|pasado manana$/.test(raw)) return iso(addDays(base, 2))
+  if (/^(mañana|manana)$/.test(raw)) return iso(addDays(base, 1))
+  if (/^pasado\s*(mañana|manana)$/.test(raw)) return iso(addDays(base, 2))
 
   const weekly = DAYS_LONG.findIndex((d) => raw.includes(d.toLowerCase()))
   if (weekly >= 0) {
@@ -74,143 +108,331 @@ export function parseWhen(text) {
   return ''
 }
 
+/**
+ * ¿Este título es de verdad un título, o es la frase del usuario reciclada?
+ *
+ * «Añádeme una tarea para el viernes» no dice cómo se llama la tarea. Un modelo
+ * pequeño rellena el hueco con «Tarea para el viernes» y se queda tan ancho.
+ * Se le quitan al título las palabras de relleno y las fechas: si lo que sobra
+ * es un sustantivo genérico, ahí no hay título ninguno.
+ */
+const GENERICO = /^(una?\s+)?(tarea|cosa|algo|recordatorio|nota|apunte|pendiente|entrega|trabajo|evento|cita|proyecto|examen|prueba)s?$/
+export function tituloVago(titulo) {
+  const limpio = norm(titulo)
+    .replace(/[¿?¡!.,;:"']/g, ' ')
+    .replace(/\b(para|por|de|del|el|la|lo|los|las|un|una|este|esta|proxim[oa]s?|que viene|nuev[oa]|mi|me)\b/g, ' ')
+    .replace(/\b(hoy|manana|pasado|lunes|martes|miercoles|jueves|viernes|sabado|domingo|semana|finde|mes|dia|dias|\d[\d/-]*)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return !limpio || limpio.length < 3 || GENERICO.test(limpio)
+}
+
 const pctFmt = (x) => `${Math.round(x * 100)}%`
 const list = (xs) => (xs.length ? xs.join('\n') : '(ninguno)')
+const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : null)
+
+/** «80», «80%» y «0.8» son lo mismo: una tasa entre 0 y 1. */
+function tasa(v) {
+  const n = num(String(v).replace('%', ''))
+  if (n == null || n <= 0) return null
+  const r = n > 1 ? n / 100 : n
+  return r > 1 ? null : r
+}
 
 /* -------------------------------------------------------- definiciones ---- */
 
+const P = (properties, required = []) => ({ type: 'object', properties, required })
+const S = (description, extra = {}) => ({ type: 'string', description, ...extra })
+const N = (description) => ({ type: 'number', description })
+
+const AMBITO = { type: 'string', enum: ['uni', 'trabajo', 'personal'], description: 'A qué parte de la vida pertenece' }
+const FECHA = S('AAAA-MM-DD, o "hoy" / "mañana" / un día de la semana')
+
 /** Esquema en el formato que entiende Ollama (compatible con OpenAI). */
 export const TOOL_SCHEMA = [
+  /* ------------------------------------------------------------- consultas */
   {
     type: 'function',
     function: {
       name: 'listar_asignaturas',
-      description: 'Lista las asignaturas del curso con su código, créditos y horario. Úsala si no sabes a qué asignatura se refiere el usuario.',
-      parameters: { type: 'object', properties: {}, required: [] },
+      description: 'Las asignaturas del curso, con código, créditos y horario.',
+      parameters: P({}),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listar_proyectos',
+      description: 'Los proyectos de trabajo, con su organización y el tiempo dedicado.',
+      parameters: P({}),
     },
   },
   {
     type: 'function',
     function: {
       name: 'estado_asignatura',
-      description:
-        'Estado completo de una asignatura: asistencia, cuántas faltas más puede permitirse, horas dedicadas, progreso semanal, tareas pendientes y próximos exámenes.',
-      parameters: {
-        type: 'object',
-        properties: { asignatura: { type: 'string', description: 'Nombre o código de la asignatura' } },
-        required: ['asignatura'],
-      },
+      description: 'Todo de una asignatura: asistencia, faltas que le quedan, horas, tareas y exámenes.',
+      parameters: P({ asignatura: S('Nombre o código') }, ['asignatura']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'estado_proyecto',
+      description: 'Todo de un proyecto de trabajo: horas dedicadas y tareas abiertas.',
+      parameters: P({ proyecto: S('Nombre del proyecto') }, ['proyecto']),
     },
   },
   {
     type: 'function',
     function: {
       name: 'resumen_semana',
-      description: 'Resumen de la semana en curso: horas trabajadas, porcentaje del trabajo semanal hecho, entregas y exámenes que vienen.',
-      parameters: { type: 'object', properties: {}, required: [] },
+      description: 'Cómo va la semana: horas, porcentaje del objetivo, asistencia, entregas, exámenes y entrenos.',
+      parameters: P({}),
     },
   },
   {
     type: 'function',
     function: {
       name: 'tareas_pendientes',
-      description: 'Tareas sin terminar, opcionalmente filtradas por asignatura o por los próximos N días.',
-      parameters: {
-        type: 'object',
-        properties: {
-          asignatura: { type: 'string', description: 'Opcional. Nombre de la asignatura.' },
-          dias: { type: 'number', description: 'Opcional. Solo las que vencen en los próximos N días.' },
-        },
-        required: [],
-      },
+      description: 'Tareas sin terminar, con filtros opcionales.',
+      parameters: P({
+        asignatura: S('Opcional'),
+        proyecto: S('Opcional'),
+        ambito: AMBITO,
+        dias: N('Solo las que vencen en los próximos N días'),
+      }),
     },
   },
   {
     type: 'function',
     function: {
       name: 'horario',
-      description: 'Clases previstas en una fecha concreta.',
-      parameters: {
-        type: 'object',
-        properties: { fecha: { type: 'string', description: 'Fecha AAAA-MM-DD, o "hoy" / "mañana" / un día de la semana.' } },
-        required: ['fecha'],
-      },
+      description: 'Clases previstas en una fecha.',
+      parameters: P({ fecha: FECHA }, ['fecha']),
     },
   },
   {
     type: 'function',
     function: {
-      name: 'crear_tarea',
+      name: 'agenda',
+      description: 'Qué hay en el calendario —eventos, exámenes y entregas— en los próximos días.',
+      parameters: P({ dias: N('Cuántos días mirar, 14 por defecto') }),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'resumen_atletismo',
+      description: 'Entrenamientos recientes: sesiones, minutos, carga y cómo va la semana.',
+      parameters: P({ semanas: N('Cuántas semanas atrás, 2 por defecto') }),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listar_documentos',
+      description: 'Los archivos que hay en la carpeta de una asignatura o un proyecto.',
+      parameters: P({ asignatura: S('Opcional'), proyecto: S('Opcional'), carpeta: S('Ruta, opcional') }),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'leer_documento',
       description:
-        'Crea una tarea. NO la llames si te falta el título o la fecha: pregúntaselos antes al usuario en tu respuesta.',
-      parameters: {
-        type: 'object',
-        properties: {
-          titulo: { type: 'string', description: 'Título corto y concreto de la tarea' },
-          asignatura: { type: 'string', description: 'Nombre de la asignatura a la que pertenece' },
-          fecha: { type: 'string', description: 'Fecha límite AAAA-MM-DD (o "viernes", "mañana")' },
-          notas: { type: 'string', description: 'Descripción o detalles de la entrega' },
-          prioridad: { type: 'string', enum: ['baja', 'normal', 'alta', 'urgente'] },
-          estimacion_min: { type: 'number', description: 'Minutos que crees que llevará' },
-        },
-        required: ['titulo', 'fecha'],
-      },
+        'Lee el contenido de un documento de texto (apuntes, .md, .txt, código) para poder resumirlo, corregirlo u opinar. Sin argumentos lee el que el usuario tiene abierto.',
+      parameters: P({
+        nombre: S('Nombre o ruta del archivo. Vacío = el documento abierto ahora mismo.'),
+        asignatura: S('Opcional, para buscarlo dentro de su carpeta'),
+        proyecto: S('Opcional'),
+      }),
+    },
+  },
+
+  /* -------------------------------------------------------- modificaciones */
+  {
+    type: 'function',
+    function: {
+      name: 'crear_tarea',
+      description: 'Apunta una tarea. Pasa solo lo que el usuario haya dicho: lo que falte se le pregunta.',
+      parameters: P({
+        titulo: S('Cómo la llama el usuario. No lo inventes.'),
+        ambito: AMBITO,
+        asignatura: S('Si es de la uni y ha dicho cuál'),
+        proyecto: S('Si es del trabajo y ha dicho cuál'),
+        fecha: FECHA,
+        notas: S('Detalles'),
+        prioridad: S('', { enum: ['baja', 'normal', 'alta', 'urgente'] }),
+        estimacion_min: N('Minutos que llevará'),
+      }, ['titulo']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'completar_tarea',
+      description: 'Da una tarea por hecha, o la reabre.',
+      parameters: P({ tarea: S('Título de la tarea'), hecha: { type: 'boolean', description: 'false para reabrirla' } }, ['tarea']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crear_proyecto',
+      description: 'Crea un proyecto en el apartado de Trabajo.',
+      parameters: P({ nombre: S('Nombre del proyecto'), organizacion: S('RFEA, cliente…'), notas: S('') }, ['nombre']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crear_asignatura',
+      description: 'Crea una asignatura vacía. El horario se pone luego a mano en la app.',
+      parameters: P({ nombre: S(''), codigo: S(''), profesor: S(''), creditos: N('ECTS') }, ['nombre']),
     },
   },
   {
     type: 'function',
     function: {
       name: 'crear_examen',
-      description:
-        'Crea un examen o una entrega evaluable de una asignatura. NO la llames si te falta el título, la asignatura o la fecha: pregúntalos antes.',
-      parameters: {
-        type: 'object',
-        properties: {
-          titulo: { type: 'string', description: 'Por ejemplo "Parcial 1" o "Entrega práctica 3"' },
-          asignatura: { type: 'string' },
-          fecha: { type: 'string', description: 'AAAA-MM-DD' },
-          hora: { type: 'string', description: 'HH:MM, opcional' },
-          aula: { type: 'string' },
-          peso: { type: 'number', description: 'Porcentaje sobre la nota final, 0–100' },
-          tipo: { type: 'string', enum: ['examen', 'entrega'] },
-          notas: { type: 'string', description: 'Temario que entra, condiciones…' },
-        },
-        required: ['titulo', 'asignatura', 'fecha'],
-      },
+      description: 'Crea un examen o una entrega evaluable de una asignatura.',
+      parameters: P({
+        titulo: S('«Parcial 1», «Entrega práctica 3»…'),
+        asignatura: S(''),
+        fecha: FECHA,
+        hora: S('HH:MM'),
+        aula: S(''),
+        peso: N('Porcentaje sobre la nota final'),
+        tipo: S('', { enum: ['examen', 'entrega'] }),
+        notas: S('Temario que entra…'),
+      }, ['titulo']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crear_evento',
+      description: 'Apunta algo en el calendario: una cita, una reunión, un viaje.',
+      parameters: P({
+        titulo: S(''),
+        fecha: FECHA,
+        hora: S('HH:MM'),
+        hora_fin: S('HH:MM'),
+        categoria: S('Universidad, Trabajo, Atletismo, Salud, Personal…'),
+        notas: S(''),
+      }, ['titulo']),
     },
   },
   {
     type: 'function',
     function: {
       name: 'registrar_tiempo',
-      description: 'Apunta minutos ya trabajados en una asignatura en una fecha. Para corregir o añadir tiempo a mano.',
-      parameters: {
-        type: 'object',
-        properties: {
-          asignatura: { type: 'string' },
-          minutos: { type: 'number' },
-          fecha: { type: 'string', description: 'AAAA-MM-DD, por defecto hoy' },
-        },
-        required: ['asignatura', 'minutos'],
-      },
+      description: 'Apunta minutos ya trabajados en una asignatura o un proyecto.',
+      parameters: P({ asignatura: S(''), proyecto: S(''), minutos: N(''), fecha: FECHA }, ['minutos']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'registrar_entreno',
+      description: 'Apunta un entrenamiento de atletismo.',
+      parameters: P({
+        tipo: S('Series, Rodaje, Gimnasio, Técnica, Competición, Recuperación'),
+        minutos: N(''),
+        rpe: N('Esfuerzo percibido del 1 al 10'),
+        fecha: FECHA,
+        notas: S(''),
+      }, ['minutos']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'marcar_asistencia',
+      description: 'Marca si fue a clase de una asignatura un día concreto.',
+      parameters: P({
+        asignatura: S(''),
+        fecha: FECHA,
+        estado: S('', { enum: ['present', 'absent', 'late', 'excused'] }),
+      }, ['asignatura', 'fecha', 'estado']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ajustar_asignatura',
+      description:
+        'Cambia los datos de una asignatura: la asistencia mínima que le exigen, los créditos, el profesor o las horas de estudio por semana.',
+      parameters: P({
+        asignatura: S(''),
+        asistencia_minima: N('El mínimo exigido, en porcentaje (80 = 80%)'),
+        creditos: N('ECTS'),
+        profesor: S(''),
+        objetivo_horas: N('Horas de estudio por semana'),
+      }, ['asignatura']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'ajustar_objetivos',
+      description: 'Cambia los objetivos generales de la app, los que valen para todo.',
+      parameters: P({
+        asistencia_minima: N('Mínimo exigido por defecto, en porcentaje'),
+        horas_semana: N('Horas de trabajo por semana que cuentan como el 100%'),
+        entrenos_semana: N('Entrenamientos por semana'),
+      }),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'borrar',
+      description: 'Borra algo que ya existe. Se puede deshacer desde la tarjeta que aparece.',
+      parameters: P({
+        tipo: S('', { enum: ['tarea', 'proyecto', 'examen', 'evento', 'entreno'] }),
+        nombre: S('Título o nombre de lo que hay que borrar'),
+      }, ['tipo', 'nombre']),
     },
   },
 ]
 
 /** Las que escriben en la base de datos: se pueden desactivar en Ajustes. */
-export const WRITE_TOOLS = new Set(['crear_tarea', 'crear_examen', 'registrar_tiempo'])
+export const WRITE_TOOLS = new Set([
+  'crear_tarea', 'completar_tarea', 'crear_proyecto', 'crear_asignatura', 'crear_examen',
+  'crear_evento', 'registrar_tiempo', 'registrar_entreno', 'marcar_asistencia',
+  'ajustar_asignatura', 'ajustar_objetivos', 'borrar',
+])
 
 /* ---------------------------------------------------------- ejecución ---- */
 
 const PRIO = { baja: 0, normal: 1, alta: 2, urgente: 3 }
+const LISTA = { tarea: 'tasks', proyecto: 'projects', examen: 'exams', evento: 'events', entreno: 'training' }
+
+/** Lo que el usuario ve en la tarjeta, y lo que hace falta para deshacerlo. */
+const creado = (list, item, summary, href) => ({ op: 'crear', list, id: item.id, summary, href })
+const borrado = (list, item, index, summary, href) => ({ op: 'borrar', list, id: item.id, item, index, summary, href })
+const editado = (list, item, before, summary, href) => ({ op: 'editar', list, id: item.id, before, summary, href })
 
 /**
- * Ejecuta una llamada del modelo. Devuelve `{ text, action }`: `text` es lo que
- * se le manda de vuelta al modelo, `action` lo que la interfaz enseña y permite
- * deshacer.
+ * Ejecuta una llamada del modelo.
+ *
+ * Devuelve `{ text, action, ask }`: `text` es lo que se le manda de vuelta al
+ * modelo, `action` lo que la interfaz enseña y permite deshacer, y `ask` una
+ * pregunta que se le hace al usuario **sin pasar por el modelo** cuando faltan
+ * datos, que es la única manera de que un modelo pequeño no se los invente.
  */
-export function runTool(name, args = {}, { db, update }) {
+export async function runTool(name, args = {}, ctx) {
+  const { db, update, dicho = '', doc = null } = ctx
   const A = args || {}
+
+  /** El nombre que trae el modelo solo vale si el usuario lo ha dicho. */
+  const suyo = (valor, buscar) => {
+    if (!valor) return null
+    const hit = buscar(db, valor)
+    return hit && loHaDicho(dicho, hit) ? hit : null
+  }
 
   switch (name) {
     /* ------------------------------------------------------------ consultas */
@@ -231,15 +453,22 @@ export function runTool(name, args = {}, { db, update }) {
       }
     }
 
+    case 'listar_proyectos': {
+      if (!db.projects.length) return { text: 'No hay ningún proyecto de trabajo creado todavía.' }
+      return {
+        text: list(
+          db.projects.map((p) => {
+            const secs = db.sessions.filter((s) => s.refId === p.id).reduce((a, s) => a + s.seconds, 0)
+            const abiertas = db.tasks.filter((t) => t.refId === p.id && t.status !== 'done').length
+            return `- ${p.name}${p.org ? ` (${p.org})` : ''} · ${dur(secs, true)} dedicadas · ${abiertas} tareas abiertas`
+          })
+        ),
+      }
+    }
+
     case 'estado_asignatura': {
       const s = findSubject(db, A.asignatura)
-      if (!s) {
-        return {
-          text: `No encuentro ninguna asignatura llamada "${A.asignatura}". Las que hay son: ${
-            db.subjects.map((x) => x.name).join(', ') || 'ninguna'
-          }.`,
-        }
-      }
+      if (!s) return { text: sinAsignatura(db, A.asignatura) }
       const st = subjectStats(db, s.id)
       const b = attendanceBudget(db, s.id)
       const w = subjectWeek(db, s.id)
@@ -254,7 +483,7 @@ export function runTool(name, args = {}, { db, update }) {
             b.unmarked ? `Hay ${b.unmarked} clases pasadas sin marcar, así que el número puede cambiar.` : '',
             b.reliable ? '' : 'OJO: alguna clase del horario no tiene fecha de fin, así que el total de clases es una estimación.',
           ].filter(Boolean).join(' ')
-        : 'Esta asignatura no tiene horario configurado, así que no se puede calcular la asistencia.'
+        : 'Esta asignatura no tiene horario configurado, así que no se puede calcular la asistencia. Dile que lo rellene en la ficha de la asignatura.'
 
       return {
         text: [
@@ -264,11 +493,30 @@ export function runTool(name, args = {}, { db, update }) {
           `Esta semana: ${dur(w.seconds, true)} de un objetivo de ${w.goal} h — ${w.pct}% del trabajo semanal hecho.`,
           `Tareas pendientes (${st.open.length}):`,
           list(st.open.map((t) => `  · ${t.title}${t.due ? ` — vence el ${t.due}` : ' — sin fecha'}`)),
-          `Exámenes y entregas evaluables:`,
+          'Exámenes y entregas evaluables:',
           list(
             st.exams.map((e) => `  · ${e.title} — ${e.date}${e.start ? ` a las ${e.start}` : ''}${e.weight ? ` (${e.weight}% de la nota)` : ''}`)
           ),
         ].join('\n'),
+      }
+    }
+
+    case 'estado_proyecto': {
+      const p = findProject(db, A.proyecto)
+      if (!p) {
+        return { text: `No encuentro ningún proyecto llamado "${A.proyecto}". Los que hay: ${db.projects.map((x) => x.name).join(', ') || 'ninguno'}.` }
+      }
+      const rows = db.sessions.filter((s) => s.refId === p.id)
+      const wk = iso(startOfWeek(new Date()))
+      const abiertas = db.tasks.filter((t) => t.refId === p.id && t.status !== 'done')
+      return {
+        text: [
+          `Proyecto: ${p.name}${p.org ? ` (${p.org})` : ''}.`,
+          `Tiempo dedicado: ${dur(rows.reduce((a, s) => a + s.seconds, 0), true)} en total, ${dur(rows.filter((s) => s.date >= wk).reduce((a, s) => a + s.seconds, 0), true)} esta semana.`,
+          `Tareas abiertas (${abiertas.length}):`,
+          list(abiertas.map((t) => `  · ${t.title}${t.due ? ` — vence el ${t.due}` : ''}`)),
+          p.notes ? `Notas: ${p.notes}` : '',
+        ].filter(Boolean).join('\n'),
       }
     }
 
@@ -279,17 +527,31 @@ export function runTool(name, args = {}, { db, update }) {
         .filter((t) => t.status !== 'done' && t.due && daysUntil(t.due) >= 0 && daysUntil(t.due) <= 7)
         .sort((a, b) => a.due.localeCompare(b.due))
       const late = db.tasks.filter((t) => t.status !== 'done' && t.due && daysUntil(t.due) < 0)
+      const wk = iso(startOfWeek(new Date()))
+      const entrenos = (db.training || []).filter((t) => t.done && t.date >= wk)
+
+      // La asistencia solo se puede resumir de las asignaturas con horario.
+      const conHorario = db.subjects.filter((s) => (s.schedule || []).length)
+      const faltas = conHorario.map((s) => ({ s, b: attendanceBudget(db, s.id) })).filter((x) => x.b.totalCounted)
+
+      if (!db.subjects.length && !db.projects.length && !db.sessions.length) {
+        return { text: 'La app está vacía: no hay asignaturas, ni proyectos, ni tiempo registrado. No hay nada que resumir todavía; dile que empiece creando sus asignaturas.' }
+      }
 
       return {
         text: [
-          `Semana del ${iso(startOfWeek(new Date()))}. Hoy es ${today()}.`,
+          `Semana del ${wk}. Hoy es ${today()}.`,
           `Trabajo semanal hecho: ${wp.pct}% (${dur(wp.seconds, true)} de ${wp.goal} h objetivo; ${wp.tasksDone} de ${wp.tasks} entregas de esta semana).`,
-          `Por asignatura:`,
+          'Por asignatura:',
           list(wp.rows.map((r) => `  · ${r.subject.name}: ${r.pct}% — ${dur(r.seconds)} de ${r.goal} h`)),
+          faltas.length
+            ? 'Asistencia:\n' + list(faltas.map(({ s, b }) => `  · ${s.name}: ${b.absences} faltas, le quedan ${b.left} de ${b.maxAbsences}${b.doomed ? ' — YA NO LLEGA AL MÍNIMO' : ''}`))
+            : 'Asistencia: ninguna asignatura tiene horario con fechas, así que no hay faltas que contar.',
+          `Atletismo: ${entrenos.length} entrenos esta semana de un objetivo de ${db.settings.weeklyTrainingGoal || 0}.`,
           late.length ? `Atrasadas (${late.length}): ${late.map((t) => t.title).join(', ')}` : 'No hay nada atrasado.',
-          `Vence en 7 días:`,
+          'Vence en 7 días:',
           list(soon.map((t) => `  · ${t.title} — ${t.due}`)),
-          `Exámenes en 3 semanas:`,
+          'Exámenes en 3 semanas:',
           list(exams.map((e) => `  · ${e.title} (${e.subject?.name || '?'}) — ${e.date}`)),
         ].join('\n'),
       }
@@ -297,17 +559,17 @@ export function runTool(name, args = {}, { db, update }) {
 
     case 'tareas_pendientes': {
       const s = A.asignatura ? findSubject(db, A.asignatura) : null
-      if (A.asignatura && !s) return { text: `No encuentro la asignatura "${A.asignatura}".` }
+      const p = A.proyecto ? findProject(db, A.proyecto) : null
+      if (A.asignatura && !s) return { text: sinAsignatura(db, A.asignatura) }
       let rows = db.tasks.filter((t) => t.status !== 'done')
       if (s) rows = rows.filter((t) => t.refId === s.id)
+      if (p) rows = rows.filter((t) => t.refId === p.id)
+      if (A.ambito) rows = rows.filter((t) => t.area === areaDe(A.ambito))
       if (A.dias > 0) rows = rows.filter((t) => t.due && daysUntil(t.due) <= A.dias)
       rows = rows.sort((a, b) => (a.due || 'z').localeCompare(b.due || 'z'))
       return {
         text: rows.length
-          ? list(rows.map((t) => {
-              const sub = db.subjects.find((x) => x.id === t.refId)
-              return `- ${t.title}${sub ? ` (${sub.name})` : ''}${t.due ? ` — vence el ${t.due}` : ' — sin fecha'}`
-            }))
+          ? list(rows.map((t) => `- ${t.title}${etiquetaDe(db, t)}${t.due ? ` — vence el ${t.due}` : ' — sin fecha'}`))
           : 'No hay tareas pendientes con esos criterios.',
       }
     }
@@ -322,28 +584,104 @@ export function runTool(name, args = {}, { db, update }) {
       }
     }
 
+    case 'agenda': {
+      const dias = num(A.dias) > 0 ? Math.min(120, num(A.dias)) : 14
+      const hasta = iso(addDays(new Date(), dias))
+      const evs = (db.events || [])
+        .filter((e) => e.date >= today() && e.date <= hasta)
+        .sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''))
+      const exs = upcomingExams(db, dias)
+      return {
+        text: [
+          `Del ${today()} al ${hasta}:`,
+          'Eventos:',
+          list(evs.map((e) => `  · ${e.date}${e.start ? ` ${e.start}` : ''} — ${e.title}`)),
+          'Exámenes y entregas:',
+          list(exs.map((e) => `  · ${e.date} — ${e.title} (${e.subject?.name || 'sin asignatura'})`)),
+        ].join('\n'),
+      }
+    }
+
+    case 'resumen_atletismo': {
+      const semanas = num(A.semanas) > 0 ? Math.min(12, num(A.semanas)) : 2
+      const desde = iso(addDays(startOfWeek(new Date()), -7 * (semanas - 1)))
+      const rows = (db.training || []).filter((t) => t.date >= desde).sort((a, b) => a.date.localeCompare(b.date))
+      if (!rows.length) return { text: `No hay ningún entrenamiento apuntado desde el ${desde}.` }
+      const hechos = rows.filter((t) => t.done)
+      const carga = hechos.reduce((a, t) => a + (Number(t.rpe) || 0) * (Number(t.minutes) || 0), 0)
+      return {
+        text: [
+          `Desde el ${desde}: ${hechos.length} entrenos, ${hechos.reduce((a, t) => a + (Number(t.minutes) || 0), 0)} minutos, carga total ${carga}.`,
+          `Objetivo semanal: ${db.settings.weeklyTrainingGoal || 0} entrenos.`,
+          list(rows.map((t) => `  · ${t.date} — ${t.type}, ${t.minutes} min, RPE ${t.rpe}${t.done ? '' : ' (no hecho)'}${t.notes ? ` — ${t.notes}` : ''}`)),
+        ].join('\n'),
+      }
+    }
+
+    case 'listar_documentos': {
+      const carpeta = carpetaDe(db, A)
+      if (!carpeta) return { text: 'No sé en qué carpeta mirar. Pregúntale de qué asignatura o proyecto.' }
+      const r = await api.tree(carpeta).catch((e) => ({ error: e.message }))
+      if (r.error) return { text: `No he podido leer la carpeta: ${r.error}` }
+      if (r.missing) return { text: `La carpeta "${carpeta}" no existe en el disco.` }
+      const plano = aplanar(r.items || [])
+      return {
+        text: plano.length
+          ? `Archivos en ${carpeta}:\n` + list(plano.map((f) => `  · ${f.path}${f.dir ? '/' : ''}`))
+          : `La carpeta ${carpeta} está vacía.`,
+      }
+    }
+
+    case 'leer_documento': {
+      let ruta = String(A.nombre || '').trim()
+      if (!ruta && doc?.path) ruta = doc.path
+      if (!ruta) {
+        return { ask: '¿Qué documento quieres que lea? Dime el nombre, o ábrelo en el espacio de trabajo y vuelve a preguntarme.' }
+      }
+      if (!ruta.includes('/')) {
+        const carpeta = carpetaDe(db, A) || doc?.path?.split('/').slice(0, -1).join('/') || ''
+        const r = carpeta ? await api.tree(carpeta).catch(() => null) : null
+        const hit = r && aplanar(r.items || []).find((f) => !f.dir && norm(f.name) === norm(ruta))
+          || (r && aplanar(r.items || []).find((f) => !f.dir && norm(f.name).includes(norm(ruta))))
+        if (hit) ruta = hit.path
+      }
+      const r = await api.readText(ruta).catch((e) => ({ error: e.message }))
+      if (r.error || typeof r.content !== 'string') {
+        return { text: `No he podido leer "${ruta}": ${r.error || 'no es un archivo de texto'}. Los PDF y las imágenes no los puedo abrir.` }
+      }
+      const recorte = r.content.length > 12000
+      return {
+        text: `Contenido de ${ruta}${recorte ? ' (recortado a los primeros 12.000 caracteres)' : ''}:\n\n${r.content.slice(0, 12000)}`,
+      }
+    }
+
     /* -------------------------------------------------------- modificaciones */
 
     case 'crear_tarea': {
-      const title = String(A.titulo || '').trim()
-      if (!title) return { text: 'Falta el título. Pregúntaselo al usuario antes de volver a intentarlo.' }
-      const due = parseWhen(A.fecha)
-      if (A.fecha && !due) return { text: `No entiendo la fecha "${A.fecha}". Pídesela al usuario en formato día/mes.` }
+      const titulo = String(A.titulo || '').trim()
+      const s = suyo(A.asignatura, findSubject)
+      const p = suyo(A.proyecto, findProject)
+      const due = A.fecha ? parseWhen(A.fecha) : ''
+      let ambito = A.ambito
+      if (s) ambito = 'uni'
+      else if (p) ambito = 'trabajo'
 
-      const s = A.asignatura ? findSubject(db, A.asignatura) : null
-      if (A.asignatura && !s) {
-        return { text: `No encuentro la asignatura "${A.asignatura}". Las que hay: ${db.subjects.map((x) => x.name).join(', ')}.` }
-      }
+      const falta = []
+      if (!titulo || tituloVago(titulo)) falta.push('cómo la llamo')
+      if (!ambito) falta.push('si es de la uni, del trabajo o personal')
+      if (!A.fecha) falta.push('para cuándo es')
+      else if (!due) falta.push(`qué día es "${A.fecha}"`)
+      if (falta.length) return { ask: pregunta('la tarea', falta) }
 
       const task = {
         id: uid('t'),
-        title,
+        title: titulo,
         notes: String(A.notas || ''),
-        area: s ? 'uni' : 'life',
-        refId: s?.id || null,
-        due: due || '',
+        area: areaDe(ambito),
+        refId: s?.id || p?.id || null,
+        due,
         priority: PRIO[String(A.prioridad || '').toLowerCase()] ?? 1,
-        estimate: Number(A.estimacion_min) || 0,
+        estimate: num(A.estimacion_min) || 0,
         status: 'todo',
         createdAt: Date.now(),
         doneAt: null,
@@ -351,68 +689,150 @@ export function runTool(name, args = {}, { db, update }) {
         createdBy: 'assistant',
       }
       update((d) => d.tasks.unshift(task))
-
+      const donde = s ? ` en ${s.name}` : p ? ` en ${p.name}` : ` en ${NOMBRE_AMBITO[ambito]}`
       return {
-        text: `Tarea creada: "${title}"${s ? ` en ${s.name}` : ''}${due ? `, para el ${due}` : ', sin fecha'}. Confírmaselo al usuario en una frase.`,
-        action: {
-          kind: 'task',
-          id: task.id,
-          summary: `Tarea · ${title}${s ? ` · ${s.name}` : ''}${due ? ` · ${due}` : ''}`,
-          href: s ? `#/uni/${s.id}` : '#/tareas',
-        },
+        text: `Hecho: tarea "${titulo}"${donde}, para el ${due}. Confírmaselo en una frase, sin repetir la lista entera.`,
+        action: creado('tasks', task, `Tarea · ${titulo}${donde} · ${due}`, s ? `#/uni/${s.id}` : p ? `#/trabajo/${p.id}` : '#/tareas'),
+      }
+    }
+
+    case 'completar_tarea': {
+      const t = porNombre(db.tasks.filter((x) => x.status !== 'done'), A.tarea, (x) => x.title)
+        || porNombre(db.tasks, A.tarea, (x) => x.title)
+      const hit = t || db.tasks.find((x) => norm(x.title).includes(norm(A.tarea)))
+      if (!hit) return { text: `No encuentro ninguna tarea que se llame "${A.tarea}".` }
+      const hecha = A.hecha !== false
+      const before = { status: hit.status, doneAt: hit.doneAt }
+      update((d) => {
+        const x = d.tasks.find((y) => y.id === hit.id)
+        if (x) { x.status = hecha ? 'done' : 'todo'; x.doneAt = hecha ? Date.now() : null }
+      })
+      return {
+        text: `"${hit.title}" queda ${hecha ? 'hecha' : 'otra vez pendiente'}.`,
+        action: editado('tasks', hit, before, `${hecha ? 'Hecha' : 'Reabierta'} · ${hit.title}`, '#/tareas'),
+      }
+    }
+
+    case 'crear_proyecto': {
+      const nombre = String(A.nombre || '').trim()
+      if (!nombre || tituloVago(nombre)) return { ask: pregunta('el proyecto', ['cómo se llama']) }
+      if (findProject(db, nombre) && norm(findProject(db, nombre).name) === norm(nombre)) {
+        return { text: `Ya existe un proyecto llamado "${nombre}". Dile que ya lo tiene.` }
+      }
+      const prj = {
+        id: uid('prj'),
+        name: nombre,
+        org: String(A.organizacion || ''),
+        color: PALETTE[(db.projects.length + 3) % PALETTE.length],
+        folder: '',
+        notes: String(A.notas || ''),
+        createdBy: 'assistant',
+      }
+      update((d) => d.projects.push(prj))
+      return {
+        text: `Proyecto "${nombre}" creado en Trabajo. Dile que le falta elegirle carpeta desde su ficha si quiere guardar archivos ahí.`,
+        action: creado('projects', prj, `Proyecto · ${nombre}${prj.org ? ` · ${prj.org}` : ''}`, `#/trabajo/${prj.id}`),
+      }
+    }
+
+    case 'crear_asignatura': {
+      const nombre = String(A.nombre || '').trim()
+      if (!nombre || tituloVago(nombre)) return { ask: pregunta('la asignatura', ['cómo se llama']) }
+      const sub = {
+        id: uid('sub'),
+        name: nombre,
+        code: String(A.codigo || ''),
+        professor: String(A.profesor || ''),
+        credits: num(A.creditos) || 6,
+        color: PALETTE[db.subjects.length % PALETTE.length],
+        portalUrl: '', isProgramming: false, repoPath: '', folder: '',
+        schedule: [], weeklyGoalHours: 0, attendanceMin: null,
+        createdBy: 'assistant',
+      }
+      update((d) => d.subjects.push(sub))
+      return {
+        text: `Asignatura "${nombre}" creada. Dile que el horario hay que ponerlo a mano en su ficha: sin horario no se pueden contar faltas.`,
+        action: creado('subjects', sub, `Asignatura · ${nombre}`, `#/uni/${sub.id}`),
       }
     }
 
     case 'crear_examen': {
-      const title = String(A.titulo || '').trim()
-      const s = findSubject(db, A.asignatura)
-      if (!title) return { text: 'Falta el título del examen. Pregúntaselo al usuario.' }
-      if (!s) {
-        return { text: `No encuentro la asignatura "${A.asignatura}". Las que hay: ${db.subjects.map((x) => x.name).join(', ')}.` }
-      }
-      const date = parseWhen(A.fecha)
-      if (!date) return { text: `No entiendo la fecha "${A.fecha}". Pídesela al usuario.` }
+      const titulo = String(A.titulo || '').trim()
+      const s = suyo(A.asignatura, findSubject)
+      const date = A.fecha ? parseWhen(A.fecha) : ''
+      const falta = []
+      if (!titulo || tituloVago(titulo)) falta.push('cómo se llama')
+      if (!s) falta.push('de qué asignatura es')
+      if (!A.fecha) falta.push('qué día es')
+      else if (!date) falta.push(`qué día es "${A.fecha}"`)
+      if (falta.length) return { ask: pregunta('el examen', falta) }
 
       const exam = {
         id: uid('ex'),
         subjectId: s.id,
-        title,
+        title: titulo,
         kind: A.tipo === 'entrega' ? 'entrega' : 'examen',
         date,
         start: /^\d{1,2}:\d{2}$/.test(String(A.hora || '')) ? A.hora : '',
         end: '',
         room: String(A.aula || ''),
-        weight: Number(A.peso) || 0,
+        weight: num(A.peso) || 0,
         notes: String(A.notas || ''),
         grade: null,
         createdBy: 'assistant',
       }
       update((d) => { (d.exams ||= []).push(exam) })
-
       return {
-        text: `${exam.kind === 'entrega' ? 'Entrega' : 'Examen'} creado: "${title}" de ${s.name} el ${date}${exam.start ? ` a las ${exam.start}` : ''}. Confírmaselo al usuario.`,
-        action: {
-          kind: 'exam',
-          id: exam.id,
-          summary: `${exam.kind === 'entrega' ? 'Entrega' : 'Examen'} · ${title} · ${s.name} · ${date}`,
-          href: `#/uni/${s.id}`,
-        },
+        text: `${exam.kind === 'entrega' ? 'Entrega' : 'Examen'} "${titulo}" de ${s.name} el ${date}${exam.start ? ` a las ${exam.start}` : ''}. Confírmaselo.`,
+        action: creado('exams', exam, `${exam.kind === 'entrega' ? 'Entrega' : 'Examen'} · ${titulo} · ${s.name} · ${date}`, `#/uni/${s.id}`),
+      }
+    }
+
+    case 'crear_evento': {
+      const titulo = String(A.titulo || '').trim()
+      const date = A.fecha ? parseWhen(A.fecha) : ''
+      const falta = []
+      if (!titulo || tituloVago(titulo)) falta.push('cómo lo llamo')
+      if (!A.fecha) falta.push('qué día')
+      else if (!date) falta.push(`qué día es "${A.fecha}"`)
+      if (falta.length) return { ask: pregunta('el evento', falta) }
+
+      const cat = A.categoria ? porNombre(db.categories, A.categoria) : null
+      const hora = (v) => (/^\d{1,2}:\d{2}$/.test(String(v || '')) ? String(v) : '')
+      const ev = {
+        id: uid('ev'),
+        title: titulo,
+        date,
+        start: hora(A.hora),
+        end: hora(A.hora_fin),
+        categoryId: cat?.id || db.categories[0]?.id || null,
+        notes: String(A.notas || ''),
+        repeat: null,
+        exceptions: [],
+        createdBy: 'assistant',
+      }
+      update((d) => d.events.push(ev))
+      return {
+        text: `Evento "${titulo}" el ${date}${ev.start ? ` a las ${ev.start}` : ''}${cat ? ` en ${cat.name}` : ''}. Confírmaselo.`,
+        action: creado('events', ev, `Evento · ${titulo} · ${date}${ev.start ? ` ${ev.start}` : ''}`, `#/calendario`),
       }
     }
 
     case 'registrar_tiempo': {
-      const s = findSubject(db, A.asignatura)
-      if (!s) return { text: `No encuentro la asignatura "${A.asignatura}".` }
-      const minutes = Math.round(Number(A.minutos) || 0)
-      if (minutes <= 0) return { text: 'Los minutos tienen que ser un número mayor que cero.' }
+      const s = A.asignatura ? findSubject(db, A.asignatura) : null
+      const p = A.proyecto ? findProject(db, A.proyecto) : null
+      if (!s && !p) return { ask: '¿En qué lo apunto: en una asignatura o en un proyecto? Dime cuál.' }
+      const minutes = Math.round(num(A.minutos) || 0)
+      if (minutes <= 0) return { ask: '¿Cuántos minutos apunto?' }
       const date = parseWhen(A.fecha) || today()
+      const ref = s || p
 
       const session = {
         id: uid('s'),
-        area: 'uni',
-        refId: s.id,
+        area: s ? 'uni' : 'work',
+        refId: ref.id,
         taskId: null,
-        label: s.name,
+        label: ref.name,
         date,
         start: parseIso(date).getTime(),
         end: parseIso(date).getTime() + minutes * 60000,
@@ -421,24 +841,198 @@ export function runTool(name, args = {}, { db, update }) {
         createdBy: 'assistant',
       }
       update((d) => d.sessions.push(session))
-
       return {
-        text: `Apuntados ${minutes} minutos en ${s.name} el ${date}.`,
-        action: { kind: 'session', id: session.id, summary: `Tiempo · ${dur(minutes * 60)} · ${s.name} · ${date}`, href: `#/uni/${s.id}` },
+        text: `Apuntados ${minutes} minutos en ${ref.name} el ${date}.`,
+        action: creado('sessions', session, `Tiempo · ${dur(minutes * 60)} · ${ref.name} · ${date}`, s ? `#/uni/${s.id}` : `#/trabajo/${p.id}`),
+      }
+    }
+
+    case 'registrar_entreno': {
+      const minutes = Math.round(num(A.minutos) || 0)
+      if (minutes <= 0) return { ask: '¿Cuántos minutos ha durado el entrenamiento?' }
+      const tipos = db.settings.trainingTypes || []
+      const tipo = (A.tipo && tipos.find((t) => norm(t) === norm(A.tipo))) || (A.tipo ? String(A.tipo) : tipos[0] || 'Rodaje')
+      const date = parseWhen(A.fecha) || today()
+      const tr = {
+        id: uid('tr'),
+        date,
+        done: true,
+        type: tipo,
+        minutes,
+        rpe: Math.min(10, Math.max(1, Math.round(num(A.rpe) || 5))),
+        cmjPre: '', cmjPost: '',
+        notes: String(A.notas || ''),
+        createdBy: 'assistant',
+      }
+      // La pantalla de Atletismo es de un entreno por día: si ya hay uno, se pisa.
+      const previo = (db.training || []).find((t) => t.date === date)
+      update((d) => {
+        d.training ||= []
+        const i = d.training.findIndex((t) => t.date === date)
+        if (i >= 0) d.training[i] = { ...d.training[i], ...tr, id: d.training[i].id }
+        else d.training.push(tr)
+      })
+      return {
+        text: `Entreno apuntado: ${tipo}, ${minutes} min, RPE ${tr.rpe}, el ${date}.${previo ? ' Ha sustituido al que ya había ese día.' : ''}`,
+        action: previo
+          ? editado('training', previo, { ...previo }, `Entreno · ${tipo} · ${minutes} min · ${date}`, '#/atletismo')
+          : creado('training', tr, `Entreno · ${tipo} · ${minutes} min · ${date}`, '#/atletismo'),
+      }
+    }
+
+    case 'marcar_asistencia': {
+      const s = findSubject(db, A.asignatura)
+      if (!s) return { text: sinAsignatura(db, A.asignatura) }
+      const date = parseWhen(A.fecha)
+      if (!date) return { ask: `¿Qué día quieres marcar en ${s.name}?` }
+      const clases = classOccurrences(db, s, date, date)
+      if (!clases.length) return { text: `El ${date} no hay clase de ${s.name} en el horario, así que no hay nada que marcar.` }
+      const estado = ['present', 'absent', 'late', 'excused'].includes(A.estado) ? A.estado : null
+      if (!estado) return { ask: `¿Qué pongo en la clase de ${s.name} del ${date}: fuiste, faltaste, llegaste tarde o está justificada?` }
+
+      const antes = clases.map((o) => db.attendance.find((a) => a.subjectId === s.id && a.date === o.date && a.slot === o.slotIndex) || null)
+      update((d) => {
+        for (const o of clases) {
+          const i = d.attendance.findIndex((a) => a.subjectId === s.id && a.date === o.date && a.slot === o.slotIndex)
+          if (i >= 0) d.attendance[i].status = estado
+          else d.attendance.push({ id: uid('at'), subjectId: s.id, date: o.date, slot: o.slotIndex, status: estado })
+        }
+      })
+      const NOMBRE = { present: 'asistió', absent: 'faltó', late: 'llegó tarde', excused: 'justificada' }
+      return {
+        text: `Marcado en ${s.name} el ${date}: ${NOMBRE[estado]}. ${resumenFaltas(db, s)}`,
+        action: {
+          op: 'asistencia', id: `${s.id}-${date}`, subjectId: s.id, clases: clases.map((o) => o.slotIndex), date, antes,
+          summary: `Asistencia · ${s.name} · ${date} · ${NOMBRE[estado]}`, href: `#/uni/${s.id}`,
+        },
+      }
+    }
+
+    case 'ajustar_asignatura': {
+      const s = findSubject(db, A.asignatura)
+      if (!s) return { text: sinAsignatura(db, A.asignatura) }
+      const patch = {}
+      const dicho2 = []
+      const r = A.asistencia_minima != null ? tasa(A.asistencia_minima) : null
+      if (A.asistencia_minima != null && r == null) return { text: `"${A.asistencia_minima}" no es un porcentaje válido. Pídeselo entre 0 y 100.` }
+      if (r != null) { patch.attendanceMin = r; dicho2.push(`asistencia mínima ${pctFmt(r)}`) }
+      if (num(A.creditos) > 0) { patch.credits = num(A.creditos); dicho2.push(`${patch.credits} ECTS`) }
+      if (A.profesor) { patch.professor = String(A.profesor); dicho2.push(`profesor ${patch.professor}`) }
+      if (num(A.objetivo_horas) > 0) { patch.weeklyGoalHours = num(A.objetivo_horas); dicho2.push(`${patch.weeklyGoalHours} h/semana`) }
+      if (!dicho2.length) return { ask: `¿Qué quieres cambiar de ${s.name}: la asistencia mínima, los créditos, el profesor o las horas por semana?` }
+
+      const before = Object.fromEntries(Object.keys(patch).map((k) => [k, s[k]]))
+      update((d) => { const x = d.subjects.find((y) => y.id === s.id); if (x) Object.assign(x, patch) })
+
+      const extra = patch.attendanceMin != null ? ' ' + resumenFaltas({ ...db, subjects: db.subjects.map((x) => (x.id === s.id ? { ...x, ...patch } : x)) }, s) : ''
+      return {
+        text: `${s.name}: ${dicho2.join(', ')}.${extra}`,
+        action: editado('subjects', s, before, `${s.name} · ${dicho2.join(' · ')}`, `#/uni/${s.id}`),
+      }
+    }
+
+    case 'ajustar_objetivos': {
+      const patch = {}
+      const dicho2 = []
+      const r = A.asistencia_minima != null ? tasa(A.asistencia_minima) : null
+      if (r != null) { patch.attendanceMin = r; dicho2.push(`asistencia mínima general ${pctFmt(r)}`) }
+      if (num(A.horas_semana) > 0) { patch.weeklyGoalHours = num(A.horas_semana); dicho2.push(`${patch.weeklyGoalHours} h de trabajo por semana`) }
+      if (num(A.entrenos_semana) > 0) { patch.weeklyTrainingGoal = num(A.entrenos_semana); dicho2.push(`${patch.weeklyTrainingGoal} entrenos por semana`) }
+      if (!dicho2.length) return { ask: '¿Qué objetivo quieres cambiar: la asistencia mínima, las horas de trabajo por semana o los entrenos por semana?' }
+
+      const before = Object.fromEntries(Object.keys(patch).map((k) => [k, db.settings[k]]))
+      update((d) => Object.assign(d.settings, patch))
+      return {
+        text: `Objetivos actualizados: ${dicho2.join(', ')}. Esto vale para todo lo que no tenga su propio número.`,
+        action: { op: 'ajustes', id: uid('cfg'), before, summary: `Ajustes · ${dicho2.join(' · ')}`, href: '#/ajustes' },
+      }
+    }
+
+    case 'borrar': {
+      const lista = LISTA[A.tipo]
+      if (!lista) return { text: `No sé borrar cosas del tipo "${A.tipo}".` }
+      const campo = A.tipo === 'proyecto' ? 'name' : A.tipo === 'entreno' ? 'type' : 'title'
+      const items = db[lista] || []
+      const hit = items.find((x) => norm(x[campo]) === norm(A.nombre))
+        || items.filter((x) => norm(x[campo]).includes(norm(A.nombre)))[0]
+      if (!hit) return { text: `No encuentro ningún ${A.tipo} que se llame "${A.nombre}". Lo que hay: ${items.map((x) => x[campo]).join(', ') || 'nada'}.` }
+      const index = items.indexOf(hit)
+      update((d) => { d[lista] = (d[lista] || []).filter((x) => x.id !== hit.id) })
+      return {
+        text: `Borrado el ${A.tipo} "${hit[campo]}". Dile que puede deshacerlo desde la tarjeta si se ha equivocado.`,
+        action: borrado(lista, hit, index, `Borrado · ${A.tipo} · ${hit[campo]}`, '#/'),
       }
     }
 
     default:
-      return { text: `No existe ninguna herramienta llamada "${name}".` }
+      return { text: `No existe ninguna herramienta llamada "${name}". Contéstale con lo que ya sabes, sin herramientas.` }
   }
 }
 
-/** Deshacer lo que el ayudante acaba de crear. */
-export function undoAction(action, update) {
+/* ------------------------------------------------------------ auxiliares -- */
+
+const NOMBRE_AMBITO = { uni: 'Universidad', trabajo: 'Trabajo', personal: 'tus cosas' }
+const areaDe = (ambito) => (ambito === 'trabajo' ? 'work' : ambito === 'personal' ? 'life' : 'uni')
+
+const etiquetaDe = (db, t) => {
+  const ref = db.subjects.find((x) => x.id === t.refId) || db.projects.find((x) => x.id === t.refId)
+  return ref ? ` (${ref.name})` : t.area === 'work' ? ' (trabajo)' : t.area === 'life' ? ' (personal)' : ''
+}
+
+const sinAsignatura = (db, nombre) =>
+  `No encuentro ninguna asignatura llamada "${nombre}". Las que hay son: ${db.subjects.map((x) => x.name).join(', ') || 'ninguna'}. Pregúntale a cuál se refiere.`
+
+function resumenFaltas(db, s) {
+  const b = attendanceBudget(db, s.id)
+  if (!b.totalCounted) return ''
+  const falta = b.absences === 1 ? '1 falta' : `${b.absences} faltas`
+  return `Ahora lleva ${falta} y le ${b.left === 1 ? 'queda 1' : `quedan ${b.left}`} de ${b.maxAbsences}.`
+}
+
+/** La pregunta que se le hace al usuario cuando el modelo no traía los datos. */
+function pregunta(que, faltan) {
+  if (faltan.length === 1) return `Antes de crear ${que} necesito saber ${faltan[0]}.`
+  const ultimo = faltan[faltan.length - 1]
+  return `Antes de crear ${que} necesito un par de cosas: ${faltan.slice(0, -1).join(', ')} y ${ultimo}.`
+}
+
+function carpetaDe(db, A) {
+  if (A.carpeta) return String(A.carpeta)
+  const s = A.asignatura ? findSubject(db, A.asignatura) : null
+  if (s?.folder) return s.folder
+  const p = A.proyecto ? findProject(db, A.proyecto) : null
+  return p?.folder || ''
+}
+
+/** El árbol viene anidado; para listarlo y buscar en él va mejor plano. */
+function aplanar(items, out = []) {
+  for (const it of items) {
+    out.push(it)
+    if (it.children) aplanar(it.children, out)
+  }
+  return out
+}
+
+/** Deshacer lo que el ayudante acaba de hacer, sea crear, borrar o cambiar. */
+export function undoAction(a, update) {
   update((d) => {
-    if (action.kind === 'task') d.tasks = d.tasks.filter((t) => t.id !== action.id)
-    if (action.kind === 'exam') d.exams = (d.exams || []).filter((e) => e.id !== action.id)
-    if (action.kind === 'session') d.sessions = d.sessions.filter((s) => s.id !== action.id)
+    if (a.op === 'crear') d[a.list] = (d[a.list] || []).filter((x) => x.id !== a.id)
+    else if (a.op === 'borrar') {
+      d[a.list] ||= []
+      d[a.list].splice(Math.min(a.index, d[a.list].length), 0, a.item)
+    } else if (a.op === 'editar') {
+      const x = (d[a.list] || []).find((y) => y.id === a.id)
+      if (x) Object.assign(x, a.before)
+    } else if (a.op === 'ajustes') Object.assign(d.settings, a.before)
+    else if (a.op === 'asistencia') {
+      for (let i = 0; i < a.clases.length; i++) {
+        const slot = a.clases[i]
+        const previo = a.antes[i]
+        const j = d.attendance.findIndex((x) => x.subjectId === a.subjectId && x.date === a.date && x.slot === slot)
+        if (j >= 0) d.attendance.splice(j, 1)
+        if (previo) d.attendance.push(previo)
+      }
+    }
   })
 }
 
@@ -448,7 +1042,7 @@ export function undoAction(action, update) {
  * El modelo no puede consultar la base de datos por su cuenta, así que arranca
  * sabiendo dónde está parado: fecha, asignaturas y qué hay encima de la mesa.
  */
-export function systemPrompt(db) {
+export function systemPrompt(db, { doc = null } = {}) {
   const wp = weekProgress(db)
   const { from, to } = termWindow(db)
   const hoy = parseIso(today())
@@ -467,13 +1061,16 @@ export function systemPrompt(db) {
     db.subjects.length
       ? `Asignaturas: ${db.subjects.map((s) => `${s.name}${s.code ? ` (${s.code})` : ''}`).join(', ')}.`
       : 'Todavía no hay asignaturas creadas.',
+    db.projects.length ? `Proyectos de trabajo: ${db.projects.map((p) => p.name).join(', ')}.` : '',
     exams.length ? `Exámenes próximos: ${exams.slice(0, 5).map((e) => `${e.title} de ${e.subject?.name} el ${e.date}`).join('; ')}.` : '',
+    doc ? `Ahora mismo tiene abierto el documento "${doc.name}" (${doc.path}). Cuando diga «este documento» o «esto», se refiere a ese: léelo con leer_documento sin argumentos.` : '',
     '',
     'Cómo trabajas:',
     '- Responde SIEMPRE en español, en segunda persona y sin rodeos. Dos o tres frases salvo que te pidan más.',
-    '- Para cualquier dato concreto (faltas, horas, fechas, tareas) usa las herramientas. No te inventes números nunca.',
-    '- Antes de crear una tarea o un examen necesitas título y fecha. Si te falta algo, PREGÚNTALO en tu respuesta y no llames a la herramienta todavía. Ejemplo: «Vale, te la añado. ¿Cómo la llamo y qué hay que hacer?».',
-    '- Si el usuario ya te dio todo lo necesario, crea la cosa directamente y confírmalo en una frase.',
+    '- No todo necesita herramienta. Una opinión, una duda de temario, ayuda a redactar o una charla se contestan directamente, con tu propio criterio. NUNCA digas «no tengo una función para eso»: si no hay herramienta, contesta igual.',
+    '- Para cualquier dato concreto de su vida (faltas, horas, fechas, tareas, entrenos) sí usa las herramientas. No te inventes números nunca.',
+    '- NO RELLENES NINGÚN CAMPO QUE ÉL NO TE HAYA DICHO. Si no ha dicho la asignatura, no pongas asignatura. Si no ha dicho el título, no te lo inventes a partir de su frase: deja el campo vacío y la herramienta te dirá qué preguntar.',
+    '- Cuando una herramienta te pida datos que faltan, hazle esa pregunta y espera. No vuelvas a llamar a la herramienta hasta que te conteste.',
     '- Cuando hables de faltas, di cuántas lleva, cuántas le quedan y de cuántas clases sale el cálculo.',
     '- Si un dato no es fiable (clases sin fecha de fin, asistencia sin marcar), dilo.',
   ].filter(Boolean).join('\n')

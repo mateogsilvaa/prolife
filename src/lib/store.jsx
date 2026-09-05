@@ -2,6 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { api } from './api.js'
 import { iso, today } from './date.js'
 import { saveDbSnapshot } from './offline.js'
+import { applyOp } from '../../server/ops.js'
+import { cola, enCola, encolar, quitar } from './queue.js'
 
 const Ctx = createContext(null)
 export const useStore = () => useContext(Ctx)
@@ -62,6 +64,9 @@ export function Provider({ children }) {
   /** Racha de fallos en curso: sirve para avisar una vez, no una por intento. */
   const failing = useRef(false)
   const attempt = useRef(0)
+  /** Cambios apuntados sin el ordenador que esperan a poder contárselo. */
+  const [queued, setQueued] = useState(() => enCola())
+  const enviarColaRef = useRef(null)
 
   useEffect(() => {
     ;(async () => {
@@ -78,7 +83,12 @@ export function Provider({ children }) {
         // Lo que acaba de llegar del ordenador es lo que se enseñará cuando no
         // esté. Lo guarda la página porque en la primera visita el service
         // worker aún no está al mando y esa carga se le escapa.
-        if (!d._stale) saveDbSnapshot(d)
+        if (!d._stale) {
+          saveDbSnapshot(d)
+          // Lo apuntado en otra sesión sin ordenador sigue en la cola: se cuenta
+          // ahora, que es la primera oportunidad de hacerlo.
+          if (enCola()) await enviarColaRef.current?.()
+        }
       } catch (e) {
         setError(e.status === 401 ? { auth: true, message: e.message } : { message: e.message })
         return
@@ -167,9 +177,14 @@ export function Provider({ children }) {
       try {
         const { stamp: disk, future: diskFuture } = await api.dbStamp()
         if (diskFuture) setFuture(diskFuture)
-        // Volvió el ordenador: no se recarga solo por si estabas leyendo algo,
-        // pero se ofrece, que es lo mismo que se hace con los cambios de fuera.
-        if (offlineRef.current) setBack(true)
+        // Volvió el ordenador: lo primero, contarle lo apuntado mientras no
+        // estaba — antes de ofrecer recargar, o la recarga traería su base sin
+        // esos cambios y parecería que se han perdido. No se recarga solo, por
+        // si estabas leyendo algo: se ofrece, igual que con los cambios de fuera.
+        if (offlineRef.current) {
+          await enviarColaRef.current?.()
+          setBack(true)
+        }
         // margen de un segundo: el mtime del disco no es exacto
         else if (disk && Math.abs(disk - stamp.current) > 1500) setRemote(true)
       } catch {
@@ -204,6 +219,66 @@ export function Provider({ children }) {
     [flush, toast]
   )
 
+  /**
+   * Manda a la cola lo que se pueda apuntar sin el ordenador.
+   *
+   * Sin conexión, `update()` se niega y hace bien: manda la base entera, y
+   * escribirla desde una copia vieja machacaría lo que hayas hecho en el
+   * ordenador. Una operación es otra cosa —«marca esta clase», «tacha esta
+   * tarea»— y se aplica sobre el `db.json` de cuando el ordenador vuelva, sin
+   * tocar nada más. Aquí se pinta ya, para que la app responda como siempre.
+   *
+   * Con el ordenador delante no se encola nada: se guarda por el camino de
+   * siempre, que ya funciona. Menos caminos, menos sitios donde equivocarse.
+   */
+  const applyChange = useCallback(
+    (op) => {
+      if (!offlineRef.current) {
+        update((d) => applyOp(d, op))
+        return
+      }
+      const entera = { ...op, id: uid('op'), at: Date.now() }
+      setDb((prev) => {
+        if (!prev) return prev
+        const next = structuredClone(prev)
+        const error = applyOp(next, entera)
+        if (error) { toast(error, 'err'); return prev }
+        encolar(entera)
+        setQueued(enCola())
+        return next
+      })
+    },
+    [update, toast]
+  )
+
+  /**
+   * Le cuenta al ordenador lo apuntado mientras no estaba. Se quitan de la cola
+   * por id y no vaciándola: entre que se manda y que contesta puedes haber
+   * apuntado otra cosa, y esa todavía no ha salido.
+   */
+  const enviarCola = useCallback(async () => {
+    const ops = cola()
+    if (!ops.length) return null
+    try {
+      const r = await api.sendOps(ops)
+      quitar(ops.map((o) => o.id))
+      setQueued(enCola())
+      stamp.current = r.stamp || stamp.current
+      const perdidas = r.skipped?.length || 0
+      toast(
+        `${r.applied} ${r.applied === 1 ? 'cambio apuntado' : 'cambios apuntados'} en el ordenador` +
+          (perdidas ? ` · ${perdidas} ya no valían` : '')
+      )
+      return r
+    } catch (e) {
+      // La cola se queda como estaba: se vuelve a intentar al próximo latido.
+      toast('No se han podido enviar los cambios: ' + e.message, 'err')
+      return null
+    }
+  }, [toast])
+
+  useEffect(() => { enviarColaRef.current = enviarCola }, [enviarCola])
+
   useEffect(() => {
     const onLeave = () => {
       if (!pending.current) return
@@ -223,8 +298,10 @@ export function Provider({ children }) {
       dismissRemote: () => setRemote(false),
       future, offline, back, unsaved,
       retryNow: () => flushRef.current?.(),
+      applyChange, queued,
+      sendQueue: () => enviarColaRef.current?.(),
     }),
-    [db, config, error, update, toast, toasts, remote, reload, future, offline, back, unsaved]
+    [db, config, error, update, toast, toasts, remote, reload, future, offline, back, unsaved, applyChange, queued]
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

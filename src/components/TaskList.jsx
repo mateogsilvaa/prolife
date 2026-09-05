@@ -5,16 +5,18 @@ import { useStore, AREAS, refLabel } from '../lib/store.jsx'
 import { fmtDate, daysUntil, dur } from '../lib/date.js'
 
 export default function TaskList({ tasks, empty = 'Nada pendiente por aquí.', showArea = true, onQuickAdd }) {
-  const { db, update } = useStore()
+  const { db, applyChange } = useStore()
   const [editing, setEditing] = useState(null)
 
-  const toggle = (t) =>
-    update((d) => {
-      const x = d.tasks.find((i) => i.id === t.id)
-      if (!x) return
-      x.status = x.status === 'done' ? 'todo' : 'done'
-      x.doneAt = x.status === 'done' ? Date.now() : null
-    })
+  /**
+   * Tachar va por `applyChange` y no por `update`: es de las tres cosas que se
+   * pueden apuntar sin el ordenador delante, porque tocan un solo registro y se
+   * pueden aplicar luego sobre la base de ese momento sin machacar nada.
+   */
+  const toggle = (t) => {
+    const status = t.status === 'done' ? 'todo' : 'done'
+    applyChange({ kind: 'tarea', taskId: t.id, status, doneAt: status === 'done' ? Date.now() : null })
+  }
 
   if (!tasks.length) {
     return (

@@ -13,6 +13,7 @@ import {
 import { loadDb, saveDb, scheduleBackups, dbPath, readRaw, isFuture, versionOf, SCHEMA } from './db.js'
 import * as vscode from './code.js'
 import * as assistant from './assistant.js'
+import { applyOp } from './ops.js'
 
 const KIND = {
   '.pdf': 'pdf',
@@ -380,6 +381,43 @@ export function createApp() {
       delete body._stale
       saveDb(cfg.baseDir, body)
       res.json({ ok: true, stamp: stamp() })
+    })
+  )
+
+  /**
+   * Cambios sueltos apuntados en la tablet sin este ordenador delante.
+   *
+   * La diferencia con el `PUT` de arriba es todo el asunto: aquel manda la base
+   * ENTERA, así que escribir desde una copia vieja machacaría lo que se haya
+   * hecho aquí mientras tanto. Esto llega con «marca esta clase» o «tacha esta
+   * tarea» y se aplica sobre el `db.json` de AHORA MISMO: lo demás no se toca.
+   *
+   * Se lee y se guarda en la misma llamada, sin `await` por medio, así que no
+   * hay ventana para que otro guardado se cuele entre una cosa y la otra.
+   */
+  app.post(
+    '/api/db/ops',
+    wrap((req, res) => {
+      const ops = Array.isArray(req.body?.ops) ? req.body.ops : null
+      if (!ops) throw Object.assign(new Error('Faltan las operaciones'), { status: 400 })
+      if (!ops.length) return res.json({ ok: true, stamp: stamp(), applied: 0, skipped: [] })
+      if (ops.length > 1000) {
+        throw Object.assign(new Error('Demasiadas operaciones de una vez'), { status: 413 })
+      }
+
+      const db = loadDb(cfg.baseDir)
+      const skipped = []
+      let applied = 0
+      for (const op of ops) {
+        const error = applyOp(db, op)
+        if (error) skipped.push({ id: op?.id ?? null, error })
+        else applied++
+      }
+      // Aunque no entre ninguna se guarda igual: `loadDb` migra y poda, y eso
+      // merece quedarse escrito. Si el fichero es de una versión más nueva,
+      // `saveDb` lanza un 409 y no se toca nada, como en el resto de la app.
+      saveDb(cfg.baseDir, db)
+      res.json({ ok: true, stamp: stamp(), applied, skipped })
     })
   )
 

@@ -72,7 +72,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { toasts, remote, reload, dismissRemote, future, offline, back, unsaved, retryNow } = useStore()
+  const { toasts, remote, reload, dismissRemote, future, offline, back, unsaved, retryNow, queued, sendQueue } = useStore()
   const ui = useUI()
   const route = useRoute()
   const [palette, setPalette] = useState(false)
@@ -137,8 +137,8 @@ function Shell() {
             <Icon name="refresh" size={13} />
             <span>
               {back
-                ? 'El ordenador ha vuelto a estar disponible. Recarga para poder editar otra vez.'
-                : 'Sin conexión con el ordenador: esto es lo último que se vio. Puedes consultarlo todo, pero no se guarda nada.'}
+                ? `El ordenador ha vuelto${queued ? '' : ' y ya tiene lo que apuntaste'}. Recarga para poder editarlo todo otra vez.`
+                : 'Sin conexión con el ordenador: esto es lo último que se vio. Puedes consultarlo todo, y apuntar faltas, tareas y entrenos — se le cuentan cuando vuelva. Lo demás no se puede editar desde aquí.'}
             </span>
             {back && (
               <>
@@ -156,6 +156,17 @@ function Shell() {
               {typeof future === 'number' ? ` (v${future})` : ''}. Para no estropear nada, aquí no se guarda
               nada hasta que actualices la app en este ordenador.
             </span>
+          </div>
+        )}
+        {queued > 0 && (
+          <div className="notice bar">
+            <Icon name="clock" size={13} />
+            <span>
+              {queued === 1 ? 'Hay 1 cambio apuntado' : `Hay ${queued} cambios apuntados`} aquí que el ordenador
+              todavía no sabe. Se le cuentan solos en cuanto vuelva a estar a tiro.
+            </span>
+            <div className="spacer" />
+            <button className="btn sm primary" onClick={sendQueue}>Intentar ahora</button>
           </div>
         )}
         {unsaved && (

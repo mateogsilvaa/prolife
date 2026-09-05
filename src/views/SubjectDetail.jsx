@@ -312,7 +312,7 @@ function Resumen({ subject: s }) {
  * fechas de cada clase: una clase que ya terminó no sigue generando casillas.
  */
 function Attendance({ subject }) {
-  const { db, update } = useStore()
+  const { db, applyChange } = useStore()
   const b = attendanceBudget(db, subject.id)
 
   const occurrences = useMemo(() => {
@@ -325,16 +325,17 @@ function Attendance({ subject }) {
   const statusOf = (o) =>
     db.attendance.find((a) => a.subjectId === subject.id && a.date === o.date && a.slot === o.slot)?.status || null
 
+  /**
+   * La asistencia se apunta con `applyChange` y no con `update`: así se puede
+   * marcar en clase aunque el ordenador esté apagado en casa. Sin conexión el
+   * cambio se guarda en la cola y entra cuando el ordenador vuelve, sin tocar
+   * nada más de la base.
+   */
   const cycle = (o) => {
     const cur = statusOf(o)
     const next = cur === null ? 'present' : STATUS[(STATUS.indexOf(cur) + 1) % STATUS.length]
     const clear = cur === 'excused'
-    update((d) => {
-      const i = d.attendance.findIndex((a) => a.subjectId === subject.id && a.date === o.date && a.slot === o.slot)
-      if (clear) { if (i >= 0) d.attendance.splice(i, 1); return }
-      if (i >= 0) d.attendance[i].status = next
-      else d.attendance.push({ id: `${subject.id}-${o.date}-${o.slot}`, subjectId: subject.id, date: o.date, slot: o.slot, status: next })
-    })
+    applyChange({ kind: 'asistencia', subjectId: subject.id, date: o.date, slot: o.slot, status: clear ? null : next })
   }
 
   /** Marcar de golpe todas las clases pasadas sin registrar: casi siempre fuiste. */
@@ -342,11 +343,9 @@ function Attendance({ subject }) {
     const pending = occurrences.filter((o) => o.date <= today() && !statusOf(o))
     if (!pending.length) return
     if (!confirm(`¿Marcar como asistidas las ${pending.length} clases pasadas sin registrar?`)) return
-    update((d) => {
-      for (const o of pending) {
-        d.attendance.push({ id: `${subject.id}-${o.date}-${o.slot}`, subjectId: subject.id, date: o.date, slot: o.slot, status: 'present' })
-      }
-    })
+    for (const o of pending) {
+      applyChange({ kind: 'asistencia', subjectId: subject.id, date: o.date, slot: o.slot, status: 'present' })
+    }
   }
 
   if (!occurrences.length) {

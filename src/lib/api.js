@@ -69,6 +69,8 @@ export const api = {
   /** `opts` permite `keepalive` para el guardado de última hora al cerrar. */
   putDb: (body, opts) => req('/api/db', { method: 'PUT', body, ...opts }),
   dbStamp: () => req('/api/db/stamp'),
+  /** Cambios sueltos apuntados sin el ordenador; se aplican sobre el db de ahora. */
+  sendOps: (ops) => req('/api/db/ops', { method: 'POST', body: { ops } }),
 
   list: (p = '') => req(`/api/fs/list?p=${encodeURIComponent(p)}`),
   tree: (p = '') => req(`/api/fs/tree?p=${encodeURIComponent(p)}`),

@@ -100,8 +100,19 @@ modo sin conexión.
 **Paso a paso, con la parte de seguridad y qué hacer si falla:** [INSTALAR-ANDROID.md](INSTALAR-ANDROID.md).
 
 **Sin el ordenador** (apagado, o tú fuera de su alcance) la app abre igualmente y enseña lo
-último que vio, pero **no deja escribir**: te lo dice arriba y rechaza los cambios en vez de
-aceptarlos y perderlos. Cuando el ordenador vuelve, te ofrece recargar.
+último que vio. Además puedes seguir **apuntando tres cosas**: la asistencia a clase, tachar
+tareas y el entreno del día. Es lo que se apunta lejos del ordenador, y se queda esperando en
+la tablet hasta que vuelva a estar a tiro. Entonces se lo cuenta sola, y te ofrece recargar.
+
+Lo demás —crear una asignatura, corregir el tiempo, cambiar ajustes— sigue sin poder tocarse
+desde ahí, y te lo dice arriba en vez de aceptarlo y perderlo.
+
+> La diferencia está en **cómo** se guarda cada cosa. Guardar normal manda el `db.json` entero,
+> así que hacerlo desde una copia de hace tres horas machacaría lo que hubieras hecho en el
+> ordenador entretanto. Esas tres, en cambio, viajan como «marca esta clase» o «tacha esta
+> tarea» y se aplican sobre el `db.json` de cuando el ordenador vuelve: lo que hiciste allí
+> mientras tanto sigue donde estaba. Se pueden aplicar dos veces sin duplicar nada, así que un
+> corte a mitad de envío tampoco rompe nada.
 
 Los archivos no se guardan solos en la tablet —un cuatrimestre de PDFs son cientos de megas—,
 pero cada archivo abierto tiene un botón para guardarlo, y entonces sí se abre sin el ordenador.

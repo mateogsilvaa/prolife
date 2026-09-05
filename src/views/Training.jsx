@@ -277,33 +277,20 @@ function Sparkline({ rows }) {
 }
 
 function TrainingForm({ entry, onClose }) {
-  const { db, update } = useStore()
+  const { db, applyChange } = useStore()
   const [t, setT] = useState(entry)
   const exists = db.training.some((x) => x.id === t.id)
   const set = (p) => setT((x) => ({ ...x, ...p }))
   const types = db.settings.trainingTypes || []
 
+  /**
+   * Va por `applyChange` para poder apuntar el entreno en la pista, con el
+   * ordenador apagado en casa. El tramo de tiempo que alimenta las estadísticas
+   * lo crea la propia operación (`server/ops.js`), atado al id del entreno, así
+   * que sale igual se apunte donde se apunte.
+   */
   const save = () => {
-    update((d) => {
-      const i = d.training.findIndex((x) => x.id === t.id)
-      if (i >= 0) d.training[i] = t
-      else d.training.push(t)
-
-      // el tiempo de entreno también alimenta las estadísticas generales
-      const sid = 'sess_' + t.id
-      const si = d.sessions.findIndex((s) => s.id === sid)
-      if (t.done && Number(t.minutes) > 0) {
-        const row = {
-          id: sid, area: 'sport', refId: null, taskId: null, label: t.type,
-          date: t.date, start: Date.now(), end: Date.now(),
-          seconds: Number(t.minutes) * 60, source: 'manual',
-        }
-        if (si >= 0) d.sessions[si] = row
-        else d.sessions.push(row)
-      } else if (si >= 0) {
-        d.sessions.splice(si, 1)
-      }
-    })
+    applyChange({ kind: 'entreno', training: t })
     onClose()
   }
 

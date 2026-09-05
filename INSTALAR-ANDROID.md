@@ -12,8 +12,9 @@ datos y los archivos sigue siendo el ordenador**. Eso tiene una ventaja grande y
 - **Ventaja:** no hay copia que sincronizar. Es literalmente el mismo `db.json` y la misma
   carpeta. Nada puede quedar «desincronizado» porque no hay dos cosas que sincronizar.
 - **Pega:** para trabajar de verdad, **el ordenador tiene que estar encendido** y tu tablet
-  tiene que poder alcanzarlo. Sin él, la app abre y te deja consultar lo último que vio, pero
-  no editar.
+  tiene que poder alcanzarlo. Sin él, la app abre y te deja consultar lo último que vio, y
+  apuntar tres cosas —asistencia, tareas y entrenos— que se le cuentan al volver. Lo demás no
+  se puede editar desde ahí.
 
 No hay nada que descargar de la Play Store, y no hace falta root ni instalar ningún `.apk`.
 
@@ -140,11 +141,33 @@ Si el ordenador está apagado, o estás sin cobertura:
 |---|---|
 | Abrir la app | Sí |
 | Consultar tareas, horario, exámenes, notas, estadísticas | Sí, tal como estaban la última vez |
-| Editar cualquier cosa | **No.** Te avisa arriba y rechaza el cambio |
+| Marcar la asistencia a una clase | **Sí**, se le cuenta al ordenador cuando vuelva |
+| Tachar (o destachar) una tarea | **Sí**, igual |
+| Apuntar el entreno del día | **Sí**, igual |
+| Lo demás: crear asignaturas, corregir el tiempo, ajustes… | **No.** Te avisa arriba y rechaza el cambio |
 | Abrir un PDF o un archivo | Solo los que hayas **guardado** antes (ver abajo) |
 
-Que **rechace** los cambios es a propósito: aceptarlos y no poder guardarlos sería perder trabajo
-sin avisar. Cuando el ordenador vuelve, la app te ofrece recargar y ya se puede editar otra vez.
+### Por qué unas cosas sí y otras no
+
+No es capricho. Guardar normal manda el `db.json` **entero**: hacerlo desde una copia de hace
+tres horas machacaría lo que hubieras hecho en el ordenador mientras tanto. Por eso lo demás se
+rechaza — aceptarlo y no poder guardarlo sería perder trabajo sin avisar.
+
+Esas tres, en cambio, no mandan la base: mandan **«marca esta clase»**, **«tacha esta tarea»**,
+**«apunta este entreno»**. Se guardan en la tablet y se aplican sobre el `db.json` de cuando el
+ordenador vuelve, tocando solo ese registro. Lo que hiciste en el ordenador entretanto sigue
+donde estaba.
+
+Mientras haya algo esperando, la app lo dice arriba con cuántos cambios son. Se envían solos en
+cuanto el ordenador aparece —también si has cerrado la app entremedias, porque la lista se
+guarda en la tablet—, y hay un botón para intentarlo a mano. Cuando ya está, te ofrece recargar.
+
+Dos detalles que conviene saber:
+
+- Si apuntas el entreno de un día en la tablet y también lo apuntaste en el ordenador, **manda
+  el de la tablet**: la pantalla de Atletismo es de un entreno por día.
+- Si algo apuntado ya no tiene sentido al volver —tachaste una tarea que entretanto borraste en
+  el ordenador—, se salta y te lo dice, en vez de recrearla.
 
 ### Llevarte archivos sueltos
 

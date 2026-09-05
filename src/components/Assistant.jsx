@@ -6,14 +6,43 @@ import { TOOL_SCHEMA, WRITE_TOOLS, runTool, undoAction, systemPrompt } from '../
 import { startDrag } from '../lib/drag.js'
 
 /** Cuántas veces seguidas puede el modelo pedir herramientas antes de rendirse. */
-const MAX_STEPS = 5
+const MAX_STEPS = 6
 
 const SUGGESTIONS = [
   '¿Cuántas faltas más me puedo permitir?',
   '¿Cómo llevo la semana?',
-  'Añádeme una tarea para el viernes',
   '¿Qué tengo pendiente para los próximos 7 días?',
+  'Resume el documento que tengo abierto',
 ]
+
+/**
+ * Qué documento tiene delante ahora mismo.
+ *
+ * Cuando dice «este documento» se refiere al que está abierto en el espacio de
+ * trabajo. El espacio guarda sus pestañas en `localStorage` y, con retraso, en
+ * el `db.json`: se mira primero el sitio que se escribe al instante.
+ */
+function documentoAbierto(db) {
+  const parts = (window.location.hash || '').slice(1).split('?')[0].split('/').filter(Boolean).map(decodeURIComponent)
+  if (parts[0] !== 'espacio') return null
+  const [, kind, id] = parts
+  const entity =
+    kind === 'uni' ? db.subjects.find((s) => s.id === id)
+    : kind === 'trabajo' ? db.projects.find((p) => p.id === id)
+    : db.tasks.find((t) => t.id === id)
+  const root = entity?.folder
+  if (!root) return null
+
+  let state = null
+  try { state = JSON.parse(localStorage.getItem('prolife.ws2:' + root) || 'null') } catch { state = null }
+  if (!state) state = db.workspaces?.[root] || null
+
+  for (const pane of state?.panes || []) {
+    const tab = pane.tabs?.find((t) => t.id === pane.active) || pane.tabs?.[pane.tabs.length - 1]
+    if (tab?.type === 'file' && tab.path) return { path: tab.path, name: tab.name || tab.path.split('/').pop() }
+  }
+  return null
+}
 
 /**
  * El ayudante. Habla con un Ollama que corre en este mismo ordenador y puede
@@ -58,9 +87,14 @@ export default function Assistant({ open, onClose, width, setWidth }) {
     setMsgs(visible)
     setBusy(true)
 
+    // Lo que el usuario ha escrito de verdad. Las herramientas lo usan para no
+    // dejar pasar una asignatura o un proyecto que el modelo se haya inventado.
+    const dicho = visible.filter((m) => m.role === 'user').map((m) => m.content).join(' \n ')
+    const doc = documentoAbierto(dbRef.current)
+
     // Historial que ve el modelo: sin las tarjetas de acciones, que son cosa nuestra.
     const wire = [
-      { role: 'system', content: systemPrompt(dbRef.current) },
+      { role: 'system', content: systemPrompt(dbRef.current, { doc }) },
       ...visible.map((m) => ({ role: m.role, content: m.content, ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}) })),
     ]
 
@@ -78,6 +112,7 @@ export default function Assistant({ open, onClose, width, setWidth }) {
 
         // El modelo pide herramientas: se ejecutan aquí y se le contesta.
         const done = []
+        let ask = null
         for (const c of calls) {
           const name = c.function?.name
           let args = c.function?.arguments
@@ -88,12 +123,20 @@ export default function Assistant({ open, onClose, width, setWidth }) {
             continue
           }
 
-          const out = runTool(name, args, { db: dbRef.current, update })
+          const out = await runTool(name, args, { db: dbRef.current, update, dicho, doc })
+          // Cuando faltan datos, la pregunta se la hace la herramienta y no el
+          // modelo: un modelo pequeño se inventa lo que le falta antes que
+          // preguntarlo, y así el usuario siempre acaba decidiendo él.
+          if (out.ask) { ask = ask || out.ask; continue }
           wire.push({ role: 'tool', tool_name: name, content: out.text })
           if (out.action) done.push(out.action)
         }
 
         if (done.length) setMsgs((m) => [...m, { role: 'actions', actions: done }])
+        if (ask) {
+          setMsgs((m) => [...m, { role: 'assistant', content: ask }])
+          break
+        }
         if (step === MAX_STEPS - 1) {
           setMsgs((m) => [...m, { role: 'assistant', content: 'Me he liado dando vueltas. Pregúntamelo otra vez más concreto.' }])
         }

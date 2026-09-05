@@ -77,9 +77,11 @@ function SecureHint() {
       </div>
       {!ok && (
         <p className="dim" style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 0 }}>
-          Para arreglarlo, en el ordenador: <span className="mono">tailscale serve --bg 4321</span>, y
-          entra desde la tablet por la dirección <span className="mono">https://…ts.net</span> que te
-          dé. Es también lo que hace que funcione fuera de casa.
+          Para arreglarlo, en el ordenador: <span className="mono">tailscale up</span> la primera vez
+          y luego <span className="mono">tailscale serve --bg 4321</span>; entra desde la tablet por
+          la dirección <span className="mono">https://…ts.net</span> que te dé. Es también lo que hace
+          que funcione fuera de casa. Si <span className="mono">serve</span> contesta
+          <span className="mono"> Logged out</span>, es que falta el <span className="mono">up</span>.
         </p>
       )}
     </div>
@@ -187,8 +189,15 @@ function Tablet() {
             de conseguirlo, que además es la misma que sirve para usarla fuera de casa, es Tailscale:
           </p>
           <pre className="mono" style={{ fontSize: 11.5, background: 'var(--surface-2)', padding: '10px 12px', borderRadius: 'var(--r)', overflowX: 'auto', margin: '0 0 8px' }}>
-{`tailscale serve --bg ${state.port}`}
+{`tailscale up                    # solo la primera vez
+tailscale serve --bg ${state.port}`}
           </pre>
+          <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
+            Instalar Tailscale no es lo mismo que haber entrado: si <span className="mono">serve</span> te
+            contesta <span className="mono">Logged out</span>, te falta el <span className="mono">up</span>.
+            Y si se queja del certificado, activa <em>MagicDNS</em> y <em>HTTPS Certificates</em> una vez
+            en la consola de Tailscale.
+          </p>
           <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
             Eso te da una dirección <span className="mono">https://…ts.net</span> con certificado de
             verdad. Ábrela en la tablet, añádele <span className="mono">?k=</span> con la clave de abajo

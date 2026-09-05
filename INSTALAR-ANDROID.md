@@ -86,15 +86,46 @@ de una red no cifrada se instale en tu aparato.
 La forma sensata de conseguir `https` en casa es **Tailscale**, que además resuelve de paso lo de
 usarla fuera. Tailscale monta una red privada entre tus aparatos: no expone nada a internet.
 
-1. Instala Tailscale en el ordenador y en la tablet, y entra con la misma cuenta en los dos.
-2. En el ordenador, ejecuta una vez:
+1. Instala Tailscale en el ordenador y en la tablet.
+
+2. **Entra con tu cuenta en el ordenador, y compruébalo antes de seguir.** Instalar no es lo
+   mismo que estar dentro: recién instalado, el aparato está fuera de la red.
+
+   ```bash
+   tailscale up          # abre el navegador para entrar
+   tailscale status      # tiene que salir tu ordenador con una IP 100.x.y.z
+   ```
+
+   Si `tailscale status` dice `Logged out`, no has entrado todavía. También se puede desde el
+   icono al lado del reloj → *Log in*.
+
+3. Entra con **la misma cuenta** en la tablet, desde la app de Tailscale.
+
+4. Activa los certificados https en tu red, una sola vez, en la consola de Tailscale:
+   [login.tailscale.com](https://login.tailscale.com/admin/dns) → **DNS** → activa *MagicDNS* y
+   *HTTPS Certificates*. Sin eso el paso siguiente no puede darte una dirección `https`.
+
+5. Ya con todo lo anterior, en el ordenador:
 
    ```bash
    tailscale serve --bg 4321
    ```
 
-3. Te dirá una dirección del estilo `https://mi-portatil.tu-tailnet.ts.net/`. Esa es la buena:
+6. Te dirá una dirección del estilo `https://mi-portatil.tu-tailnet.ts.net/`. Esa es la buena:
    tiene certificado de verdad y funciona desde cualquier sitio con internet, no solo en casa.
+
+### Si el comando se queja
+
+| Lo que dice | Qué pasa |
+|---|---|
+| `Logged out.` | El ordenador no ha entrado en la red. `tailscale up`, y vuelve a intentarlo. |
+| `Access denied` / `permission denied` | En Windows, abre PowerShell **como administrador**. |
+| Algo de `cert` o `HTTPS is not enabled` | Falta activar *HTTPS Certificates* en la consola (paso 4). |
+| No sale nada y el navegador da error | Comprueba que prolife está abierta: `serve` no levanta el servidor, solo lo saca a la red. |
+
+Y recuerda que el **modo tablet tiene que estar activado en prolife** (Ajustes → Abrir en la
+tablet o el móvil). `tailscale serve` te da la dirección https, pero la clave de acceso la pone
+prolife: sin ese interruptor no hay clave, y la tablet se queda en la puerta.
 
 Si prefieres no usar Tailscale, cualquier otra vía que te dé `https` sirve (un proxy inverso con
 certificado propio, por ejemplo), pero **no abras el puerto en el router**: ver el punto 8.

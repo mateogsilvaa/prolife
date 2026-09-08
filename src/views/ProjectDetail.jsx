@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import TaskList from '../components/TaskList.jsx'
 import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
+import LogTime from '../components/LogTime.jsx'
 import { ProjectForm, projectStats } from './Work.jsx'
 import { useStore, refLabel } from '../lib/store.jsx'
 import { api } from '../lib/api.js'
@@ -41,6 +42,7 @@ export default function ProjectDetail({ id }) {
         </div>
         <div className="row">
           <a className="btn primary" href={`#/espacio/trabajo/${p.id}`}><Icon name="layers" size={13} /> Abrir espacio de trabajo</a>
+          <LogTime area="work" refId={p.id} label={p.name} />
           <button className="btn" onClick={() => api.openInCode(p.folder).then(() => toast('Abriendo VS Code…')).catch((e) => toast(e.message, 'err'))}>
             <Icon name="code" size={13} /> VS Code
           </button>

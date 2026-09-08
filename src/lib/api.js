@@ -104,6 +104,9 @@ export const api = {
   getRemote: () => req('/api/remote'),
   setRemote: (body) => req('/api/remote', { method: 'PUT', body }),
 
+  tailscaleStatus: () => req('/api/tailscale/status'),
+  tailscaleServe: () => req('/api/tailscale/serve', { method: 'POST', body: {} }),
+
   aiStatus: (url) => req(`/api/ai/status?url=${encodeURIComponent(url || '')}`),
   aiChat: (body) => req('/api/ai/chat', { method: 'POST', body }),
 

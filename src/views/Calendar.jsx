@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import TaskList from '../components/TaskList.jsx'
@@ -7,6 +7,7 @@ import ExamEditor, { newExam, kindLabel } from '../components/ExamEditor.jsx'
 import { useStore, uid, AREAS, PALETTE } from '../lib/store.jsx'
 import { slotActiveOn } from '../lib/stats.js'
 import { expandEvents, FREQ, repeatLabel } from '../lib/recurrence.js'
+import { startDrag } from '../lib/drag.js'
 import {
   monthMatrix, MONTHS, DAYS, DAYS_LONG, today, iso, parseIso, weekday,
   dur, addDays, startOfWeek, weekLabel,
@@ -15,16 +16,82 @@ import {
 const HOUR_H = 46
 const DAY_START = 7
 const DAY_END = 23
+/** A qué se redondea un evento al arrastrarlo: ni al minuto, ni a la hora entera. */
+const SNAP_MIN = 5
+/** Qué vista de horario se vio la última vez, para no volver siempre al día. */
+const MODE_KEY = 'prolife.cal.mode'
 
 const toMin = (t) => {
   if (!t) return null
   const [h, m] = t.split(':').map(Number)
   return h * 60 + (m || 0)
 }
+const fromMin = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`
+
+/**
+ * Reparte en columnas los eventos que coinciden en el tiempo, como cualquier
+ * calendario decente: si dos chocan, uno al lado del otro, no uno tapando al
+ * otro sin que se note que hay dos. Agrupa por «racimos» que se solapan
+ * transitivamente y, dentro de cada uno, reparte columnas con la asignación
+ * voraz de siempre (la primera libre); el ancho del racimo entero es el mayor
+ * número de columnas que ha hecho falta en algún punto.
+ */
+function layoutOverlaps(items) {
+  const withTimes = items
+    .map((it) => {
+      const s = toMin(it.start)
+      const e = Math.max(s + 15, toMin(it.end) || s + 60)
+      return { it, s, e }
+    })
+    .sort((a, b) => a.s - b.s || a.e - b.e)
+
+  const out = []
+  let cluster = []
+  let clusterEnd = -Infinity
+
+  const flush = () => {
+    if (!cluster.length) return
+    const active = []
+    let maxCol = 0
+    for (const x of cluster) {
+      for (let i = active.length - 1; i >= 0; i--) if (active[i].e <= x.s) active.splice(i, 1)
+      const used = new Set(active.map((a) => a.col))
+      let col = 0
+      while (used.has(col)) col++
+      active.push({ e: x.e, col })
+      maxCol = Math.max(maxCol, col)
+      x.col = col
+    }
+    for (const x of cluster) out.push({ ...x.it, _col: x.col, _cols: maxCol + 1, _s: x.s, _e: x.e })
+    cluster = []
+  }
+
+  for (const x of withTimes) {
+    if (x.s >= clusterEnd) { flush(); clusterEnd = x.e }
+    else clusterEnd = Math.max(clusterEnd, x.e)
+    cluster.push(x)
+  }
+  flush()
+  return out
+}
+
+/** Lee la última vista, o «mes» la primera vez que se abre la app. */
+const readMode = () => {
+  try {
+    const v = localStorage.getItem(MODE_KEY)
+    return v === 'semana' || v === 'dia' ? v : 'mes'
+  } catch {
+    return 'mes'
+  }
+}
 
 export default function Calendar() {
-  const { db } = useStore()
-  const [mode, setMode] = useState('mes')
+  const { db, update } = useStore()
+  const [mode, setModeRaw] = useState(readMode)
+  const setMode = (m) => {
+    setModeRaw(m)
+    try { localStorage.setItem(MODE_KEY, m) } catch { /* sin storage, no pasa nada */ }
+  }
   const [anchor, setAnchor] = useState(() => today())
   const [sel, setSel] = useState(() => today())
   const [event, setEvent] = useState(null)
@@ -109,6 +176,19 @@ export default function Calendar() {
     categoryId: db.categories[0]?.id || null, notes: '', repeat: null, exceptions: [],
   })
 
+  /**
+   * Mover un evento a mano, arrastrándolo por la rejilla. Solo los que no se
+   * repiten: uno de una serie no tiene sitio propio donde guardar «esta vez
+   * se movió», así que arrastrarlo tendría que mover la serie entera o crear
+   * una excepción con su propio evento — más de lo que pide esto por ahora.
+   */
+  const rescheduleEvent = (ev, patch) => {
+    update((d) => {
+      const x = d.events.find((e) => e.id === ev.id)
+      if (x) Object.assign(x, patch)
+    })
+  }
+
   return (
     <>
       <div className="page-head">
@@ -163,12 +243,16 @@ export default function Calendar() {
           onSlot={(date, start) => newEvent(date, start)}
           onOpen={openItem}
           onSelect={(d) => { setSel(d); setAnchor(d) }}
+          onDragEvent={rescheduleEvent}
         />
       )}
 
       {mode === 'dia' && (
         <div className="split with-aside">
-          <TimeGrid days={[anchor]} itemsOf={itemsOf} onSlot={(date, start) => newEvent(date, start)} onOpen={openItem} onSelect={() => {}} />
+          <TimeGrid
+            days={[anchor]} itemsOf={itemsOf} onSlot={(date, start) => newEvent(date, start)}
+            onOpen={openItem} onSelect={() => {}} onDragEvent={rescheduleEvent}
+          />
           <DayPanel
             date={anchor}
             itemsOf={itemsOf}
@@ -231,7 +315,7 @@ function MonthGrid({ anchor, sel, setSel, itemsOf, load, onOpen }) {
 
 /* ------------------------------------------------------------ semana / día */
 
-function TimeGrid({ days, itemsOf, onSlot, onOpen, onSelect }) {
+function TimeGrid({ days, itemsOf, onSlot, onOpen, onSelect, onDragEvent }) {
   const hours = Array.from({ length: DAY_END - DAY_START }, (_, i) => DAY_START + i)
   const cols = `52px repeat(${days.length}, minmax(0, 1fr))`
   const now = new Date()
@@ -284,7 +368,7 @@ function TimeGrid({ days, itemsOf, onSlot, onOpen, onSelect }) {
           <div className="cal-gutter">
             {hours.map((h) => <div className="cal-hour" key={h}>{String(h).padStart(2, '0')}:00</div>)}
           </div>
-          {days.map((d) => (
+          {days.map((d, dayIndex) => (
             <div className="cal-col" key={d}>
               {hours.map((h) => (
                 <div
@@ -297,33 +381,92 @@ function TimeGrid({ days, itemsOf, onSlot, onOpen, onSelect }) {
               {d === today() && nowTop > 0 && nowTop < (DAY_END - DAY_START) * HOUR_H && (
                 <div className="cal-now" style={{ top: nowTop }} />
               )}
-              {itemsOf(d).filter((i) => i.start).map((it, k) => {
-                const s = toMin(it.start)
-                const e = toMin(it.end) || s + 60
-                const top = ((s - DAY_START * 60) / 60) * HOUR_H
-                const height = Math.max(20, ((e - s) / 60) * HOUR_H - 2)
+              {layoutOverlaps(itemsOf(d).filter((i) => i.start)).map((it, k) => {
+                const top = ((it._s - DAY_START * 60) / 60) * HOUR_H
+                const height = Math.max(20, ((it._e - it._s) / 60) * HOUR_H - 2)
                 if (top < -HOUR_H) return null
                 return (
-                  <div
-                    key={k}
-                    className={`cal-block${it.important ? ' hot' : ''}`}
-                    style={{
-                      top, height, borderLeftColor: it.color,
-                      background: `color-mix(in srgb, ${it.color} ${it.important ? 22 : 11}%, var(--surface))`,
-                    }}
-                    onClick={() => onOpen(it)}
-                    title={`${it.label} · ${it.detail}`}
-                  >
-                    <div className="t">{it.start}{it.end ? `–${it.end}` : ''}</div>
-                    <div style={{ fontWeight: 600 }}>{it.kind === 'exam' ? '★ ' : ''}{it.label}</div>
-                    {height > 44 && <div className="dim" style={{ fontSize: 10 }}>{it.detail}</div>}
-                  </div>
+                  <EventBlock
+                    key={k} it={it} days={days} dayIndex={dayIndex} top={top} height={height}
+                    onOpen={onOpen} onDragEvent={onDragEvent}
+                  />
                 )
               })}
             </div>
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Un bloque del horario. Si es un evento suelto —ni clase, ni examen, ni
+ * repetición—, se puede arrastrar: verticalmente cambia la hora, en la vista
+ * de semana también cambia de día al cruzar de columna. Mientras se arrastra
+ * se mueve con un `transform`, sin volver a pintar nada; el cambio de verdad
+ * —y el redibujado que trae— solo llega al soltar. Si el ratón apenas se ha
+ * movido, cuenta como clic: abre el editor de siempre.
+ */
+function EventBlock({ it, days, dayIndex, top, height, onOpen, onDragEvent }) {
+  const ref = useRef(null)
+  const drag = useRef(null)
+  const draggable = it.kind === 'event' && !it.event?.repeat?.freq && !!onDragEvent
+
+  const style = { top, height, borderLeftColor: it.color, background: `color-mix(in srgb, ${it.color} ${it.important ? 22 : 11}%, var(--surface))` }
+  if (it._cols > 1) {
+    const pct = 100 / it._cols
+    style.left = `calc(${it._col * pct}% + 2px)`
+    style.width = `calc(${pct}% - 4px)`
+    style.right = 'auto'
+  }
+
+  const onPointerDown = (e) => {
+    if (!draggable || e.button !== 0) return
+    const colWidth = ref.current?.closest('.cal-col')?.getBoundingClientRect().width || 0
+    const s = it._s
+    const dur = Math.max(15, it._e - it._s)
+    drag.current = { startX: e.clientX, startY: e.clientY, moved: false, colWidth, s, dur, dayIndex, dayDelta: 0, minuteDelta: 0 }
+
+    startDrag(
+      e,
+      (ev) => {
+        const g = drag.current
+        const dx = ev.clientX - g.startX
+        const dy = ev.clientY - g.startY
+        if (!g.moved && Math.hypot(dx, dy) < 4) return
+        g.moved = true
+        g.dayDelta = g.colWidth ? Math.round(dx / g.colWidth) : 0
+        const snapPx = (HOUR_H * SNAP_MIN) / 60
+        g.minuteDelta = Math.round(dy / snapPx) * SNAP_MIN
+        if (ref.current) {
+          ref.current.style.transform = `translate(${g.dayDelta * g.colWidth}px, ${(g.minuteDelta / 60) * HOUR_H}px)`
+          ref.current.style.zIndex = 5
+        }
+      },
+      () => {
+        const g = drag.current
+        if (ref.current) { ref.current.style.transform = ''; ref.current.style.zIndex = '' }
+        if (!g.moved) { onOpen(it); return }
+        const newDay = days[Math.min(days.length - 1, Math.max(0, g.dayIndex + g.dayDelta))]
+        const newS = Math.max(DAY_START * 60, Math.min(DAY_END * 60 - g.dur, g.s + g.minuteDelta))
+        onDragEvent(it.event, { date: newDay, start: fromMin(newS), end: fromMin(newS + g.dur) })
+      }
+    )
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={`cal-block${it.important ? ' hot' : ''}${draggable ? ' draggable' : ''}`}
+      style={style}
+      onPointerDown={onPointerDown}
+      onClick={() => !draggable && onOpen(it)}
+      title={draggable ? `${it.label} · ${it.detail} · arrastra para moverlo` : `${it.label} · ${it.detail}`}
+    >
+      <div className="t">{it.start}{it.end ? `–${it.end}` : ''}</div>
+      <div style={{ fontWeight: 600 }}>{it.kind === 'exam' ? '★ ' : ''}{it.label}</div>
+      {height > 44 && <div className="dim" style={{ fontSize: 10 }}>{it.detail}</div>}
     </div>
   )
 }

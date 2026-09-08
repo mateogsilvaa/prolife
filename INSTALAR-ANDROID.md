@@ -84,62 +84,52 @@ es algo que prolife pueda saltarse: es una regla del navegador para no dejar que
 de una red no cifrada se instale en tu aparato.
 
 La forma sensata de conseguir `https` en casa es **Tailscale**, que además resuelve de paso lo de
-usarla fuera. Tailscale monta una red privada entre tus aparatos: no expone nada a internet.
+usarla fuera. Tailscale monta una red privada entre tus aparatos: no expone nada a internet. Y
+desde que existe el botón de Ajustes, casi todo esto lo hace prolife por ti — lo único que sigue
+siendo cosa tuya es entrar con tu cuenta, porque eso abre un navegador y no tiene sentido
+automatizarlo.
 
-1. Instala Tailscale en el ordenador y en la tablet.
+1. Instala Tailscale en el ordenador y en la tablet, con la app oficial en cada uno.
 
-2. **Entra con tu cuenta en el ordenador, y compruébalo antes de seguir.** Instalar no es lo
-   mismo que estar dentro: recién instalado, el aparato está fuera de la red.
-
-   ```bash
-   tailscale up          # abre el navegador para entrar
-   tailscale status      # tiene que salir tu ordenador con una IP 100.x.y.z
-   ```
-
-   Si `tailscale status` dice `Logged out`, no has entrado todavía. También se puede desde el
-   icono al lado del reloj → *Log in*.
+2. **Entra con tu cuenta en el ordenador.** Instalar no es lo mismo que estar dentro: recién
+   instalado, el aparato sigue fuera de la red. Se hace desde el icono de Tailscale junto al
+   reloj → *Log in*, o en una terminal con `tailscale up` (te abre el navegador para entrar).
 
 3. Entra con **la misma cuenta** en la tablet, desde la app de Tailscale.
 
-4. Activa los certificados https en tu red, una sola vez, en la consola de Tailscale:
-   [login.tailscale.com](https://login.tailscale.com/admin/dns) → **DNS** → activa *MagicDNS* y
-   *HTTPS Certificates*. Sin eso el paso siguiente no puede darte una dirección `https`.
+4. En el ordenador, abre prolife → **Ajustes → Abrir en la tablet o el móvil** → activa el
+   interruptor si no lo tenías ya. Ahí abajo aparece un bloque de Tailscale que **comprueba solo**
+   si estás dentro de la red, y cuando lo estás, un botón: **«Activar acceso fuera de casa»**.
 
-5. Ya con todo lo anterior, en el ordenador:
+5. Púlsalo. Es exactamente lo que antes había que escribir en una terminal
+   (`tailscale serve --bg 4321`), solo que lo hace el propio botón — incluido avisar si falta
+   activar los certificados en la consola de Tailscale, con el enlace a mano para hacerlo.
 
-   ```bash
-   tailscale serve --bg 4321
-   ```
+6. En cuanto está activo, la pantalla enseña un **código QR** y, debajo, el enlace completo con
+   la clave ya puesta dentro. Ya no hay que copiar una dirección y pegarle la clave a mano.
 
-6. Te dirá una dirección del estilo `https://mi-portatil.tu-tailnet.ts.net/`. Esa es la buena:
-   tiene certificado de verdad y funciona desde cualquier sitio con internet, no solo en casa.
-
-### Si el comando se queja
+### Si el botón se queja
 
 | Lo que dice | Qué pasa |
 |---|---|
-| `Logged out.` | El ordenador no ha entrado en la red. `tailscale up`, y vuelve a intentarlo. |
-| `Access denied` / `permission denied` | En Windows, abre PowerShell **como administrador**. |
-| Algo de `cert` o `HTTPS is not enabled` | Falta activar *HTTPS Certificates* en la consola (paso 4). |
-| No sale nada y el navegador da error | Comprueba que prolife está abierta: `serve` no levanta el servidor, solo lo saca a la red. |
-
-Y recuerda que el **modo tablet tiene que estar activado en prolife** (Ajustes → Abrir en la
-tablet o el móvil). `tailscale serve` te da la dirección https, pero la clave de acceso la pone
-prolife: sin ese interruptor no hay clave, y la tablet se queda en la puerta.
+| «No has entrado con tu cuenta todavía» | Falta el paso 2. Entra y pulsa «Comprobar». |
+| Algo de `cert` o `HTTPS Certificates` | Falta activarlos una vez en [login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) → *MagicDNS* y *HTTPS Certificates*. |
+| «No se encuentra Tailscale en este ordenador» | No está instalado, o no está en el `PATH`. El propio aviso enlaza a la descarga. |
 
 Si prefieres no usar Tailscale, cualquier otra vía que te dé `https` sirve (un proxy inverso con
-certificado propio, por ejemplo), pero **no abras el puerto en el router**: ver el punto 8.
+certificado propio, por ejemplo) — entonces sí hace falta lo de siempre: `tailscale serve` (o el
+equivalente de tu proxy) a mano, ver la clave en Ajustes y montar tú el enlace. **No abras el
+puerto en el router** en ningún caso: ver el punto 8.
 
 ---
 
 ## 5. Emparejar la tablet
 
-La tablet necesita la clave una vez. El enlace de emparejamiento la lleva dentro.
+Con el acceso fuera de casa activado (punto 4), Ajustes te enseña un **código QR**: apunta la
+cámara de la tablet y ábrelo. Es lo más rápido, porque no hay nada que teclear ni que copiar.
 
-- **Si usas Tailscale:** en Ajustes, pulsa **«Ver la clave»**, cópiala, y en la tablet abre
-  tu dirección `https://…ts.net/?k=LA_CLAVE`.
-- **Si estás en la red local:** usa directamente el botón **«Copiar enlace de emparejamiento»**,
-  que ya la incluye.
+Si prefieres el enlace de texto, también está debajo del código, ya con la clave puesta dentro —
+o, si vas por la red local sin Tailscale, el botón de siempre **«Copiar enlace de emparejamiento»**.
 
 Nada más abrirlo, la app guarda la clave y **la borra de la barra de direcciones**, para que no
 acabe en el historial ni la compartas sin querer al enviar el enlace.

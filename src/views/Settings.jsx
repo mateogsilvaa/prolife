@@ -78,11 +78,11 @@ function SecureHint() {
       </div>
       {!ok && (
         <p className="dim" style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 0 }}>
-          Para arreglarlo, en el ordenador: <span className="mono">tailscale up</span> la primera vez
-          y luego <span className="mono">tailscale serve --bg 4321</span>; entra desde la tablet por
-          la dirección <span className="mono">https://…ts.net</span> que te dé. Es también lo que hace
-          que funcione fuera de casa. Si <span className="mono">serve</span> contesta
-          <span className="mono"> Logged out</span>, es que falta el <span className="mono">up</span>.
+          Para arreglarlo, ve <strong>al ordenador</strong> → Ajustes → «Abrir en la tablet o el
+          móvil»: ahí abajo hay un botón, <strong>«Activar acceso fuera de casa»</strong>, que monta
+          la dirección <span className="mono">https://…ts.net</span> y te enseña un código QR para
+          abrirla aquí. Es lo mismo que hace que funcione desde la universidad. Lo único que tienes
+          que haber hecho tú antes es entrar en Tailscale con tu cuenta en los dos aparatos.
         </p>
       )}
     </div>

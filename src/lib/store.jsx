@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { api } from './api.js'
+import { api, enDrive } from './api.js'
 import { iso, today } from './date.js'
 import { saveDbSnapshot } from './offline.js'
 import { applyOp } from '../../server/ops.js'
@@ -206,6 +206,13 @@ export function Provider({ children }) {
         toast('Sin conexión con el ordenador: ahora mismo solo se puede consultar.', 'err')
         return
       }
+      // Con la app contra Drive no hay servidor al que mandarle la base entera,
+      // y subirla desde aquí machacaría lo que hubieras hecho en el ordenador.
+      // Lo que sí se puede apuntar va por `applyChange`, como cambio suelto.
+      if (enDrive) {
+        toast('Desde la tablet esto no se puede cambiar: hazlo en el ordenador.', 'err')
+        return
+      }
       setDb((prev) => {
         if (!prev) return prev
         const next = structuredClone(prev)
@@ -233,7 +240,9 @@ export function Provider({ children }) {
    */
   const applyChange = useCallback(
     (op) => {
-      if (!offlineRef.current) {
+      // Contra Drive nunca se guarda la base entera: todo va como operación al
+      // buzón, esté o no la tablet con conexión en ese momento.
+      if (!offlineRef.current && !enDrive) {
         update((d) => applyOp(d, op))
         return
       }
@@ -245,6 +254,9 @@ export function Provider({ children }) {
         if (error) { toast(error, 'err'); return prev }
         encolar(entera)
         setQueued(enCola())
+        // Sin ordenador la cola espera a que vuelva; contra Drive, en cambio,
+        // el buzón está a un viaje de distancia y no hay por qué esperar.
+        if (enDrive) setTimeout(() => enviarColaRef.current?.(), 0)
         return next
       })
     },
@@ -264,11 +276,19 @@ export function Provider({ children }) {
       quitar(ops.map((o) => o.id))
       setQueued(enCola())
       stamp.current = r.stamp || stamp.current
-      const perdidas = r.skipped?.length || 0
-      toast(
-        `${r.applied} ${r.applied === 1 ? 'cambio apuntado' : 'cambios apuntados'} en el ordenador` +
-          (perdidas ? ` · ${perdidas} ya no valían` : '')
-      )
+      // Contra Drive nada se ha aplicado todavía: se ha dejado en el buzón, y
+      // lo aplicará el ordenador la próxima vez que abra la app. Decir «hecho
+      // en el ordenador» ahí sería mentira, y encima `applied` no existe.
+      if (r.buzon) {
+        const n = r.queued || ops.length
+        toast(`${n} ${n === 1 ? 'cambio guardado' : 'cambios guardados'} en Drive · el ordenador lo recoge al abrirse`)
+      } else {
+        const perdidas = r.skipped?.length || 0
+        toast(
+          `${r.applied} ${r.applied === 1 ? 'cambio apuntado' : 'cambios apuntados'} en el ordenador` +
+            (perdidas ? ` · ${perdidas} ya no valían` : '')
+        )
+      }
       return r
     } catch (e) {
       // La cola se queda como estaba: se vuelve a intentar al próximo latido.

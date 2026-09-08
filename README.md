@@ -88,15 +88,15 @@ Se activa en **Ajustes → Abrir en la tablet o el móvil**. A partir de ahí:
 **Para que se instale como una app de verdad** —con su icono, y capaz de abrir sin el ordenador
 delante— la dirección tiene que ser `https`. Por `http://192.168.x.x` el navegador no lo permite,
 y eso no es algo que la app pueda saltarse. La forma sensata de conseguirlo es
-[Tailscale](https://tailscale.com), que además es lo que la hace funcionar fuera de casa:
+[Tailscale](https://tailscale.com), que además es lo que la hace funcionar fuera de casa, y esta
+pantalla lo monta por ti: instala Tailscale, entra con tu cuenta —eso sí es un paso tuyo, abre un
+navegador— y en **Ajustes → Abrir en la tablet o el móvil** aparece un botón, **«Activar acceso
+fuera de casa»**, que hace exactamente lo que antes había que teclear.
 
-```bash
-tailscale serve --bg 4321
-```
-
-Eso da una dirección `https://…ts.net` con certificado real. Se abre en la tablet, se le añade
-`?k=` con la clave una sola vez, y con «Añadir a pantalla de inicio» queda instalada. **No abras
-puertos del router**: eso pondría tus apuntes en internet detrás de una sola clave.
+Con eso activado, la propia pantalla enseña un **código QR**: apunta la cámara de la tablet y
+listo, sin copiar ni pegar nada. También hay un enlace de texto por si lo prefieres. **No abras
+puertos del router**: eso pondría tus apuntes en internet detrás de una sola clave, y no hace
+falta — Tailscale ya te da la dirección segura entre tus propios aparatos.
 
 Por la red local sin `https` la app funciona igual en el navegador; lo que no habrá es icono ni
 modo sin conexión.
@@ -191,6 +191,10 @@ un minuto se descartan.
 En ambos casos, `Ctrl+J` abre la revisión del día: editar duración, reasignar de
 asignatura, partir, borrar o añadir un tramo a mano.
 
+Y si se te olvidó darle a «Trabajar en…» antes de ponerte, en la propia ficha de la
+asignatura o el proyecto hay un botón **«Apuntar tiempo»**: solo pide cuánto y qué día,
+sin tener que buscar de qué se trata en una lista — ya sabe dónde está.
+
 ## Trabajo semanal
 
 Cada asignatura tiene unas **horas objetivo por semana** (si no las pones, se calculan por
@@ -246,9 +250,17 @@ ollama pull llama3.1:8b
 
 ## Calendario
 
-Vistas de **mes, semana y día**. La semana y el día son rejilla horaria: las clases del
-horario, los exámenes, los eventos y las entregas caen en su hora.
+Vistas de **mes, semana y día**, y se queda en la que dejaste: si lo último que viste fue la
+semana, la próxima vez es la semana, no siempre el día. La semana y el día son rejilla
+horaria: las clases del horario, los exámenes, los eventos y las entregas caen en su hora.
 
+- **Los eventos se arrastran.** Coge uno por la rejilla de semana o día y suéltalo en otra
+  hora —o, en semana, en otro día— para moverlo; un clic sin arrastrar lo sigue abriendo
+  para editarlo. Las clases, los exámenes y los eventos que se repiten no se arrastran: una
+  clase la mueve el horario, y una repetición necesitaría decidir si se mueve la serie
+  entera o solo esa vez, así que de momento esos se editan del modo de siempre.
+- **Si dos cosas chocan en la misma hora**, se ven las dos, una al lado de la otra —como en
+  cualquier calendario decente—, no una tapando a la otra sin que se note que hay dos.
 - **El horario tiene fechas.** Cada clase vale entre un *desde* y un *hasta*; si los dejas
   vacíos hereda los del curso (Ajustes). Sin fecha de fin la clase se agendaría para siempre
   y no se podría contar cuántas faltas te puedes permitir, así que la app te lo avisa.

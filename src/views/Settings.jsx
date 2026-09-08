@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import QRCode from 'qrcode'
 import Icon from '../components/Icon.jsx'
 import { LOGO_PATH, bumpLogo } from '../components/Brand.jsx'
 import { useStore, uid, PALETTE, isDesktop } from '../lib/store.jsx'
@@ -84,6 +85,127 @@ function SecureHint() {
           <span className="mono"> Logged out</span>, es que falta el <span className="mono">up</span>.
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Todo el ritual de Tailscale, hecho desde aquí en vez de contado en un manual.
+ *
+ * Antes había que: instalar Tailscale, entrar con la cuenta, activar los
+ * certificados en su web, teclear `tailscale serve --bg`, copiar la dirección
+ * que devuelve y pegarle detrás la clave a mano. De todo eso, lo único que de
+ * verdad tiene que pasar por un humano es entrar en Tailscale la primera vez
+ * —abre un navegador, no tiene sentido automatizarlo—; el resto es exactamente
+ * lo mismo que haría un comando, así que lo hace este botón.
+ */
+function TailscaleSetup({ port, token }) {
+  const { toast } = useStore()
+  const [status, setStatus] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [qr, setQr] = useState(null)
+
+  const check = () =>
+    api.tailscaleStatus().then(setStatus).catch(() => setStatus({ installed: false, error: 'no se ha podido comprobar' }))
+
+  useEffect(() => { check() }, [])
+
+  const activar = async () => {
+    setBusy(true)
+    try {
+      setStatus(await api.tailscaleServe())
+    } catch (e) {
+      toast(e.message, 'err')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const copy = (text) =>
+    navigator.clipboard?.writeText(text).then(() => toast('Copiado'), () => toast('No se ha podido copiar', 'err'))
+
+  const url = status?.dnsName ? `https://${status.dnsName}/?k=${encodeURIComponent(token || '')}` : ''
+
+  useEffect(() => {
+    if (!url) return setQr(null)
+    QRCode.toDataURL(url, { margin: 1, width: 220, color: { dark: '#1a1815', light: '#f5f3ee' } })
+      .then(setQr)
+      .catch(() => setQr(null))
+  }, [url])
+
+  if (!status) return <p className="dim" style={{ fontSize: 12.5 }}>Comprobando Tailscale…</p>
+
+  if (!status.installed) {
+    return (
+      <div className="notice">
+        <Icon name="link" size={13} />
+        <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+          No se encuentra Tailscale en este ordenador.{' '}
+          <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl('https://tailscale.com/download') }} style={{ textDecoration: 'underline' }}>
+            Instálalo
+          </a>, entra con tu cuenta y vuelve a esta pantalla.
+        </span>
+      </div>
+    )
+  }
+
+  if (!status.loggedIn) {
+    return (
+      <div className="notice">
+        <Icon name="link" size={13} />
+        <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+          Tailscale está instalado pero <strong>no has entrado con tu cuenta todavía</strong>: es un paso
+          aparte de instalarlo. Ábrelo desde el icono junto al reloj → <em>Log in</em>, o en una terminal{' '}
+          <span className="mono">tailscale up</span>. En cuanto entres, dale a comprobar.
+        </span>
+        <div className="spacer" />
+        <button className="btn sm" onClick={check}><Icon name="refresh" size={12} /> Comprobar</button>
+      </div>
+    )
+  }
+
+  if (!status.serving) {
+    return (
+      <>
+        <p className="dim" style={{ fontSize: 12.5, marginTop: 0 }}>
+          Tailscale ya está dentro de tu red. Falta un solo paso — es justo lo que teclearías tú, hecho
+          desde aquí:
+        </p>
+        <button className="btn primary" onClick={activar} disabled={busy}>
+          <Icon name="link" size={13} /> {busy ? 'Activando…' : 'Activar acceso fuera de casa'}
+        </button>
+        {status.error && (
+          <p className="dim mono" style={{ fontSize: 11, marginBottom: 0 }}>
+            {status.error.includes('cert') || status.error.includes('HTTPS')
+              ? 'Falta activar MagicDNS y HTTPS Certificates, una vez, en login.tailscale.com/admin/dns.'
+              : status.error}
+          </p>
+        )}
+      </>
+    )
+  }
+
+  return (
+    <div className="row wrap" style={{ gap: 16, alignItems: 'flex-start' }}>
+      {qr && (
+        <img
+          src={qr} width={128} height={128} alt="Código QR para abrir prolife en la tablet"
+          style={{ borderRadius: 'var(--r)', border: '1px solid var(--line)', flexShrink: 0 }}
+        />
+      )}
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <p className="dim" style={{ fontSize: 12.5, marginTop: 0 }}>
+          Apunta la cámara de la tablet a este código — o copia el enlace y ábrelo ahí una sola vez:
+        </p>
+        <div className="row" style={{ gap: 8 }}>
+          <span className="mono" style={{ fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{url}</span>
+          <button className="btn sm" onClick={() => copy(url)}><Icon name="link" size={12} /> Copiar</button>
+        </div>
+        <p className="dim" style={{ fontSize: 11.5, marginBottom: 0 }}>
+          Después, «Añadir a pantalla de inicio» en el menú del navegador la deja instalada, con su
+          icono, y funcionando igual fuera de casa que en el salón.
+        </p>
+      </div>
     </div>
   )
 }
@@ -184,26 +306,10 @@ function Tablet() {
           <h4 style={{ margin: '0 0 6px', fontSize: 13 }}>Instalarla como app, con su icono</h4>
           <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
             Para que Android ofrezca «Instalar app» —y para que abra sin el ordenador delante— hace
-            falta que la dirección sea <strong>https</strong>: por <span className="mono">http://</span> a
-            secas el navegador no lo permite, y no es algo que la app pueda saltarse. La forma sensata
-            de conseguirlo, que además es la misma que sirve para usarla fuera de casa, es Tailscale:
+            falta que la dirección sea <strong>https</strong>, y esa parte es cosa de Tailscale, no de
+            prolife. Lo que sigue lo hace esta pantalla por ti.
           </p>
-          <pre className="mono" style={{ fontSize: 11.5, background: 'var(--surface-2)', padding: '10px 12px', borderRadius: 'var(--r)', overflowX: 'auto', margin: '0 0 8px' }}>
-{`tailscale up                    # solo la primera vez
-tailscale serve --bg ${state.port}`}
-          </pre>
-          <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
-            Instalar Tailscale no es lo mismo que haber entrado: si <span className="mono">serve</span> te
-            contesta <span className="mono">Logged out</span>, te falta el <span className="mono">up</span>.
-            Y si se queja del certificado, activa <em>MagicDNS</em> y <em>HTTPS Certificates</em> una vez
-            en la consola de Tailscale.
-          </p>
-          <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
-            Eso te da una dirección <span className="mono">https://…ts.net</span> con certificado de
-            verdad. Ábrela en la tablet, añádele <span className="mono">?k=</span> con la clave de abajo
-            una sola vez, y usa «Añadir a pantalla de inicio». Por la red local sin https la app
-            funciona igual en el navegador; lo que no habrá es icono ni consulta sin conexión.
-          </p>
+          <TailscaleSetup port={state.port} token={state.token} />
 
           <hr className="hr" style={{ margin: '14px 0' }} />
 

@@ -3,6 +3,7 @@ import Icon from '../components/Icon.jsx'
 import TaskList from '../components/TaskList.jsx'
 import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
 import ExamEditor, { ExamRow, newExam } from '../components/ExamEditor.jsx'
+import LogTime from '../components/LogTime.jsx'
 import { SubjectForm } from './Uni.jsx'
 import { useStore } from '../lib/store.jsx'
 import { useTracker } from '../lib/tracker.jsx'
@@ -55,6 +56,7 @@ export default function SubjectDetail({ id }) {
           <button className={`btn ${working ? '' : 'primary'}`} disabled={working} onClick={work} title="Cuenta el tiempo estés donde estés, dentro o fuera de la app">
             <Icon name="play" size={12} fill="currentColor" /> {working ? 'Contando…' : 'Trabajar en esto'}
           </button>
+          <LogTime area="uni" refId={s.id} label={s.name} />
           <a className="btn" href={`#/espacio/uni/${s.id}`}>
             <Icon name="layers" size={13} /> Espacio
           </a>

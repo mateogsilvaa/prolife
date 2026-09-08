@@ -41,6 +41,11 @@ async function createWindow() {
     backgroundColor: '#f5f3ee',
     show: false,
     autoHideMenuBar: true,
+    // El instalador ya lleva el icono de verdad (ver `build.icon` en package.json,
+    // que electron-builder graba dentro del .exe); esto es lo que evita que la
+    // ventana en sí —barra de tareas, Alt+Tab— enseñe el átomo de Electron
+    // mientras se desarrolla o se corre sin empaquetar.
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

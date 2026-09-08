@@ -13,6 +13,7 @@ import {
 import { loadDb, saveDb, scheduleBackups, dbPath, readRaw, isFuture, versionOf, SCHEMA } from './db.js'
 import * as vscode from './code.js'
 import * as assistant from './assistant.js'
+import * as tailscale from './tailscale.js'
 import { applyOp } from './ops.js'
 
 const KIND = {
@@ -342,6 +343,31 @@ export function createApp() {
       }
       // El puerto ya está escuchando donde estaba: el cambio entra al reiniciar.
       res.json({ ...remoteState(), restart: true })
+    })
+  )
+
+  /**
+   * Todo lo que antes había que teclear a mano para usar la tablet fuera de
+   * casa: si Tailscale está dentro de la red, su dirección `.ts.net`, y si ya
+   * está publicando este puerto. Con eso la interfaz arma el enlace de
+   * emparejamiento sola, sin que el usuario copie ni pegue nada.
+   */
+  app.get(
+    '/api/tailscale/status',
+    wrap(async (req, res) => {
+      onlyHere(req)
+      res.json(await tailscale.status(cfg.port))
+    })
+  )
+
+  /** El botón «Activar acceso fuera de casa»: hace justo `tailscale serve --bg`. */
+  app.post(
+    '/api/tailscale/serve',
+    wrap(async (req, res) => {
+      onlyHere(req)
+      const r = await tailscale.serve(cfg.port)
+      if (!r.ok) throw Object.assign(new Error(r.error), { status: 502 })
+      res.json(await tailscale.status(cfg.port))
     })
   )
 

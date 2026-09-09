@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import Icon from './Icon.jsx'
-import { buscarCarpetas, fijarRaiz, raizGuardada, haySesion } from '../lib/drive.js'
+import { buscarCarpetas, listarCarpetas, fijarRaiz, raizGuardada, haySesion } from '../lib/drive.js'
 import { entrar, puedeEntrar, PETICION } from '../lib/google.js'
 
 /**
@@ -19,6 +19,11 @@ export default function ConectarDrive({ onListo }) {
   const [carpetas, setCarpetas] = useState(null)
   const [error, setError] = useState(null)
   const [ocupado, setOcupado] = useState(false)
+  // Cuando la búsqueda automática no da con ninguna, se pasa a buscar por
+  // nombre. `aMano` guarda lo que se teclea; `sinPuente`, la carpeta que se ha
+  // elegido y no tiene el `.prolife` dentro.
+  const [aMano, setAMano] = useState('prolife')
+  const [sinPuente, setSinPuente] = useState(null)
 
   // Si la sesión sigue viva de la última vez, se salta el primer paso.
   useEffect(() => {
@@ -30,10 +35,27 @@ export default function ConectarDrive({ onListo }) {
     if (paso !== 'carpeta' || carpetas) return
     setOcupado(true)
     buscarCarpetas()
+      // Si no aparece ninguna, se busca ya por nombre en vez de dejar la
+      // pantalla vacía: casi siempre la carpeta está y lo que falla es otra
+      // cosa, y verla en la lista es lo que lo dice.
+      .then((cs) => (cs.length ? cs : listarCarpetas('prolife')))
       .then((cs) => setCarpetas(cs))
       .catch((e) => setError(e.message))
       .finally(() => setOcupado(false))
   }, [paso, carpetas])
+
+  const buscarAMano = async () => {
+    setError(null)
+    setSinPuente(null)
+    setOcupado(true)
+    try {
+      setCarpetas(await listarCarpetas(aMano))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setOcupado(false)
+    }
+  }
 
   const conGoogle = async () => {
     setError(null)
@@ -49,6 +71,10 @@ export default function ConectarDrive({ onListo }) {
   }
 
   const elegir = (carpeta) => {
+    // Sin `.prolife` dentro no hay nada que leer: no es la carpeta buena, o
+    // Drive todavía no la ha subido entera. Elegirla igualmente dejaría la app
+    // en blanco sin explicar por qué.
+    if (carpeta.prolife === false) return setSinPuente(carpeta)
     fijarRaiz(carpeta.id)
     onListo?.()
   }
@@ -91,32 +117,72 @@ export default function ConectarDrive({ onListo }) {
         {paso === 'carpeta' && (
           <>
             <p className="muted" style={{ lineHeight: 1.6 }}>
-              Estas son las carpetas de tu Drive que tienen datos de prolife dentro. Normalmente
-              hay una sola.
+              Es la carpeta que sincroniza tu ordenador: la que tiene un <span className="mono">
+              .prolife</span> dentro. Normalmente hay una sola.
             </p>
             {ocupado && <p className="dim">Mirando en tu Drive…</p>}
+
             {carpetas && carpetas.length === 0 && (
               <div className="notice err" style={{ margin: '14px 0' }}>
                 <Icon name="x" size={13} />
                 <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-                  No se encuentra ninguna carpeta de prolife en este Drive. Comprueba en el
-                  ordenador que el directorio de trabajo está dentro de Google Drive, y que Drive
-                  ha terminado de subirlo.
+                  Ninguna carpeta con ese nombre en este Drive. Comprueba que has entrado con la
+                  misma cuenta de Google que sincroniza el ordenador, y prueba con otro nombre
+                  aquí abajo.
                 </span>
               </div>
             )}
+
             <div className="stack" style={{ gap: 6, marginTop: 12 }}>
               {(carpetas || []).map((c) => (
                 <button key={c.id} className="link-tile" onClick={() => elegir(c)}>
-                  <span className="glyph" style={{ background: 'var(--surface-2)', color: 'var(--ink-3)' }}>
+                  <span className="glyph" style={{
+                    background: c.prolife === false ? 'var(--surface-2)' : 'var(--green-soft)',
+                    color: c.prolife === false ? 'var(--ink-3)' : 'var(--green)',
+                  }}>
                     <Icon name="folder" size={12} />
                   </span>
                   <span style={{ fontSize: 13 }}>{c.name}</span>
+                  <span className="spacer" />
+                  {c.prolife === false
+                    ? <span className="dim" style={{ fontSize: 11 }}>sin .prolife</span>
+                    : (
+                      <span className="badge"
+                        style={{ background: 'var(--green-soft)', color: 'var(--green)', borderColor: 'transparent' }}>
+                        es esta
+                      </span>
+                    )}
                 </button>
               ))}
             </div>
-            <button className="btn ghost sm" style={{ marginTop: 14 }} onClick={() => { setCarpetas(null) }}>
-              <Icon name="refresh" size={12} /> Volver a mirar
+
+            {sinPuente && (
+              <div className="notice err" style={{ marginTop: 14 }}>
+                <Icon name="x" size={13} />
+                <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                  En <b>{sinPuente.name}</b> no hay ninguna carpeta <span className="mono">
+                  .prolife</span>, y es ahí donde vive todo. O no es esta carpeta, o Google Drive
+                  no la ha subido: empieza por punto, y la copia de seguridad de carpetas del
+                  ordenador se salta los archivos ocultos si está configurada así. En el ordenador,
+                  Ajustes → Directorio de trabajo te dice cuál es la buena.
+                </span>
+              </div>
+            )}
+
+            <div className="row" style={{ gap: 6, marginTop: 16, alignItems: 'flex-end' }}>
+              <div className="field" style={{ flex: 1, margin: 0 }}>
+                <label>Buscarla por su nombre</label>
+                <input className="input" value={aMano} placeholder="prolife"
+                  onChange={(e) => setAMano(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && buscarAMano()} />
+              </div>
+              <button className="btn" onClick={buscarAMano} disabled={ocupado}>
+                <Icon name="search" size={12} /> Buscar
+              </button>
+            </div>
+            <button className="btn ghost sm" style={{ marginTop: 10 }}
+              onClick={() => { setSinPuente(null); setCarpetas(null) }}>
+              <Icon name="refresh" size={12} /> Volver a mirar solo
             </button>
           </>
         )}

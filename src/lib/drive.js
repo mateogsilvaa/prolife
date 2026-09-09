@@ -124,19 +124,55 @@ export function fijarRaiz(id) {
   cacheIds.clear()
 }
 
-/** Las carpetas candidatas: las que tienen un `.prolife` dentro son las buenas. */
-export async function buscarCarpetas(nombre = '') {
-  const filtro = nombre
-    ? `name contains '${escapar(nombre)}' and `
-    : ''
+/**
+ * Las carpetas candidatas: las que tienen un `.prolife` dentro son las buenas.
+ *
+ * Se busca el `.prolife`, no la carpeta que lo contiene, y se sube al padre.
+ * Al revés no funcionaba: pedir las carpetas del Drive y mirar dentro de cada
+ * una obliga a cortar la lista por algún sitio, y la carpeta de prolife se
+ * quedaba fuera. Su fecha de modificación en Drive solo cambia cuando se le
+ * añade o se le quita un hijo directo —crear una asignatura, no editar un
+ * apunte de dentro—, así que en un Drive con trabajo de todos los días caía al
+ * fondo de la lista y no llegaba a mirarse. Buscando el `.prolife` hay un solo
+ * candidato posible y no hay lista que recortar.
+ */
+export async function buscarCarpetas() {
+  const r = await json(
+    `${API}/files?q=${encodeURIComponent(`name = '.prolife' and mimeType = '${CARPETA}' and trashed = false`)}` +
+      '&fields=files(id,parents)&pageSize=100'
+  )
+  const padres = [...new Set((r.files || []).flatMap((f) => f.parents || []))]
+  const salida = []
+  for (const id of padres) {
+    const carpeta = await json(`${API}/files/${id}?fields=id,name,modifiedTime`).catch(() => null)
+    if (carpeta) salida.push({ ...carpeta, prolife: true })
+  }
+  return salida
+}
+
+/**
+ * Carpetas por nombre, para elegir a mano cuando la búsqueda automática no da
+ * con ninguna.
+ *
+ * Dice de cada una si tiene el `.prolife` dentro en vez de esconder las que no
+ * lo tienen. Es a propósito: si Mateo ve su carpeta en la lista y marcada como
+ * incompleta, ya sabe que el problema no es la app sino que Drive no ha subido
+ * esa parte —empieza por punto, y hay copias de seguridad configuradas para
+ * saltarse los archivos ocultos—. Una lista vacía no habría dicho nada.
+ */
+export async function listarCarpetas(nombre = '') {
+  const filtro = nombre.trim() ? `name contains '${escapar(nombre.trim())}' and ` : ''
   const r = await json(
     `${API}/files?q=${encodeURIComponent(`${filtro}mimeType = '${CARPETA}' and trashed = false`)}` +
-      '&fields=files(id,name,modifiedTime)&pageSize=50&orderBy=modifiedTime desc'
+      '&fields=files(id,name,modifiedTime)&pageSize=100&orderBy=name'
   )
   const salida = []
-  for (const carpeta of r.files || []) {
+  // Los propios `.prolife` casan con la búsqueda y no son candidatos: lo que se
+  // elige es la carpeta que los contiene.
+  const candidatas = (r.files || []).filter((c) => !c.name.startsWith('.')).slice(0, 40)
+  for (const carpeta of candidatas) {
     const dentro = await hijo(carpeta.id, '.prolife').catch(() => null)
-    if (dentro) salida.push({ ...carpeta, prolife: true })
+    salida.push({ ...carpeta, prolife: !!dentro })
   }
   return salida
 }

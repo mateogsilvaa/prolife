@@ -25,6 +25,20 @@ const REDIRECCION = 'com.mateo.prolife:/oauth2redirect'
 /** Acceso a Drive: los archivos los creó el ordenador, no esta app. */
 const PERMISOS = 'https://www.googleapis.com/auth/drive'
 
+/**
+ * Lo que esta app le pide a Google, tal cual va en la petición.
+ *
+ * Está expuesto a propósito: cuando Google contesta «la solicitud no es
+ * válida» no dice *qué* no le cuadra, y lo único que resuelve eso es poner
+ * estos tres valores al lado de los de la consola y ver cuál baila.
+ */
+export const PETICION = {
+  clientId: CLIENT_ID,
+  paquete: 'com.mateo.prolife',
+  redireccion: REDIRECCION,
+  permisos: PERMISOS,
+}
+
 const REFRESCO_KEY = 'prolife.drive.refresco'
 
 /* ------------------------------------------------------------------ PKCE -- */

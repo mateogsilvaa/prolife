@@ -137,12 +137,38 @@ hace una vez. En [console.cloud.google.com](https://console.cloud.google.com):
    desde 2024, Google **desactiva por defecto** ese método en los clientes Android nuevos, y sin
    él la app no puede volver del navegador después de entrar.
 
-   Vuelve a *Credenciales*, haz clic en el cliente que acabas de crear, busca
-   **Configuración avanzada** (*Advanced Settings*) y activa **«Habilitar esquema de URI
-   personalizado»** (*Enable Custom URI Scheme*). Guarda.
+   Google ha movido esta pantalla de sitio: los clientes de OAuth ya no viven en *APIs y
+   servicios → Credenciales*, sino en **Plataforma de Auth de Google → Clientes**. Ve directo:
+
+   ```
+   https://console.cloud.google.com/auth/clients
+   ```
+
+   - Comprueba arriba que el proyecto seleccionado es el tuyo (`prolife`).
+   - En la lista, **haz clic en el nombre** del cliente Android — en el nombre, no en el icono
+     de copiar el ID. Se abre su ficha.
+   - **Baja del todo.** Debajo del paquete y de la huella SHA-1 hay una sección plegada
+     **Configuración avanzada** (*Advanced Settings*). Despliégala.
+   - Marca **«Habilitar esquema de URI personalizado»** (*Enable Custom URI Scheme*) y
+     **Guardar**.
+   - Tarda unos minutos en surtir efecto. Si al volver a probar sale lo mismo, cierra la app
+     de la tablet del todo y espera cinco minutos.
 
    > Si te saltas esto, al pulsar «Entrar con Google» sale
    > **«Acceso bloqueado: la solicitud de prolife no es válida»**, con un *Error 400*.
+
+   **Si no ves «Configuración avanzada» por ningún lado**, casi siempre es una de estas tres:
+
+   | Qué pasa | Cómo se ve | Solución |
+   |---|---|---|
+   | Estás en el proyecto equivocado | La lista de clientes está vacía o sale otro | Cambia de proyecto en el desplegable de arriba |
+   | El cliente no es de tipo **Android** | En la ficha pone *Aplicación web* o *Escritorio* | Ese tipo no tiene la opción. Crea uno nuevo de tipo Android (paso 4) y usa **su** ID |
+   | Estás en la pantalla vieja | La URL pone `/apis/credentials` | Entra por `console.cloud.google.com/auth/clients` |
+
+   Y si aun estando en la ficha de un cliente Android del proyecto correcto la sección no
+   aparece: **borra ese cliente y créalo otra vez** (mismo paquete, misma huella). Los
+   clientes recién creados siempre traen la sección; si el ID cambia, hay que actualizar
+   `src/lib/google.config.js` y volver a compilar el APK.
 
 ### Paso 2 — Poner ese identificador en el proyecto
 
@@ -218,7 +244,7 @@ cuando el ordenador abre la app.
 | Qué ves | Qué pasa |
 |---|---|
 | «A esta compilación le falta el identificador de cliente» | El paso 2 no llegó al APK. Comprueba que hiciste `git push` **antes** de lanzar el workflow, y vuelve a lanzarlo. |
-| «Acceso bloqueado: la solicitud de prolife no es válida», *Error 400* | Falta activar el **esquema de URI personalizado** en la configuración avanzada del cliente Android (paso 1.5). Es lo más probable, porque Google lo trae desactivado de fábrica. |
+| «Acceso bloqueado: la solicitud de prolife no es válida», *Error 400* | Falta activar el **esquema de URI personalizado** en la configuración avanzada del cliente Android (paso 1.5). Es lo más probable, porque Google lo trae desactivado de fábrica. Despliega *Detalles del error* en esa misma pantalla de Google: la línea `error=` dice cuál de los dos casos es. |
 | Al entrar: *Error 400: redirect_uri_mismatch* | El nombre del paquete o la huella SHA-1 no coinciden con lo que pusiste en Google Cloud. Repasa el paso 1.4 — tienen que ser exactamente `com.mateo.prolife` y la huella de arriba. |
 | Al entrar: *Acceso bloqueado* / *app no verificada* sin opción de continuar | Falta publicar la pantalla de consentimiento (paso 1.3, el botón *PUBLICAR APLICACIÓN*). |
 | «No se encuentra ninguna carpeta de prolife en este Drive» | O el directorio de trabajo del ordenador no está dentro de Google Drive, o Drive no ha terminado de subirlo. Míralo en Ajustes → Directorio de trabajo. |

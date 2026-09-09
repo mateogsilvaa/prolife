@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { safeJoin } from './config.js'
+import { applyOp, describeOp } from './ops.js'
 
 /** La base de datos es un único JSON dentro del directorio real del usuario. */
 export function dbPath(baseDir) {
@@ -193,6 +194,99 @@ export function saveDb(baseDir, data) {
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8')
   fs.renameSync(tmp, file)
   return true
+}
+
+/* --------------------------------------------------------- buzón de ops --- */
+
+/**
+ * El buzón por el que la tablet cambia la base de datos sin tocar el `db.json`.
+ *
+ * La tablet, cuando habla con Google Drive por su cuenta, no puede escribir el
+ * `db.json` entero: lo haría desde su copia y machacaría lo que hubieras hecho
+ * en el ordenador entretanto. Lo que hace es dejar ficheros sueltos en
+ * `.prolife/ops/`, cada uno con unas pocas operaciones dentro. Drive los
+ * sincroniza como cualquier otro archivo —son pequeños y nadie más los toca, así
+ * que no hay conflicto posible— y aquí se vacían sobre el `db.json` del momento.
+ *
+ * Sigue habiendo un solo escritor de la base: este ordenador.
+ */
+export const opsDir = (baseDir) => path.join(baseDir, '.prolife', 'ops')
+
+/** Una hora de margen antes de dar por perdido un fichero que no se puede leer. */
+const PACIENCIA_MS = 3600_000
+
+/**
+ * Vacía el buzón sobre la base de datos. Devuelve qué ha entrado y qué no.
+ *
+ * No lanza nunca: esto corre en el camino de leer los datos, y un fichero raro
+ * dejado por una sincronización a medias no puede dejar la app sin abrir.
+ */
+export function drainOps(baseDir) {
+  const dir = opsDir(baseDir)
+  let nombres
+  try {
+    nombres = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort()
+  } catch {
+    return { applied: 0, skipped: [], files: 0 }
+  }
+  if (!nombres.length) return { applied: 0, skipped: [], files: 0 }
+
+  const db = loadDb(baseDir)
+  const skipped = []
+  const hechos = []
+  let applied = 0
+
+  for (const nombre of nombres) {
+    const file = path.join(dir, nombre)
+    let lote
+    try {
+      lote = JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch {
+      // Puede ser que Drive lo esté trayendo a medias: se deja para la próxima.
+      // Si lleva ahí una hora sin poder leerse, ya no va a arreglarse solo.
+      try {
+        if (Date.now() - fs.statSync(file).mtimeMs > PACIENCIA_MS) apartar(dir, file, nombre)
+      } catch {
+        /* ha desaparecido entre medias */
+      }
+      continue
+    }
+
+    const ops = Array.isArray(lote) ? lote : Array.isArray(lote?.ops) ? lote.ops : null
+    if (!ops) { apartar(dir, file, nombre); continue }
+
+    for (const op of ops) {
+      const error = applyOp(db, op)
+      if (error) skipped.push({ file: nombre, que: describeOp(op), error })
+      else applied++
+    }
+    hechos.push(file)
+  }
+
+  if (!hechos.length) return { applied: 0, skipped, files: 0 }
+
+  // Guardar ANTES de borrar: si algo falla al escribir, las operaciones siguen
+  // en el buzón y se vuelven a intentar. Al revés se perderían.
+  saveDb(baseDir, db)
+  for (const file of hechos) {
+    try {
+      fs.rmSync(file, { force: true })
+    } catch {
+      /* si no se puede borrar, la próxima vez se aplica otra vez: son idempotentes */
+    }
+  }
+  return { applied, skipped, files: hechos.length }
+}
+
+/** Lo que no se ha podido aplicar no se tira: se aparta para poder mirarlo. */
+function apartar(dir, file, nombre) {
+  try {
+    const malas = path.join(dir, 'rechazadas')
+    fs.mkdirSync(malas, { recursive: true })
+    fs.renameSync(file, path.join(malas, nombre))
+  } catch {
+    /* mejor dejarlo donde está que tumbar el arranque */
+  }
 }
 
 /** Copia de seguridad diaria, se conservan las 14 últimas. */

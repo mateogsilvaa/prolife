@@ -22,9 +22,15 @@
  * `dist`, `electron` y `server`: desde `src/` el servidor no podría importarlo
  * en la app instalada. La interfaz sí puede tirar de aquí, que Vite lo mete en
  * el paquete al compilar.
+ *
+ * Desde que la tablet puede hablar con Google Drive por su cuenta, esto es
+ * además el ÚNICO camino por el que la tablet toca la base de datos: deja las
+ * operaciones como ficheros sueltos en `.prolife/ops/` y el ordenador las
+ * vacía ahí (`drenarOps`, en db.js). Así sigue habiendo un solo escritor del
+ * `db.json` —el ordenador— y dos aparatos no pueden pisarse el fichero entero.
  */
 
-export const KINDS = ['asistencia', 'tarea', 'entreno']
+export const KINDS = ['asistencia', 'tarea', 'entreno', 'tarea-nueva', 'evento', 'sesion']
 
 const texto = (v) => (typeof v === 'string' ? v : null)
 
@@ -45,6 +51,19 @@ export function opError(op) {
   if (op.kind === 'entreno') {
     if (!op.training || typeof op.training !== 'object') return 'entreno incompleto'
     if (!texto(op.training.id) || !texto(op.training.date)) return 'el entreno necesita id y fecha'
+  }
+  if (op.kind === 'tarea-nueva') {
+    if (!op.task || typeof op.task !== 'object') return 'tarea incompleta'
+    if (!texto(op.task.id) || !texto(op.task.title)) return 'la tarea necesita id y título'
+  }
+  if (op.kind === 'evento') {
+    if (!op.event || typeof op.event !== 'object') return 'evento incompleto'
+    if (!texto(op.event.id) || !texto(op.event.title) || !texto(op.event.date)) return 'el evento necesita id, título y fecha'
+  }
+  if (op.kind === 'sesion') {
+    if (!op.session || typeof op.session !== 'object') return 'tramo incompleto'
+    if (!texto(op.session.id) || !texto(op.session.date)) return 'el tramo necesita id y fecha'
+    if (!Number.isFinite(Number(op.session.seconds))) return 'el tramo necesita duración'
   }
   return null
 }
@@ -114,6 +133,32 @@ export function applyOp(db, op) {
     return null
   }
 
+  // Las tres que siguen crean algo que en la tablet todavía no existía en el
+  // ordenador. Todas se identifican por su `id`, que lo pone quien la crea, así
+  // que aplicarlas dos veces actualiza en vez de duplicar.
+
+  if (op.kind === 'tarea-nueva') {
+    const i = db.tasks.findIndex((t) => t.id === op.task.id)
+    if (i >= 0) db.tasks[i] = { ...db.tasks[i], ...op.task }
+    else db.tasks.unshift(op.task)
+    return null
+  }
+
+  if (op.kind === 'evento') {
+    if (!Array.isArray(db.events)) db.events = []
+    const i = db.events.findIndex((e) => e.id === op.event.id)
+    if (i >= 0) db.events[i] = { ...db.events[i], ...op.event }
+    else db.events.push(op.event)
+    return null
+  }
+
+  if (op.kind === 'sesion') {
+    const i = db.sessions.findIndex((s) => s.id === op.session.id)
+    if (i >= 0) db.sessions[i] = { ...db.sessions[i], ...op.session }
+    else db.sessions.push(op.session)
+    return null
+  }
+
   return `operación desconocida: ${op.kind}`
 }
 
@@ -122,5 +167,8 @@ export function describeOp(op) {
   if (op.kind === 'asistencia') return op.status ? `Asistencia del ${op.date}` : `Asistencia del ${op.date} (sin marcar)`
   if (op.kind === 'tarea') return op.status === 'done' ? 'Tarea completada' : 'Tarea reabierta'
   if (op.kind === 'entreno') return `Entreno del ${op.training?.date}`
+  if (op.kind === 'tarea-nueva') return `Tarea nueva: ${op.task?.title}`
+  if (op.kind === 'evento') return `Evento: ${op.event?.title}`
+  if (op.kind === 'sesion') return `Tiempo apuntado el ${op.session?.date}`
   return 'Cambio'
 }

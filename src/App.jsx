@@ -7,7 +7,10 @@ import Icon from './components/Icon.jsx'
 import Modal from './components/Modal.jsx'
 import Launcher from './components/Launcher.jsx'
 import TaskEditor, { newTask } from './components/TaskEditor.jsx'
+import ConectarDrive from './components/ConectarDrive.jsx'
 import { useStore } from './lib/store.jsx'
+import { enDrive } from './lib/api.js'
+import { raizGuardada } from './lib/drive.js'
 import { TrackerProvider } from './lib/tracker.jsx'
 import { UIProvider, useUI } from './lib/ui.jsx'
 
@@ -40,6 +43,15 @@ function useRoute() {
 
 export default function App() {
   const { db, error } = useStore()
+
+  /**
+   * En el APK, mientras no se haya dicho con qué cuenta y en qué carpeta, no
+   * hay nada que enseñar: la app no tiene datos propios, están todos en Drive.
+   * Se comprueba antes que el error, porque «no hay carpeta elegida» no es un
+   * fallo, es que todavía no se ha configurado.
+   */
+  const [conectado, setConectado] = useState(() => !!raizGuardada())
+  if (enDrive && !conectado) return <ConectarDrive onListo={() => { setConectado(true); location.reload() }} />
 
   if (error) {
     return (

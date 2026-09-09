@@ -5,7 +5,7 @@ import Editor from './Editor.jsx'
 import BrowserPane from './BrowserPane.jsx'
 import CodePane from './CodePane.jsx'
 import Ask from './Ask.jsx'
-import { api } from '../lib/api.js'
+import { api, enDrive } from '../lib/api.js'
 import { useStore, uid } from '../lib/store.jsx'
 import { useUI } from '../lib/ui.jsx'
 import { startDrag } from '../lib/drag.js'
@@ -208,6 +208,9 @@ export default function Workspace({ root }) {
     // Pasar por una carpeta sin abrir nada no ensucia el db.json de los dos ordenadores.
     const untouched = panes.length === 1 && !panes[0].tabs.length
     if (untouched && !dbRef.current?.workspaces?.[root]) return
+    // Contra Drive la disposición se queda en el aparato: guardarla exigiría
+    // subir la base entera, y no merece la pena arriesgar eso por unas pestañas.
+    if (enDrive) return
 
     const t = setTimeout(() => {
       update((d) => {

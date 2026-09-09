@@ -1,5 +1,33 @@
+import { drive } from './drive.js'
+
 const base = ''
 const KEY = 'prolife.key'
+
+/**
+ * ¿Hay un servidor de prolife detrás, o hay que hablar con Google Drive?
+ *
+ * En el ordenador —y en la tablet abierta por el navegador contra el
+ * ordenador— la app se sirve por http y detrás hay un servidor que lee y
+ * escribe en una carpeta de verdad. Dentro del APK no hay servidor ninguno: la
+ * app va empaquetada en el propio aparato y los datos están en Drive.
+ *
+ * Lo pregunta Capacitor, que es quien lo sabe de verdad. Mirar el protocolo no
+ * sirve: el APK se sirve desde `https://localhost`, que es indistinguible de
+ * una página normal. El protocolo se deja solo como red de seguridad por si
+ * alguna vez se empaqueta de otra manera.
+ */
+function modoDrive() {
+  if (typeof window === 'undefined') return false
+  try {
+    if (localStorage.getItem('prolife.modo') === 'drive') return true
+  } catch {
+    /* sin storage: mandan las señales de abajo */
+  }
+  if (window.Capacitor?.isNativePlatform?.()) return true
+  return /^(capacitor|file|ionic):$/.test(window.location.protocol)
+}
+
+export const enDrive = modoDrive()
 
 /**
  * Clave de acceso, solo necesaria cuando la app se abre desde otro aparato (la
@@ -58,7 +86,7 @@ async function req(url, opts = {}) {
   return data
 }
 
-export const api = {
+const apiServidor = {
   health: () => req('/api/health'),
   getConfig: () => req('/api/config'),
   setConfig: (body) => req('/api/config', { method: 'PUT', body }),
@@ -114,4 +142,68 @@ export const api = {
   openPath: (p) => req('/api/open', { method: 'POST', body: { p } }),
   openInCode: (p) => req('/api/open', { method: 'POST', body: { p, app: 'code' } }),
   reveal: (p) => req('/api/open', { method: 'POST', body: { p, app: 'reveal' } }),
+
+  /**
+   * La URL de los bytes de un archivo, prometida en vez de devuelta.
+   *
+   * Contra el servidor es la misma URL de `raw()` y no cuesta nada; contra
+   * Drive hay que traerse el archivo y envolverlo en un `blob:`. Quien pinte un
+   * PDF o una imagen usa esto, para que le dé igual dónde esté el archivo.
+   */
+  rawUrl: async (p) => apiServidor.raw(p),
 }
+
+/**
+ * Lo mismo, pero contra Google Drive, para la tablet con el APK.
+ *
+ * Solo están las funciones que tienen sentido sin ordenador: leer la base,
+ * leer y escribir documentos, y dejar los cambios de la base en el buzón. Lo
+ * demás —abrir VS Code, hablar con Ollama, tocar Tailscale— es del ordenador
+ * por definición, y decirlo claro es mejor que fallar con un error de red.
+ */
+const soloEnElOrdenador = (que) => () =>
+  Promise.reject(Object.assign(new Error(`«${que}» solo se puede desde el ordenador.`), { status: 501 }))
+
+const apiDrive = {
+  health: async () => ({ ok: true, drive: true }),
+  getConfig: async () => ({ here: false, drive: true, baseDir: 'Google Drive' }),
+
+  getDb: () => drive.getDb(),
+  dbStamp: async () => ({ stamp: (await drive.getDb())._stamp || 0, future: null }),
+  sendOps: (ops) => drive.sendOps(ops),
+  // Guardar la base entera desde la tablet machacaría lo del ordenador: no existe.
+  putDb: soloEnElOrdenador('Guardar la base entera'),
+
+  list: (p) => drive.list(p),
+  tree: (p) => drive.tree(p),
+  mkdir: (p) => drive.mkdir(p),
+  readText: (p) => drive.readText(p),
+  writeText: (p, content) => drive.writeText(p, content),
+  rename: (p, name) => drive.rename(p, name),
+  remove: (p) => drive.remove(p),
+  upload: (p, files) => drive.upload(p, files),
+
+  // Sin servidor no hay URL que valga: hay que traerse los bytes.
+  raw: () => '',
+  rawUrl: (p) => drive.rawUrl(p),
+
+  setConfig: soloEnElOrdenador('Cambiar el directorio de trabajo'),
+  syncRoots: soloEnElOrdenador('Ver las carpetas de la nube'),
+  codeStatus: soloEnElOrdenador('VS Code'),
+  codeAccept: soloEnElOrdenador('VS Code'),
+  codeStart: soloEnElOrdenador('VS Code'),
+  codeStop: soloEnElOrdenador('VS Code'),
+  getRemote: soloEnElOrdenador('El acceso desde otros aparatos'),
+  setRemote: soloEnElOrdenador('El acceso desde otros aparatos'),
+  tailscaleStatus: soloEnElOrdenador('Tailscale'),
+  tailscaleServe: soloEnElOrdenador('Tailscale'),
+  aiStatus: soloEnElOrdenador('El ayudante'),
+  aiChat: soloEnElOrdenador('El ayudante'),
+  openPath: soloEnElOrdenador('Abrir la carpeta'),
+  openInCode: soloEnElOrdenador('VS Code'),
+  reveal: soloEnElOrdenador('Abrir la carpeta'),
+  // Abrir un enlace fuera sí vale: lo hace el propio navegador del aparato.
+  openUrl: async (url) => { window.open(url, '_blank', 'noopener'); return { ok: true } },
+}
+
+export const api = enDrive ? apiDrive : apiServidor

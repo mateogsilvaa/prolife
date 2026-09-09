@@ -1,0 +1,7 @@
+{
+  "appId": "com.mateo.prolife",
+  "appName": "prolife",
+  "webDir": "dist",
+  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "https" }
+}

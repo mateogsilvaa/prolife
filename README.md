@@ -101,7 +101,17 @@ falta — Tailscale ya te da la dirección segura entre tus propios aparatos.
 Por la red local sin `https` la app funciona igual en el navegador; lo que no habrá es icono ni
 modo sin conexión.
 
-**Paso a paso, con la parte de seguridad y qué hacer si falla:** [INSTALAR-ANDROID.md](INSTALAR-ANDROID.md).
+**Y desde la última versión, la tablet puede además ser una app instalada de verdad —un
+APK— que habla directamente con Google Drive**, sin depender de que el ordenador esté
+encendido. Los apuntes y los PDFs se leen y se escriben en la misma carpeta de Drive que
+ya sincronizas; los cambios de la base (faltas, tareas, entrenos) se dejan en un buzón que
+el ordenador recoge, para que nunca haya dos aparatos escribiendo el mismo `db.json`.
+
+**Paso a paso para actualizar el ordenador e instalar el APK:**
+[INSTALAR-TABLET.md](INSTALAR-TABLET.md).
+
+**La forma antigua, contra el ordenador por Tailscale** (sigue funcionando, y es la única
+que sirve si no quieres dar de alta nada en Google): [INSTALAR-ANDROID.md](INSTALAR-ANDROID.md).
 
 **Sin el ordenador** (apagado, o tú fuera de su alcance) la app abre igualmente y enseña lo
 último que vio. Además puedes seguir **apuntando tres cosas**: la asistencia a clase, tachar

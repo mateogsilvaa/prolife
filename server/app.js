@@ -10,7 +10,7 @@ import {
   readConfig, writeConfig, ensureBase, safeJoin, cloudRoots, syncInfo, ROOT,
   ensureToken, newToken, tokenMatches, lanAddresses,
 } from './config.js'
-import { loadDb, saveDb, scheduleBackups, dbPath, readRaw, isFuture, versionOf, SCHEMA } from './db.js'
+import { loadDb, saveDb, scheduleBackups, dbPath, readRaw, isFuture, versionOf, SCHEMA, drainOps } from './db.js'
 import * as vscode from './code.js'
 import * as assistant from './assistant.js'
 import * as tailscale from './tailscale.js'
@@ -388,11 +388,32 @@ export function createApp() {
     return raw && isFuture(raw) ? versionOf(raw) : null
   }
 
+  /** Solo se cuenta en la respuesta cuando de verdad ha entrado algo del buzón. */
+  const loDelBuzon = (buzon) => (buzon.applied || buzon.skipped.length ? { _drained: buzon } : {})
+
+  /**
+   * Antes de servir los datos se vacía el buzón que deja la tablet cuando ha
+   * trabajado contra Drive por su cuenta. Va aquí y no en un temporizador
+   * porque este es justo el momento en que alguien va a mirar los datos: así
+   * lo que apuntaste en clase ya está dentro la primera vez que abres la app,
+   * sin esperar a ningún ciclo. Es un `readdir` de una carpeta casi siempre
+   * vacía, y solo se toca el `db.json` si de verdad había algo.
+   */
   app.get(
     '/api/db',
-    wrap((_req, res) =>
-      res.json({ ...loadDb(cfg.baseDir), _stamp: stamp(), _schema: SCHEMA, _future: futureVersion() })
-    )
+    wrap((_req, res) => {
+      const buzon = drainOps(cfg.baseDir)
+      if (buzon.applied || buzon.skipped.length) {
+        console.log(`buzón de la tablet: ${buzon.applied} cambios aplicados` +
+          (buzon.skipped.length ? `, ${buzon.skipped.length} descartados` : ''))
+      }
+      res.json({
+        ...loadDb(cfg.baseDir),
+        _stamp: stamp(), _schema: SCHEMA, _future: futureVersion(),
+        // Para que la interfaz pueda decir «lo que apuntaste en la tablet ya está aquí».
+        ...loDelBuzon(buzon),
+      })
+    })
   )
 
   app.get('/api/db/stamp', (_req, res) => res.json({ stamp: stamp(), future: futureVersion() }))

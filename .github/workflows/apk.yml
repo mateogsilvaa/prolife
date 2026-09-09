@@ -1,0 +1,57 @@
+# Compila el APK de la tablet en GitHub, para no tener que instalar Android
+# Studio en el ordenador. Se lanza a mano desde la pestaña «Actions», y deja el
+# APK como archivo descargable en la propia ejecución.
+name: APK de la tablet
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['tablet-*']
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar la interfaz
+        run: npm run build
+
+      - name: Meterla dentro del proyecto Android
+        run: npx cap sync android
+
+      # Se firma con la clave de depuración a propósito: el APK no va a la Play
+      # Store, se instala a mano. Lo importante es que esa clave sea SIEMPRE la
+      # misma, porque su huella SHA-1 es la que está registrada en Google Cloud
+      # para poder entrar con la cuenta. Por eso el keystore está en el
+      # repositorio (es la de depuración de Android, que no es un secreto: la
+      # contraseña «android» es pública y viene en su documentación).
+      - name: Compilar el APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Enseñar la huella SHA-1 de la firma
+        run: |
+          keytool -list -v -keystore android/keystore/prolife.keystore \
+            -alias prolife -storepass android -keypass android | grep -A1 "SHA1:" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prolife-tablet-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

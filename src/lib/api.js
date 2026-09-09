@@ -7,19 +7,23 @@ const KEY = 'prolife.key'
  * ¿Hay un servidor de prolife detrás, o hay que hablar con Google Drive?
  *
  * En el ordenador —y en la tablet abierta por el navegador contra el
- * ordenador— la app se sirve por http, y detrás hay un servidor que lee y
- * escribe en una carpeta de verdad. En la tablet con el APK instalado no hay
- * servidor ninguno: la app se carga desde el propio aparato (`capacitor:` o
- * `file:`) y los datos están en Drive. El protocolo lo dice sin ambigüedad, y
- * no depende de que haya red en ese momento.
+ * ordenador— la app se sirve por http y detrás hay un servidor que lee y
+ * escribe en una carpeta de verdad. Dentro del APK no hay servidor ninguno: la
+ * app va empaquetada en el propio aparato y los datos están en Drive.
+ *
+ * Lo pregunta Capacitor, que es quien lo sabe de verdad. Mirar el protocolo no
+ * sirve: el APK se sirve desde `https://localhost`, que es indistinguible de
+ * una página normal. El protocolo se deja solo como red de seguridad por si
+ * alguna vez se empaqueta de otra manera.
  */
 function modoDrive() {
   if (typeof window === 'undefined') return false
   try {
     if (localStorage.getItem('prolife.modo') === 'drive') return true
   } catch {
-    /* sin storage: manda el protocolo */
+    /* sin storage: mandan las señales de abajo */
   }
+  if (window.Capacitor?.isNativePlatform?.()) return true
   return /^(capacitor|file|ionic):$/.test(window.location.protocol)
 }
 

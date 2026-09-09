@@ -1,5 +1,12 @@
 # Instalar prolife en Android
 
+> **Hay un camino más nuevo.** Desde la última versión, la tablet puede llevar prolife
+> instalada como **APK** hablando directamente con Google Drive, sin necesitar que el
+> ordenador esté encendido ni Tailscale de por medio: [INSTALAR-TABLET.md](INSTALAR-TABLET.md).
+> Esta guía sigue valiendo, y es la que quieres si prefieres no dar de alta nada en la
+> consola de Google — pero entonces el ordenador tiene que estar encendido y a tiro.
+
+
 Guía completa para tener prolife en la tablet (o el móvil) con su icono, viendo los mismos
 archivos y las mismas notas que en el ordenador.
 

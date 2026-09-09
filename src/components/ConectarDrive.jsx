@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Icon from './Icon.jsx'
 import { buscarCarpetas, fijarRaiz, raizGuardada, haySesion } from '../lib/drive.js'
-import { entrar, puedeEntrar } from '../lib/google.js'
+import { entrar, puedeEntrar, PETICION } from '../lib/google.js'
 
 /**
  * La primera pantalla del APK: entrar con Google y decir cuál es la carpeta.
@@ -84,6 +84,7 @@ export default function ConectarDrive({ onListo }) {
               Se abre Chrome para escribir la contraseña, no esta app: es lo correcto, y lo único
               que vuelve aquí es un permiso de acceso a tu carpeta.
             </p>
+            <QueMandamos />
           </>
         )}
 
@@ -127,6 +128,49 @@ export default function ConectarDrive({ onListo }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Los tres datos que Google compara con lo que hay dado de alta en la consola.
+ *
+ * Cuando dice «la solicitud de prolife no es válida» no cuenta cuál de ellos le
+ * chirría, así que la única forma de salir del bucle es tenerlos delante para
+ * ponerlos al lado de la ficha del cliente. Va plegado porque el día que todo
+ * funciona no le importan a nadie.
+ */
+function QueMandamos() {
+  const [abierto, setAbierto] = useState(false)
+  const filas = [
+    ['ID de cliente', PETICION.clientId],
+    ['Paquete', PETICION.paquete],
+    ['Redirección', PETICION.redireccion],
+  ]
+  return (
+    <div style={{ marginTop: 18 }}>
+      <button className="btn ghost sm" onClick={() => setAbierto((x) => !x)}>
+        <Icon name={abierto ? 'x' : 'search'} size={12} />
+        {abierto ? 'Ocultar' : 'Si Google te dice que no'}
+      </button>
+      {abierto && (
+        <div className="stack" style={{ gap: 10, marginTop: 12 }}>
+          <p className="dim" style={{ fontSize: 12, lineHeight: 1.6, margin: 0 }}>
+            Esto es lo que la app le pide a Google. Tiene que coincidir, letra por letra, con la
+            ficha del cliente Android en{' '}
+            <span className="mono">console.cloud.google.com/auth/clients</span>. Y ahí mismo,
+            abajo del todo, <b>Configuración avanzada → Habilitar esquema de URI personalizado</b>
+            {' '}tiene que estar activado: viene desactivado de fábrica y sin él sale
+            «Acceso bloqueado».
+          </p>
+          {filas.map(([k, v]) => (
+            <div key={k}>
+              <div className="eyebrow">{k}</div>
+              <div className="mono" style={{ fontSize: 11, wordBreak: 'break-all' }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -14,9 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Capacitor 8 exige Node 22 o más. Con la 20 se planta en `cap sync`
+      # antes de llegar a compilar nada.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - uses: actions/setup-java@v4
@@ -43,7 +45,7 @@ jobs:
       # contraseña «android» es pública y viene en su documentación).
       - name: Compilar el APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Enseñar la huella SHA-1 de la firma
         run: |

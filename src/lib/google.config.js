@@ -10,4 +10,4 @@
  * Se saca de console.cloud.google.com → Credenciales → ID de cliente de OAuth →
  * Android. Está explicado paso a paso en INSTALAR-TABLET.md.
  */
-export const CLIENT_ID = 'PON-AQUI-TU-ID-DE-CLIENTE.apps.googleusercontent.com'
+export const CLIENT_ID = '641970655049-4cmegapml8sl1s41fsm966525ffukc28.apps.googleusercontent.com'

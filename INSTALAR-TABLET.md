@@ -51,10 +51,17 @@ movido. Si algo baila, para aquí y mira la tabla del final.
 De uno en uno: actualiza el primero, ábrelo, **espera a que Drive termine de subir** (el
 icono deja de girar) y luego ve al segundo.
 
-**Qué hay de nuevo en esta versión**, por si quieres probarlo: apuntar tiempo a mano en una
-asignatura o un proyecto, arrastrar los eventos por el horario, la vista del calendario que
-se queda donde la dejaste, los eventos que chocan puestos uno al lado del otro, el icono
-nuevo, y un ayudante que pregunta en vez de inventarse las cosas.
+**Qué hay de nuevo en esta versión:** el apartado de **Voluntariado** —jornadas con sus
+horas y sus fotos, para poder justificarlas—, apuntar tiempo a mano en una asignatura o un
+proyecto, arrastrar los eventos por el horario, la vista del calendario que se queda donde
+la dejaste, los eventos que chocan puestos uno al lado del otro, el icono nuevo, y un
+ayudante que pregunta en vez de inventarse las cosas.
+
+> **Esta vez hay que actualizar los DOS ordenadores, no vale dejarlo a medias.** El
+> voluntariado añade datos nuevos al `db.json` y con ello sube el formato de la v4 a la v5.
+> El ordenador que se quede sin actualizar lo detectará, te lo dirá con un aviso rojo y
+> **dejará de guardar** para no estropear nada — que es lo que tiene que hacer, pero mejor
+> saberlo antes que encontrárselo.
 
 ---
 

@@ -24,6 +24,7 @@ export const AREAS = {
   uni: { label: 'Universidad', color: '#3c5a78' },
   work: { label: 'Trabajo', color: '#bf3f24' },
   sport: { label: 'Atletismo', color: '#4f6b4a' },
+  volunteer: { label: 'Voluntariado', color: '#7a5c9e' },
   life: { label: 'Personal', color: '#a5711b' },
 }
 
@@ -335,6 +336,7 @@ export function entityOf(db, area, refId) {
   if (!refId) return null
   if (area === 'uni') return db.subjects.find((s) => s.id === refId) || null
   if (area === 'work') return db.projects.find((p) => p.id === refId) || null
+  if (area === 'volunteer') return (db.volunteering || []).find((v) => v.id === refId) || null
   return null
 }
 

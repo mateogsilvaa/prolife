@@ -30,7 +30,7 @@
  * `db.json` —el ordenador— y dos aparatos no pueden pisarse el fichero entero.
  */
 
-export const KINDS = ['asistencia', 'tarea', 'entreno', 'tarea-nueva', 'evento', 'sesion']
+export const KINDS = ['asistencia', 'tarea', 'entreno', 'tarea-nueva', 'evento', 'sesion', 'voluntariado']
 
 const texto = (v) => (typeof v === 'string' ? v : null)
 
@@ -64,6 +64,11 @@ export function opError(op) {
     if (!op.session || typeof op.session !== 'object') return 'tramo incompleto'
     if (!texto(op.session.id) || !texto(op.session.date)) return 'el tramo necesita id y fecha'
     if (!Number.isFinite(Number(op.session.seconds))) return 'el tramo necesita duración'
+  }
+  if (op.kind === 'voluntariado') {
+    if (!op.day || typeof op.day !== 'object') return 'jornada incompleta'
+    if (!texto(op.day.id) || !texto(op.day.date)) return 'la jornada necesita id y fecha'
+    if (!texto(op.day.volunteerId)) return 'la jornada necesita saber de qué entidad es'
   }
   return null
 }
@@ -159,6 +164,32 @@ export function applyOp(db, op) {
     return null
   }
 
+  if (op.kind === 'voluntariado') {
+    const d = op.day
+    if (!Array.isArray(db.volunteerDays)) db.volunteerDays = []
+    if (!(db.volunteering || []).some((v) => v.id === d.volunteerId)) return 'esa entidad de voluntariado ya no existe'
+    const i = db.volunteerDays.findIndex((x) => x.id === d.id)
+    if (i >= 0) db.volunteerDays[i] = { ...db.volunteerDays[i], ...d }
+    else db.volunteerDays.push(d)
+
+    // Igual que el entreno: la jornada también cuenta como tiempo, con el tramo
+    // atado a su id para que apuntarla dos veces no sume dos veces.
+    const sid = 'vol_' + d.id
+    const si = db.sessions.findIndex((s) => s.id === sid)
+    if (Number(d.minutes) > 0) {
+      const row = {
+        id: sid, area: 'volunteer', refId: d.volunteerId, taskId: null, label: d.task || 'Voluntariado',
+        date: d.date, start: op.at || Date.now(), end: op.at || Date.now(),
+        seconds: Number(d.minutes) * 60, source: 'manual',
+      }
+      if (si >= 0) db.sessions[si] = row
+      else db.sessions.push(row)
+    } else if (si >= 0) {
+      db.sessions.splice(si, 1)
+    }
+    return null
+  }
+
   return `operación desconocida: ${op.kind}`
 }
 
@@ -170,5 +201,6 @@ export function describeOp(op) {
   if (op.kind === 'tarea-nueva') return `Tarea nueva: ${op.task?.title}`
   if (op.kind === 'evento') return `Evento: ${op.event?.title}`
   if (op.kind === 'sesion') return `Tiempo apuntado el ${op.session?.date}`
+  if (op.kind === 'voluntariado') return `Jornada de voluntariado del ${op.day?.date}`
   return 'Cambio'
 }

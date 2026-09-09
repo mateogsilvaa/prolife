@@ -21,6 +21,8 @@ import Work from './views/Work.jsx'
 import ProjectDetail from './views/ProjectDetail.jsx'
 import Tasks from './views/Tasks.jsx'
 import Training from './views/Training.jsx'
+import Volunteering from './views/Volunteering.jsx'
+import VolunteerDetail from './views/VolunteerDetail.jsx'
 import Calendar from './views/Calendar.jsx'
 import Stats from './views/Stats.jsx'
 import Files from './views/Files.jsx'
@@ -118,6 +120,7 @@ function Shell() {
   else if (p[0] === 'trabajo') view = p[1] ? <ProjectDetail id={p[1]} /> : <Work />
   else if (p[0] === 'tareas') view = <Tasks />
   else if (p[0] === 'atletismo') view = <Training />
+  else if (p[0] === 'voluntariado') view = p[1] ? <VolunteerDetail id={p[1]} /> : <Volunteering />
   else if (p[0] === 'calendario') view = <Calendar />
   else if (p[0] === 'estadisticas') view = <Stats />
   else if (p[0] === 'archivos') view = <Files path={p.slice(1).join('/')} />

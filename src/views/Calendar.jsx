@@ -145,6 +145,16 @@ export default function Calendar() {
         if (tr.date === date && tr.done)
           out.push({ kind: 'training', label: tr.type || 'Entreno', color: AREAS.sport.color, detail: `RPE ${tr.rpe || '—'}`, href: '#/atletismo' })
 
+      for (const vd of db.volunteerDays || []) {
+        if (vd.date !== date) continue
+        const ent = (db.volunteering || []).find((x) => x.id === vd.volunteerId)
+        out.push({
+          kind: 'volunteer', label: ent?.name || 'Voluntariado', color: ent?.color || AREAS.volunteer.color,
+          detail: `${((Number(vd.minutes) || 0) / 60).toFixed(1)} h${vd.task ? ` · ${vd.task}` : ''}`,
+          href: ent ? `#/voluntariado/${ent.id}` : '#/voluntariado',
+        })
+      }
+
       return out.sort((a, b) => (a.start || 'zz').localeCompare(b.start || 'zz'))
     }
   }, [db])
@@ -514,7 +524,7 @@ function DayPanel({ date, itemsOf, load, onOpen, onNew, onNewTask, onNewExam }) 
 
 /* ------------------------------------------------------------- formulario */
 
-function EventForm({ event, onClose }) {
+export function EventForm({ event, onClose }) {
   const { db, update } = useStore()
   const [e, setE] = useState({ ...event, repeat: event.repeat || { freq: '', interval: 1, byday: [], until: '' } })
   const [newCat, setNewCat] = useState('')

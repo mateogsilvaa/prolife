@@ -283,6 +283,23 @@ horaria: las clases del horario, los exámenes, los eventos y las entregas caen 
 - **Repeticiones**: diaria, semanal (con días concretos), mensual o anual, con intervalo y
   fecha de fin. Un día suelto se puede saltar sin romper la serie.
 
+## Voluntariado
+
+Un apartado propio para las horas de voluntariado, pensado no para medirlas sino para
+**poder demostrarlas**, que es lo que te piden cuando hay que justificarlas.
+
+La unidad no es la entidad, es la **jornada**: un día concreto, sus horas, qué hiciste y
+**las fotos de ese día**. Las fotos van a `Voluntariado/<Entidad>/<fecha>/` dentro de tu
+carpeta de siempre —archivos normales, que se abren desde el explorador y viajan por Drive
+como todo lo demás—, no dentro del `db.json`.
+
+- Cada entidad lleva su total de horas y, si te has comprometido a un número, cuánto llevas.
+- Las jornadas **sin ninguna foto se marcan**, porque son las que costará justificar.
+- Las horas cuentan como tiempo dedicado, igual que un entreno: el tramo va atado al id de
+  la jornada, así que corregirla no duplica nada.
+- Desde la ficha se pone una salida o un turno **en el calendario**, ya con su categoría.
+- Las jornadas aparecen en el calendario junto a las clases y los entrenos.
+
 ## Atletismo
 
 Registro por sesión: si fuiste o no, tipo de entreno, duración, **RPE 1–10**, **CMJ pre y

@@ -6,6 +6,7 @@ const P = {
   briefcase: 'M3 8h18v12H3zM8 8V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V8M3 13h18',
   check: 'M4 12.5 9 17.5 20 6.5',
   activity: 'M3 12h4l3-8 4 16 3-8h4',
+  heart: 'M12 20.3 4.6 13a4.6 4.6 0 0 1 6.5-6.5l.9.9.9-.9A4.6 4.6 0 0 1 19.4 13z',
   calendar: 'M3 6.5h18V21H3zM3 11h18M8 3v5M16 3v5',
   chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   folder: 'M3 6.5h6l2 2.5h10V19H3z',

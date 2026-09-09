@@ -8,7 +8,7 @@ export function dbPath(baseDir) {
   return path.join(baseDir, '.prolife', 'db.json')
 }
 
-export const SCHEMA = 4
+export const SCHEMA = 5
 
 export const DEFAULT_CATEGORIES = [
   { id: 'cat-uni', name: 'Universidad', color: '#3c5a78', area: 'uni' },
@@ -17,6 +17,7 @@ export const DEFAULT_CATEGORIES = [
   { id: 'cat-health', name: 'Salud', color: '#2f6f6b', area: 'life' },
   { id: 'cat-driving', name: 'Conducir', color: '#a5711b', area: 'life' },
   { id: 'cat-personal', name: 'Personal', color: '#6b4a6b', area: 'life' },
+  { id: 'cat-volunteer', name: 'Voluntariado', color: '#7a5c9e', area: 'volunteer' },
 ]
 
 export const EMPTY_DB = {
@@ -61,6 +62,13 @@ export const EMPTY_DB = {
   events: [],
   training: [],
   /**
+   * Voluntariado: las entidades con las que colaboras y, aparte, cada jornada
+   * que has hecho. Van separados porque lo que hay que justificar son las
+   * jornadas —fecha, horas y fotos de ese día—, no la entidad.
+   */
+  volunteering: [],
+  volunteerDays: [],
+  /**
    * Estado del espacio de trabajo por carpeta: qué paneles, pestañas y tamaños
    * tenías abiertos. Vive aquí, y no solo en el navegador, para que viaje con
    * la carpeta sincronizada al otro ordenador.
@@ -74,6 +82,8 @@ export const EMPTY_DB = {
  *          ser eterno (cada clase tiene su rango de fechas) y aparece el ayudante local.
  * v3 → v4: el estado del espacio de trabajo (paneles, pestañas, tamaños) pasa a
  *          guardarse aquí para que viaje entre ordenadores. No toca datos previos.
+ * v4 → v5: aparece el voluntariado —entidades y jornadas— y su categoría de
+ *          calendario. Tampoco toca nada de lo anterior: solo añade.
  */
 
 /** Versión que trae el fichero tal cual está en disco. */
@@ -92,8 +102,13 @@ function migrate(raw) {
   db.profile = { ...EMPTY_DB.profile, ...(raw.profile || {}) }
 
   if (!Array.isArray(db.categories) || db.categories.length === 0) db.categories = structuredClone(DEFAULT_CATEGORIES)
+  // La categoría de voluntariado llega en la v5: se añade a las bases que ya
+  // existían, pero sin tocar las que el usuario haya creado o renombrado.
+  if (!db.categories.some((c) => c.id === 'cat-volunteer')) {
+    db.categories.push({ id: 'cat-volunteer', name: 'Voluntariado', color: '#7a5c9e', area: 'volunteer' })
+  }
 
-  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training']) {
+  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'volunteering', 'volunteerDays']) {
     if (!Array.isArray(db[key])) db[key] = []
   }
 

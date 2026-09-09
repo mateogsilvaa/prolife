@@ -126,6 +126,17 @@ hace una vez. En [console.cloud.google.com](https://console.cloud.google.com):
    - *Crear*. Te da un **ID de cliente** que acaba en `.apps.googleusercontent.com`.
      Cópialo.
 
+5. **Activa el esquema de URI personalizado.** Este paso es imprescindible y no es evidente:
+   desde 2024, Google **desactiva por defecto** ese método en los clientes Android nuevos, y sin
+   él la app no puede volver del navegador después de entrar.
+
+   Vuelve a *Credenciales*, haz clic en el cliente que acabas de crear, busca
+   **Configuración avanzada** (*Advanced Settings*) y activa **«Habilitar esquema de URI
+   personalizado»** (*Enable Custom URI Scheme*). Guarda.
+
+   > Si te saltas esto, al pulsar «Entrar con Google» sale
+   > **«Acceso bloqueado: la solicitud de prolife no es válida»**, con un *Error 400*.
+
 ### Paso 2 — Poner ese identificador en el proyecto
 
 En el ordenador, abre `src/lib/google.config.js` y sustituye la línea:
@@ -200,6 +211,7 @@ cuando el ordenador abre la app.
 | Qué ves | Qué pasa |
 |---|---|
 | «A esta compilación le falta el identificador de cliente» | El paso 2 no llegó al APK. Comprueba que hiciste `git push` **antes** de lanzar el workflow, y vuelve a lanzarlo. |
+| «Acceso bloqueado: la solicitud de prolife no es válida», *Error 400* | Falta activar el **esquema de URI personalizado** en la configuración avanzada del cliente Android (paso 1.5). Es lo más probable, porque Google lo trae desactivado de fábrica. |
 | Al entrar: *Error 400: redirect_uri_mismatch* | El nombre del paquete o la huella SHA-1 no coinciden con lo que pusiste en Google Cloud. Repasa el paso 1.4 — tienen que ser exactamente `com.mateo.prolife` y la huella de arriba. |
 | Al entrar: *Acceso bloqueado* / *app no verificada* sin opción de continuar | Falta publicar la pantalla de consentimiento (paso 1.3, el botón *PUBLICAR APLICACIÓN*). |
 | «No se encuentra ninguna carpeta de prolife en este Drive» | O el directorio de trabajo del ordenador no está dentro de Google Drive, o Drive no ha terminado de subirlo. Míralo en Ajustes → Directorio de trabajo. |

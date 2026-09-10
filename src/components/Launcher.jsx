@@ -1,6 +1,6 @@
 import React from 'react'
 import Icon from './Icon.jsx'
-import { api } from '../lib/api.js'
+import { api, enDrive } from '../lib/api.js'
 import { useStore, PALETTE } from '../lib/store.jsx'
 
 export const initials = (n) =>
@@ -30,7 +30,7 @@ export default function Launcher({ compact, onOpenDock }) {
 
   return (
     <div className="stack" style={{ gap: compact ? 8 : 14 }}>
-      {onOpenDock && (
+      {onOpenDock && !enDrive && (
         <>
           {!compact && <div className="eyebrow">Ayudante</div>}
           <button className="link-tile" onClick={onOpenDock}>

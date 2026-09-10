@@ -140,9 +140,14 @@ function Shell() {
           )}
           <StatusBar onReview={() => setReview(true)} />
           <div className="spacer" />
-          <button className={`btn sm ${ui.dock ? 'primary' : 'ghost'}`} onClick={ui.toggleDock} title="Ayudante (Ctrl+I)">
-            <Icon name="sparkle" size={14} /> Ayudante
-          </button>
+          {/* El ayudante es Ollama, que corre en el ordenador: desde la tablet
+              no hay a quién preguntar. Se quita el botón en vez de dejarlo dar
+              un error al pulsarlo. */}
+          {!enDrive && (
+            <button className={`btn sm ${ui.dock ? 'primary' : 'ghost'}`} onClick={ui.toggleDock} title="Ayudante (Ctrl+I)">
+              <Icon name="sparkle" size={14} /> Ayudante
+            </button>
+          )}
           <button className="btn sm primary" onClick={() => setAdding(newTask())}>
             <Icon name="plus" size={13} /> Tarea
           </button>
@@ -153,7 +158,7 @@ function Shell() {
             <span>
               {back
                 ? `El ordenador ha vuelto${queued ? '' : ' y ya tiene lo que apuntaste'}. Recarga para poder editarlo todo otra vez.`
-                : 'Sin conexión con el ordenador: esto es lo último que se vio. Puedes consultarlo todo, y apuntar faltas, tareas y entrenos — se le cuentan cuando vuelva. Lo demás no se puede editar desde aquí.'}
+                : 'Sin conexión con el ordenador: esto es lo último que se vio. Puedes seguir trabajando igual — lo que cambies se le cuenta cuando vuelva.'}
             </span>
             {back && (
               <>

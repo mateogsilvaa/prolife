@@ -3,7 +3,7 @@ import QRCode from 'qrcode'
 import Icon from '../components/Icon.jsx'
 import { LOGO_PATH, bumpLogo } from '../components/Brand.jsx'
 import { useStore, uid, PALETTE, isDesktop } from '../lib/store.jsx'
-import { api } from '../lib/api.js'
+import { api, enDrive } from '../lib/api.js'
 import { canStore, usage, clearAll } from '../lib/offline.js'
 
 /**
@@ -372,9 +372,13 @@ export default function Settings() {
           <LogoPicker />
         </div>
 
-        <Sync dir={dir} setDir={setDir} />
+        {/* Estas cuatro son del ordenador por definición —dónde vive la carpeta,
+            el enlace para emparejar, Ollama, VS Code— y en la tablet no se
+            enseñan: un cuadro que solo puede dar un error no es una función que
+            falte, es un callejón. Lo que sí se puede hacer, se hace. */}
+        {!enDrive && <Sync dir={dir} setDir={setDir} />}
 
-        <Tablet />
+        {!enDrive && <Tablet />}
         <SecureHint />
         <OfflineFiles />
 
@@ -428,7 +432,7 @@ export default function Settings() {
           </p>
         </div>
 
-        <Assistant />
+        {!enDrive && <Assistant />}
 
         <div className="card">
           <div className="card-head"><h3>Universidad</h3></div>
@@ -460,7 +464,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <VsCode />
+        {!enDrive && <VsCode />}
 
         <Categories />
 
@@ -503,12 +507,16 @@ export default function Settings() {
             <Metric n={db.training.length} l="entrenos" />
             <Metric n={`${(totalSecs / 3600).toFixed(0)}h`} l="registradas" />
           </div>
-          <div className="row wrap" style={{ gap: 6 }}>
-            <a className="btn sm" href={api.raw('.prolife/db.json', true)} download="prolife-db.json"><Icon name="download" size={12} /> Exportar copia</a>
-            <button className="btn sm ghost" onClick={() => api.openPath('.prolife')}><Icon name="folder" size={12} /> Carpeta de datos</button>
-          </div>
+          {!enDrive && (
+            <div className="row wrap" style={{ gap: 6 }}>
+              <a className="btn sm" href={api.raw('.prolife/db.json', true)} download="prolife-db.json"><Icon name="download" size={12} /> Exportar copia</a>
+              <button className="btn sm ghost" onClick={() => api.openPath('.prolife')}><Icon name="folder" size={12} /> Carpeta de datos</button>
+            </div>
+          )}
           <p className="dim" style={{ fontSize: 12, margin: '12px 0 0' }}>
-            Copia de seguridad automática cada día; se conservan las últimas 14.
+            {enDrive
+              ? 'Lo que cambies aquí se guarda en Drive y lo recoge el ordenador la próxima vez que abra la app. Las copias de seguridad las hace él, cada día, y guarda las últimas 14.'
+              : 'Copia de seguridad automática cada día; se conservan las últimas 14.'}
           </p>
         </div>
       </div>

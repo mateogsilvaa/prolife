@@ -30,7 +30,48 @@
  * `db.json` —el ordenador— y dos aparatos no pueden pisarse el fichero entero.
  */
 
-export const KINDS = ['asistencia', 'tarea', 'entreno', 'tarea-nueva', 'evento', 'sesion', 'voluntariado']
+export const KINDS = ['asistencia', 'tarea', 'entreno', 'tarea-nueva', 'evento', 'sesion', 'voluntariado', 'cambio']
+
+/**
+ * Las siete de arriba son operaciones con nombre propio, escritas a mano una a
+ * una. Servían mientras la tablet solo tenía que marcar faltas y tachar tareas,
+ * pero no escalan: cada cosa nueva que se puede hacer en el ordenador exigía
+ * inventar aquí otra operación, y mientras tanto la tablet contestaba «esto
+ * hazlo en el ordenador». Una tablet que no deja hacer lo mismo no sirve.
+ *
+ * `cambio` es la general y no hay que ampliarla nunca: en vez de describir la
+ * intención («marca esta clase»), describe el efecto («en la lista `tasks`, deja
+ * este registro así»). La tablet aplica el cambio sobre su copia, mira qué ha
+ * quedado distinto y manda eso. Sigue sin mandar la base entera —que es lo que
+ * machacaría el trabajo del ordenador—: manda solo los registros tocados.
+ *
+ *   { op: 'fijar',  ruta: ['settings', 'attendanceMin'], valor: 0.8 }
+ *   { op: 'poner',  ruta: ['tasks'], valor: { id: 't1', … } }   ← alta o edición
+ *   { op: 'quitar', ruta: ['tasks'], ref: 't1' }
+ *
+ * Las tres son idempotentes: dicen cómo tiene que quedar algo, no cómo cambiarlo
+ * desde donde estaba, así que aplicarlas dos veces deja lo mismo.
+ *
+ * Lo que NO puede hacer, y es a propósito: dos aparatos que tocan el MISMO
+ * registro entre sincronizaciones se pisan, y gana el último. Lo que no se pisa
+ * —que es lo que importa— son dos registros distintos: la tarea que creaste en
+ * clase y la que creó el ordenador conviven, porque cada `poner` va por su id.
+ */
+const OPS_CAMBIO = ['fijar', 'poner', 'quitar']
+
+/** Claves que una operación no puede tocar, venga de donde venga. */
+const PROHIBIDAS = new Set(['__proto__', 'constructor', 'prototype', 'version'])
+
+const rutaMala = (ruta) => {
+  if (!Array.isArray(ruta) || !ruta.length || ruta.length > 6) return 'la ruta del cambio no vale'
+  for (const k of ruta) {
+    if (typeof k !== 'string' || !k) return 'la ruta del cambio no vale'
+    // `version` la pone la migración y `_stamp` el servidor: ni una ni otra son
+    // de nadie más, y dejarlas pasar sería dejar mentir sobre el formato.
+    if (PROHIBIDAS.has(k) || k.startsWith('_')) return `«${k}» no se puede cambiar así`
+  }
+  return null
+}
 
 const texto = (v) => (typeof v === 'string' ? v : null)
 
@@ -64,6 +105,18 @@ export function opError(op) {
     if (!op.session || typeof op.session !== 'object') return 'tramo incompleto'
     if (!texto(op.session.id) || !texto(op.session.date)) return 'el tramo necesita id y fecha'
     if (!Number.isFinite(Number(op.session.seconds))) return 'el tramo necesita duración'
+  }
+  if (op.kind === 'cambio') {
+    if (!OPS_CAMBIO.includes(op.op)) return `cambio desconocido: ${op.op}`
+    const mala = rutaMala(op.ruta)
+    if (mala) return mala
+    if (op.op === 'poner' && (!op.valor || typeof op.valor !== 'object' || !texto(op.valor.id))) {
+      return 'un registro nuevo necesita id'
+    }
+    // `ref` y no `id`: cada operación lleva ya su propio `id`, que es el de la
+    // operación en la cola. Llamar igual a las dos cosas hacía que al encolarla
+    // se machacara el registro que había que quitar y no se quitara nada.
+    if (op.op === 'quitar' && !texto(op.ref)) return 'no dice qué registro quitar'
   }
   if (op.kind === 'voluntariado') {
     if (!op.day || typeof op.day !== 'object') return 'jornada incompleta'
@@ -190,7 +243,150 @@ export function applyOp(db, op) {
     return null
   }
 
+  if (op.kind === 'cambio') return aplicarCambio(db, op)
+
   return `operación desconocida: ${op.kind}`
+}
+
+/* ------------------------------------------------------- el cambio general -- */
+
+/**
+ * Baja por la ruta hasta el contenedor, creando por el camino lo que falte.
+ *
+ * Crear lo que falta importa: el ordenador puede tener una base sin
+ * `settings.assistant` todavía, y un cambio que venga de la tablet no tiene por
+ * qué morirse por eso.
+ */
+function contenedor(db, ruta, crear) {
+  let n = db
+  for (const k of ruta) {
+    if (n == null || typeof n !== 'object') return null
+    if (n[k] == null) {
+      if (!crear) return null
+      n[k] = {}
+    }
+    n = n[k]
+  }
+  return n
+}
+
+function aplicarCambio(db, op) {
+  if (op.op === 'fijar') {
+    const clave = op.ruta[op.ruta.length - 1]
+    const padre = contenedor(db, op.ruta.slice(0, -1), true)
+    if (!padre || typeof padre !== 'object') return 'no existe donde poner ese valor'
+    if (op.valor === undefined) delete padre[clave]
+    else padre[clave] = op.valor
+    return null
+  }
+
+  const clave = op.ruta[op.ruta.length - 1]
+  const padre = contenedor(db, op.ruta.slice(0, -1), op.op === 'poner')
+  if (!padre || typeof padre !== 'object') return 'no existe esa lista'
+  // Una lista que todavía no está se crea al dar de alta el primero: es lo que
+  // pasa con `volunteering` en una base que viene de antes de que existiera.
+  if (!Array.isArray(padre[clave])) {
+    if (op.op !== 'poner') return 'no existe esa lista'
+    padre[clave] = []
+  }
+  const lista = padre[clave]
+
+  if (op.op === 'quitar') {
+    const i = lista.findIndex((x) => x && x.id === op.ref)
+    // Que ya no esté no es un fallo: es el resultado que pedía la operación.
+    if (i >= 0) lista.splice(i, 1)
+    return null
+  }
+
+  const i = lista.findIndex((x) => x && x.id === op.valor.id)
+  // Se reemplaza entero y no se fusiona: el registro que manda la tablet ES el
+  // estado que tiene que quedar, y fusionar dejaría vivos campos que allí se
+  // habían quitado a propósito.
+  if (i >= 0) lista[i] = op.valor
+  else lista.push(op.valor)
+  return null
+}
+
+/* ------------------------------------------------ de dos bases a cambios --- */
+
+const esRegistro = (v) => v && typeof v === 'object' && !Array.isArray(v) && typeof v.id === 'string'
+const esListaDeRegistros = (v) => Array.isArray(v) && v.every(esRegistro)
+const esObjeto = (v) => v && typeof v === 'object' && !Array.isArray(v)
+
+/** Igualdad por valor. Se compara a mano porque el orden de las claves baila. */
+export function igual(a, b) {
+  if (a === b) return true
+  if (a == null || b == null || typeof a !== typeof b) return false
+  if (typeof a !== 'object') return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  if (Array.isArray(a)) return a.length === b.length && a.every((x, i) => igual(x, b[i]))
+  const ka = Object.keys(a), kb = Object.keys(b)
+  return ka.length === kb.length && ka.every((k) => igual(a[k], b[k]))
+}
+
+/**
+ * Qué ha cambiado entre dos bases, en forma de operaciones.
+ *
+ * Esta es la pieza que hace que la tablet pueda hacer lo mismo que el
+ * ordenador. La app entera escribe mutando un borrador de la base; aquí se
+ * mira ese borrador contra el original y sale la lista de cambios que hay que
+ * contarle al ordenador. No hay que enseñarle nada de cada pantalla nueva:
+ * mientras el cambio quede en la base, sale solo.
+ *
+ * Las listas de registros se comparan **por id**, no por posición, que es lo
+ * que permite convivir con el ordenador: mover una tarea de sitio no manda
+ * nada, y añadir una manda solo esa.
+ */
+export function diffDb(antes, despues, ruta = []) {
+  const ops = []
+  if (ruta.length >= 4) return ops
+  const claves = new Set([...Object.keys(antes || {}), ...Object.keys(despues || {})])
+
+  for (const k of claves) {
+    if (PROHIBIDAS.has(k) || k.startsWith('_')) continue
+    const a = antes?.[k]
+    const b = despues?.[k]
+    if (igual(a, b)) continue
+
+    // Una lista que en el original no estaba se manda registro a registro
+    // igualmente: mandarla entera de una pieza borraría lo que el ordenador
+    // hubiera metido ahí mientras tanto.
+    if (esListaDeRegistros(b) && (a == null || esListaDeRegistros(a))) {
+      const antesPorId = new Map((a || []).map((x) => [x.id, x]))
+      const despuesPorId = new Map(b.map((x) => [x.id, x]))
+      for (const [id, x] of despuesPorId) {
+        if (!igual(antesPorId.get(id), x)) ops.push({ kind: 'cambio', op: 'poner', ruta: [...ruta, k], valor: x })
+      }
+      for (const id of antesPorId.keys()) {
+        if (!despuesPorId.has(id)) ops.push({ kind: 'cambio', op: 'quitar', ruta: [...ruta, k], ref: id })
+      }
+      continue
+    }
+
+    // Objetos sueltos —`settings`, `profile`— se bajan un nivel más para no
+    // mandar el bloque entero: cambiar el tema no puede deshacer el mínimo de
+    // asistencia que tocaste en el ordenador hace un rato.
+    if (esObjeto(a) && esObjeto(b)) {
+      ops.push(...diffDb(a, b, [...ruta, k]))
+      continue
+    }
+
+    ops.push({ kind: 'cambio', op: 'fijar', ruta: [...ruta, k], valor: b })
+  }
+  return ops
+}
+
+/**
+ * Qué registro toca una operación, para no acumular en la cola diez versiones
+ * del mismo mientras se rellena un formulario. La última manda: todas dicen
+ * cómo tiene que quedar, no cómo llegar hasta ahí.
+ */
+export function claveOp(op) {
+  if (!op || op.kind !== 'cambio') return null
+  const donde = op.ruta.join('/')
+  if (op.op === 'fijar') return `fijar:${donde}`
+  if (op.op === 'poner') return `poner:${donde}:${op.valor?.id}`
+  return `quitar:${donde}:${op.ref}`
 }
 
 /** Cómo se le cuenta al usuario lo que tiene esperando en la cola. */
@@ -202,5 +398,33 @@ export function describeOp(op) {
   if (op.kind === 'evento') return `Evento: ${op.event?.title}`
   if (op.kind === 'sesion') return `Tiempo apuntado el ${op.session?.date}`
   if (op.kind === 'voluntariado') return `Jornada de voluntariado del ${op.day?.date}`
+  if (op.kind === 'cambio') return describeCambio(op)
   return 'Cambio'
+}
+
+/** Nombres en cristiano de las listas de la base, para los avisos. */
+const NOMBRES = {
+  subjects: ['Asignatura', 'la asignatura'],
+  projects: ['Proyecto', 'el proyecto'],
+  tasks: ['Tarea', 'la tarea'],
+  exams: ['Examen', 'el examen'],
+  events: ['Evento', 'el evento'],
+  sessions: ['Tiempo', 'el tramo de tiempo'],
+  training: ['Entreno', 'el entreno'],
+  attendance: ['Asistencia', 'la asistencia'],
+  categories: ['Categoría', 'la categoría'],
+  volunteering: ['Voluntariado', 'la entidad'],
+  volunteerDays: ['Voluntariado', 'la jornada'],
+  settings: ['Ajustes', 'los ajustes'],
+  profile: ['Perfil', 'el perfil'],
+  workspaces: ['Escritorio', 'la disposición'],
+}
+
+function describeCambio(op) {
+  const lista = op.ruta[op.op === 'fijar' ? 0 : op.ruta.length - 1]
+  const [titulo, articulo] = NOMBRES[lista] || ['Cambio', 'esto']
+  if (op.op === 'quitar') return `${titulo} eliminada`
+  if (op.op === 'fijar') return `${titulo}: ${op.ruta.slice(1).join(' · ')}`
+  const nombre = op.valor?.name || op.valor?.title || op.valor?.date
+  return nombre ? `${titulo}: ${nombre}` : `Cambio en ${articulo}`
 }

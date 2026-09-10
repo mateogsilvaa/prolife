@@ -2,8 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { api, enDrive } from './api.js'
 import { iso, today } from './date.js'
 import { saveDbSnapshot } from './offline.js'
-import { applyOp } from '../../server/ops.js'
-import { cola, enCola, encolar, quitar } from './queue.js'
+import { applyOp, diffDb } from '../../server/ops.js'
+import { cola, enCola, encolar, quitar, guardarEnBuzon, enBuzon, podarBuzon } from './queue.js'
 
 const Ctx = createContext(null)
 export const useStore = () => useContext(Ctx)
@@ -38,6 +38,17 @@ export function Provider({ children }) {
 
   const saveTimer = useRef(null)
   const pending = useRef(null)
+  /**
+   * La base tal y como está ahora mismo, fuera de React.
+   *
+   * Hace falta para poder comparar «antes» y «después» de un cambio sin estar
+   * dentro de un `setDb`, y para que dos cambios seguidos en el mismo instante
+   * se encadenen sobre el resultado del primero en vez de sobre el mismo punto
+   * de partida.
+   */
+  const dbRef = useRef(null)
+  /** Los cambios se mandan al buzón en tandas, no uno por tecla. */
+  const envioTimer = useRef(null)
   /** Marca del db.json que conocemos. Si cambia sola, lo tocó otro ordenador. */
   const stamp = useRef(0)
   const [remote, setRemote] = useState(false)
@@ -77,6 +88,13 @@ export function Provider({ children }) {
         // hacía que la tablet sin conexión enseñara «el servidor no responde»
         // en vez de lo último que sí tenía guardado.
         const d = await api.getDb()
+        // El `db.json` de Drive lo escribe solo el ordenador, así que lo que la
+        // tablet dejó en el buzón todavía no está dentro. Se vuelve a aplicar
+        // encima: si no, al reabrir la app parecería que se ha perdido.
+        if (enDrive) {
+          podarBuzon(d._stamp || 0)
+          for (const op of enBuzon(d._stamp || 0)) applyOp(d, op)
+        }
         stamp.current = d._stamp || 0
         setFuture(d._future || null)
         setOffline(!!d._stale)
@@ -97,6 +115,10 @@ export function Provider({ children }) {
       api.getConfig().then(setConfig).catch(() => {})
     })()
   }, [])
+
+  // Todo lo que cambie la base pasa por aquí, venga de donde venga: así el
+  // espejo de fuera de React nunca se queda atrás.
+  useEffect(() => { dbRef.current = db }, [db])
 
   useEffect(() => {
     document.documentElement.dataset.theme = db?.settings?.theme === 'ink' ? 'ink' : 'paper'
@@ -200,31 +222,61 @@ export function Provider({ children }) {
     location.reload()
   }, [flush])
 
-  /** update(draft => { ...mutar... }) — persiste con debounce. */
+  /**
+   * update(draft => { ...mutar... }) — el único camino para escribir en la base.
+   *
+   * Con el ordenador delante guarda el fichero entero, como siempre. Sin él
+   * —la tablet con el APK, o el ordenador apagado— hace lo mismo sobre su copia
+   * y después compara: lo que haya quedado distinto sale como operaciones
+   * sueltas al buzón, y el ordenador las aplica sobre SU base cuando abra.
+   *
+   * Esto es lo que hace que la tablet sirva para lo mismo que el ordenador. No
+   * hay una lista de cosas permitidas que haya que ir ampliando: si una
+   * pantalla escribe en la base, la tablet puede usarla, porque el cambio se
+   * deduce del resultado y no de haberlo previsto aquí.
+   */
   const update = useCallback(
     (recipe) => {
-      if (offlineRef.current) {
-        toast('Sin conexión con el ordenador: ahora mismo solo se puede consultar.', 'err')
+      const prev = dbRef.current
+      if (!prev) return
+      const next = structuredClone(prev)
+      recipe(next)
+
+      // Sin ordenador al que mandarle el fichero entero: se manda el cambio.
+      if (enDrive || offlineRef.current) {
+        // Una base escrita por una versión más nueva no se toca ni por
+        // operaciones: no sabemos qué significan los campos que no conocemos.
+        if (futureRef.current) {
+          toast('Esta base la escribió una versión más nueva de prolife. Actualiza este aparato antes de cambiar nada.', 'err')
+          return
+        }
+        const cambios = diffDb(prev, next)
+        if (!cambios.length) return
+        // El id y la hora se ponen fuera del `setDb` a propósito: React puede
+        // llamar dos veces al actualizador, y con el id ya puesto la segunda
+        // vuelve a apuntar la MISMA operación en vez de duplicarla.
+        for (const c of cambios) encolar({ ...c, id: uid('op'), at: Date.now() })
+        dbRef.current = next
+        setDb(next)
+        setQueued(enCola())
+        // En tandas: rellenar un formulario son muchos cambios seguidos y no
+        // tiene sentido un viaje a Drive por cada tecla.
+        // Contra Drive el buzón está a un viaje: se manda en tandas. Sin
+        // ordenador no hay a quién mandarlo, y la cola ya espera a que vuelva.
+        if (enDrive) {
+          clearTimeout(envioTimer.current)
+          envioTimer.current = setTimeout(() => enviarColaRef.current?.(), 900)
+        }
         return
       }
-      // Con la app contra Drive no hay servidor al que mandarle la base entera,
-      // y subirla desde aquí machacaría lo que hubieras hecho en el ordenador.
-      // Lo que sí se puede apuntar va por `applyChange`, como cambio suelto.
-      if (enDrive) {
-        toast('Desde la tablet esto no se puede cambiar: hazlo en el ordenador.', 'err')
-        return
-      }
-      setDb((prev) => {
-        if (!prev) return prev
-        const next = structuredClone(prev)
-        recipe(next)
-        pending.current = next
-        clearTimeout(saveTimer.current)
-        saveTimer.current = setTimeout(flush, 400)
-        return next
-      })
+
+      dbRef.current = next
+      setDb(next)
+      pending.current = next
+      clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(flush, 400)
     },
-    [flush, toast]
+    [flush]
   )
 
   /**
@@ -281,6 +333,9 @@ export function Provider({ children }) {
       // lo aplicará el ordenador la próxima vez que abra la app. Decir «hecho
       // en el ordenador» ahí sería mentira, y encima `applied` no existe.
       if (r.buzon) {
+        // Ya están entregadas, pero el ordenador tardará en recogerlas: se
+        // recuerdan para volver a pintarlas la próxima vez que abra la app.
+        guardarEnBuzon(ops)
         const n = r.queued || ops.length
         toast(`${n} ${n === 1 ? 'cambio guardado' : 'cambios guardados'} en Drive · el ordenador lo recoge al abrirse`)
       } else {

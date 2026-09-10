@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import Icon from './Icon.jsx'
+import { enDrive } from '../lib/api.js'
 import Modal from './Modal.jsx'
 import Launcher from './Launcher.jsx'
 import Brand from './Brand.jsx'
@@ -68,11 +69,14 @@ export default function Sidebar({ route, onAI, dockOpen }) {
       </nav>
 
       <div className="sidebar-foot">
-        <button className={`nav-item${dockOpen ? ' active' : ''}`} onClick={onAI}>
-          <Icon name="sparkle" size={15} />
-          <span className="label">Ayudante</span>
-          <span className="kbd">Ctrl I</span>
-        </button>
+        {/* Sin ordenador no hay Ollama a quien preguntar. */}
+        {!enDrive && (
+          <button className={`nav-item${dockOpen ? ' active' : ''}`} onClick={onAI}>
+            <Icon name="sparkle" size={15} />
+            <span className="label">Ayudante</span>
+            <span className="kbd">Ctrl I</span>
+          </button>
+        )}
         <button className="nav-item" onClick={() => setLinks(true)}>
           <Icon name="link" size={15} />
           <span className="label">Enlaces</span>

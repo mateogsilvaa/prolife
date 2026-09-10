@@ -103,9 +103,13 @@ modo sin conexión.
 
 **Y desde la última versión, la tablet puede además ser una app instalada de verdad —un
 APK— que habla directamente con Google Drive**, sin depender de que el ordenador esté
-encendido. Los apuntes y los PDFs se leen y se escriben en la misma carpeta de Drive que
-ya sincronizas; los cambios de la base (faltas, tareas, entrenos) se dejan en un buzón que
-el ordenador recoge, para que nunca haya dos aparatos escribiendo el mismo `db.json`.
+encendido, y **con las mismas funciones**: lo que se puede hacer en el ordenador se puede
+hacer en la tablet. Los apuntes y los PDFs se leen y se escriben en la misma carpeta de
+Drive que ya sincronizas; los cambios de la base no se suben como fichero entero sino como
+registros sueltos a un buzón que el ordenador recoge, para que nunca haya dos aparatos
+escribiendo el mismo `db.json` y para que el trabajo de uno no borre el del otro. Fuera
+quedan solo las cosas que **son** del ordenador: el directorio de trabajo, el ayudante y
+VS Code.
 
 **Paso a paso para actualizar el ordenador e instalar el APK:**
 [INSTALAR-TABLET.md](INSTALAR-TABLET.md).

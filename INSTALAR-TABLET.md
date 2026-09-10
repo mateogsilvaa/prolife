@@ -82,21 +82,44 @@ Drive, la misma carpeta que ya sincronizas.
 
 > **Ojo con esto:** quita la dependencia del *ordenador*, no la de *internet*. En clase
 > seguirás necesitando wifi o datos. Sin ninguna conexión, la tablet sigue enseñando lo
-> último que vio y apuntando faltas y tareas para más tarde, como hasta ahora.
+> último que vio y apuntando lo que hagas para más tarde.
+
+### Qué se puede hacer en la tablet
+
+**Lo mismo que en el ordenador.** Crear asignaturas, proyectos y exámenes; editar horarios;
+marcar faltas; crear, editar y borrar tareas y eventos; apuntar entrenos, tiempo y jornadas
+de voluntariado; cambiar ajustes y categorías; subir y leer apuntes, PDFs y fotos.
+
+Lo único que no está es lo que **es** del ordenador y no tendría sentido allí:
+
+| Qué | Por qué |
+|---|---|
+| El directorio de trabajo | Es una carpeta de un disco concreto |
+| El ayudante (Ollama) | El modelo corre en el ordenador |
+| El editor VS Code | Igual |
+| Abrir carpetas del disco, Tailscale, el enlace de emparejamiento | Del ordenador por definición |
+
+En la tablet esos cuadros no se enseñan siquiera, para que no haya botones que solo puedan
+dar un error.
 
 ### Cómo se reparte el trabajo (por qué no se pisan)
 
-Esto es lo único técnico que conviene entender, porque explica los avisos que verás:
+Esto es lo único técnico que conviene entender, porque explica el aviso que verás a diario:
 
 - **Los apuntes, los PDFs y las fotos** se escriben directos en Drive. Son archivos sueltos;
   solo chocarían si editas el mismo apunte a la vez en la tablet y en el ordenador.
-- **La base de datos** (faltas, tareas, entrenos, eventos, tiempo) la tablet **no la escribe
-  nunca**. Deja los cambios en un buzón, `.prolife/ops/`, y el ordenador los recoge y los
-  aplica la próxima vez que lo abras. Por eso la tablet te dirá *«guardado en Drive · el
-  ordenador lo recoge al abrirse»* y no *«hecho»*.
+- **La base de datos** la tablet **no la escribe nunca entera**. Aplica el cambio sobre su
+  copia, mira qué ha quedado distinto y deja *solo eso* en un buzón, `.prolife/ops/`. El
+  ordenador lo recoge y lo aplica sobre su base la próxima vez que lo abras. Por eso la
+  tablet dice *«guardado en Drive · el ordenador lo recoge al abrirse»* y no *«hecho»*.
 
 Así sigue habiendo **un solo escritor** del `db.json`: el ordenador. Si escribieran los dos,
 Drive no sabría fusionarlos y ganaría el último en subir.
+
+> **La única regla que hay que tener en la cabeza:** si tocas **el mismo registro** —la
+> misma tarea, la misma asignatura— en los dos aparatos antes de sincronizar, gana el
+> último. Registros distintos nunca se pisan: la tarea que creaste en clase y la que creó
+> el ordenador conviven las dos.
 
 ---
 

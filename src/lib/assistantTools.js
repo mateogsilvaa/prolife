@@ -231,9 +231,34 @@ export const TOOL_SCHEMA = [
   {
     type: 'function',
     function: {
+      name: 'resumen_voluntariado',
+      description: 'Horas de voluntariado, jornadas y cuáles no tienen foto que las acredite.',
+      parameters: P({ entidad: S('Opcional, para una sola entidad') }),
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'listar_documentos',
-      description: 'Los archivos que hay en la carpeta de una asignatura o un proyecto.',
-      parameters: P({ asignatura: S('Opcional'), proyecto: S('Opcional'), carpeta: S('Ruta, opcional') }),
+      description:
+        'Qué hay dentro de una carpeta. Sin argumentos, la carpeta que el usuario está mirando ahora mismo.',
+      parameters: P({
+        carpeta: S('Ruta de la carpeta, por ejemplo "Universidad/Cálculo". Vacío = la que está mirando.'),
+        asignatura: S('Opcional, en vez de la ruta'),
+        proyecto: S('Opcional, en vez de la ruta'),
+      }),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'buscar_archivos',
+      description:
+        'Busca un archivo o una carpeta por su nombre en TODO el directorio. Úsalo siempre que el usuario nombre un documento sin decir dónde está, en vez de responder que no sabes dónde está.',
+      parameters: P({
+        texto: S('Trozo del nombre que busca'),
+        carpeta: S('Opcional, para buscar solo dentro de una carpeta'),
+      }, ['texto']),
     },
   },
   {
@@ -241,9 +266,9 @@ export const TOOL_SCHEMA = [
     function: {
       name: 'leer_documento',
       description:
-        'Lee el contenido de un documento de texto (apuntes, .md, .txt, código) para poder resumirlo, corregirlo u opinar. Sin argumentos lee el que el usuario tiene abierto.',
+        'Lee un documento para resumirlo, corregirlo, opinar o responder sobre él. Vale para apuntes, .md, .txt, código, PDF y Word (.docx). Si solo sabes el nombre, pásalo: lo busca solo. Sin argumentos lee el que el usuario tiene delante.',
       parameters: P({
-        nombre: S('Nombre o ruta del archivo. Vacío = el documento abierto ahora mismo.'),
+        nombre: S('Nombre o ruta del archivo. Vacío = el documento que tiene abierto.'),
         asignatura: S('Opcional, para buscarlo dentro de su carpeta'),
         proyecto: S('Opcional'),
       }),
@@ -388,6 +413,43 @@ export const TOOL_SCHEMA = [
   {
     type: 'function',
     function: {
+      name: 'crear_carpeta',
+      description:
+        'Crea una carpeta. Si la ruta lleva varios niveles ("Universidad/Cálculo/Tema 3"), crea los que falten.',
+      parameters: P({
+        ruta: S('Dónde y cómo se llama, por ejemplo "Universidad/Cálculo/Tema 3"'),
+        dentro_de: S('Opcional: carpeta donde meterla, si en "ruta" solo va el nombre'),
+      }, ['ruta']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mover_archivo',
+      description:
+        'Mueve un archivo o una carpeta a otra carpeta. Úsalo cuando te pida ordenar o guardar algo en su sitio.',
+      parameters: P({
+        que: S('Nombre o ruta de lo que hay que mover'),
+        a_carpeta: S('Carpeta de destino'),
+      }, ['que', 'a_carpeta']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'guardar_nota',
+      description:
+        'Escribe un archivo de texto con lo que le has preparado: un resumen, un esquema, un borrador. Pasa el contenido entero.',
+      parameters: P({
+        nombre: S('Cómo se llama el archivo, con o sin .md'),
+        contenido: S('El texto completo del archivo'),
+        carpeta: S('Dónde guardarlo. Vacío = donde está mirando.'),
+      }, ['nombre', 'contenido']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'borrar',
       description: 'Borra algo que ya existe. Se puede deshacer desde la tarjeta que aparece.',
       parameters: P({
@@ -403,6 +465,7 @@ export const WRITE_TOOLS = new Set([
   'crear_tarea', 'completar_tarea', 'crear_proyecto', 'crear_asignatura', 'crear_examen',
   'crear_evento', 'registrar_tiempo', 'registrar_entreno', 'marcar_asistencia',
   'ajustar_asignatura', 'ajustar_objetivos', 'borrar',
+  'crear_carpeta', 'mover_archivo', 'guardar_nota',
 ])
 
 /* ---------------------------------------------------------- ejecución ---- */
@@ -618,41 +681,78 @@ export async function runTool(name, args = {}, ctx) {
       }
     }
 
+    case 'resumen_voluntariado': {
+      const entidades = db.volunteering || []
+      if (!entidades.length) return { text: 'No hay ninguna entidad de voluntariado dada de alta.' }
+      const una = A.entidad ? porNombre(entidades, A.entidad, (v) => v.org) : null
+      const cuales = una ? [una] : entidades
+      const filas = cuales.map((v) => {
+        const dias = (db.volunteerDays || []).filter((d) => d.volunteerId === v.id)
+        const min = dias.reduce((a, d) => a + (Number(d.minutes) || 0), 0)
+        const sinFoto = dias.filter((d) => !d.photos?.length).length
+        const ultima = [...dias].sort((a, b) => b.date.localeCompare(a.date))[0]
+        return `  · ${v.name}${v.org ? ` (${v.org})` : ''}: ${(min / 60).toFixed(1)} h en ${dias.length} ${
+          dias.length === 1 ? 'jornada' : 'jornadas'
+        }${v.hoursGoal ? ` de las ${v.hoursGoal} h comprometidas` : ''}${
+          sinFoto ? ` · ${sinFoto} sin foto que las acredite` : ''
+        }${ultima ? ` · última el ${ultima.date}` : ''}`
+      })
+      const totalMin = (db.volunteerDays || []).reduce((a, d) => a + (Number(d.minutes) || 0), 0)
+      return { text: [`Voluntariado — ${(totalMin / 60).toFixed(1)} h en total:`, list(filas)].join('\n') }
+    }
+
     case 'listar_documentos': {
-      const carpeta = carpetaDe(db, A)
-      if (!carpeta) return { text: 'No sé en qué carpeta mirar. Pregúntale de qué asignatura o proyecto.' }
+      // Sin carpeta se mira donde él está mirando, y si tampoco hay, la raíz.
+      // Antes se rendía con «no sé en qué carpeta mirar» en cuanto la pregunta
+      // no nombraba una asignatura, que es casi siempre.
+      const carpeta = carpetaDe(db, A) || doc?.dir || ''
       const r = await api.tree(carpeta).catch((e) => ({ error: e.message }))
       if (r.error) return { text: `No he podido leer la carpeta: ${r.error}` }
       if (r.missing) return { text: `La carpeta "${carpeta}" no existe en el disco.` }
       const plano = aplanar(r.items || [])
+      const donde = carpeta || 'el directorio de trabajo'
+      if (!plano.length) return { text: `${donde} está vacío.` }
+      const recorte = plano.length > 200
       return {
-        text: plano.length
-          ? `Archivos en ${carpeta}:\n` + list(plano.map((f) => `  · ${f.path}${f.dir ? '/' : ''}`))
-          : `La carpeta ${carpeta} está vacía.`,
+        text: `En ${donde} hay ${plano.length} elementos${recorte ? ' (enseño los 200 primeros)' : ''}:\n` +
+          list(plano.slice(0, 200).map((f) => `  · ${f.path}${f.dir ? '/' : ''}`)),
+      }
+    }
+
+    case 'buscar_archivos': {
+      const texto = String(A.texto || '').trim()
+      if (!texto) return { ask: '¿Qué archivo buscas? Dime aunque sea un trozo del nombre.' }
+      const dentro = carpetaDe(db, A)
+      const r = await api.search(texto, dentro).catch((e) => ({ error: e.message }))
+      if (r.error) return { text: `No he podido buscar: ${r.error}` }
+      const hits = r.items || []
+      if (!hits.length) {
+        return { text: `No hay ningún archivo ni carpeta que se llame algo parecido a "${texto}"${dentro ? ` dentro de ${dentro}` : ''}.` }
+      }
+      return {
+        text: `${hits.length} resultado${hits.length === 1 ? '' : 's'} para "${texto}":\n` +
+          list(hits.slice(0, 40).map((f) => `  · ${f.path}${f.dir ? '/ (carpeta)' : ''}`)),
       }
     }
 
     case 'leer_documento': {
-      let ruta = String(A.nombre || '').trim()
-      if (!ruta && doc?.path) ruta = doc.path
-      if (!ruta) {
-        return { ask: '¿Qué documento quieres que lea? Dime el nombre, o ábrelo en el espacio de trabajo y vuelve a preguntarme.' }
+      const ruta = await resolverArchivo(db, A, doc)
+      if (ruta.ask) return ruta
+      const r = await api.extract(ruta.path).catch((e) => ({ error: e.message }))
+      if (r.error || typeof r.texto !== 'string') {
+        return { text: `No he podido leer "${ruta.path}": ${r.error || 'formato desconocido'}.` }
       }
-      if (!ruta.includes('/')) {
-        const carpeta = carpetaDe(db, A) || doc?.path?.split('/').slice(0, -1).join('/') || ''
-        const r = carpeta ? await api.tree(carpeta).catch(() => null) : null
-        const hit = r && aplanar(r.items || []).find((f) => !f.dir && norm(f.name) === norm(ruta))
-          || (r && aplanar(r.items || []).find((f) => !f.dir && norm(f.name).includes(norm(ruta))))
-        if (hit) ruta = hit.path
+      if (!r.texto.trim()) {
+        return {
+          text: `"${ruta.path}" no tiene texto que se pueda sacar. Si es un PDF escaneado, son imágenes de las páginas y haría falta reconocimiento de texto.`,
+        }
       }
-      const r = await api.readText(ruta).catch((e) => ({ error: e.message }))
-      if (r.error || typeof r.content !== 'string') {
-        return { text: `No he podido leer "${ruta}": ${r.error || 'no es un archivo de texto'}. Los PDF y las imágenes no los puedo abrir.` }
-      }
-      const recorte = r.content.length > 12000
-      return {
-        text: `Contenido de ${ruta}${recorte ? ' (recortado a los primeros 12.000 caracteres)' : ''}:\n\n${r.content.slice(0, 12000)}`,
-      }
+      const cabecera = [
+        `Contenido de ${ruta.path}`,
+        r.paginas ? `${r.paginas} páginas` : '',
+        r.recortado ? 'recortado, es largo' : '',
+      ].filter(Boolean).join(' · ')
+      return { text: `${cabecera}:\n\n${r.texto}` }
     }
 
     /* -------------------------------------------------------- modificaciones */
@@ -948,6 +1048,57 @@ export async function runTool(name, args = {}, ctx) {
       }
     }
 
+    /* ------------------------------------------------- archivos y carpetas */
+
+    case 'crear_carpeta': {
+      const limpio = (x) => String(x || '').split('/').map((t) => t.trim().replace(/[\\:*?"<>|]/g, '-')).filter(Boolean).join('/')
+      const ruta = [limpio(A.dentro_de), limpio(A.ruta)].filter(Boolean).join('/')
+      if (!ruta) return { ask: '¿Cómo quieres que se llame la carpeta, y dónde la meto?' }
+      const r = await api.mkdir(ruta).catch((e) => ({ error: e.message }))
+      if (r.error) return { text: `No he podido crear la carpeta: ${r.error}` }
+      return {
+        text: `Creada la carpeta ${ruta}.`,
+        action: { op: 'carpeta', id: uid('fs'), summary: `Carpeta · ${ruta}`, href: `#/archivos/${ruta}` },
+      }
+    }
+
+    case 'mover_archivo': {
+      const origen = await resolverArchivo(db, { ...A, nombre: A.que }, doc)
+      if (origen.ask) return origen
+      const destino = String(A.a_carpeta || '').trim().replace(/^\/+|\/+$/g, '')
+      if (!destino) return { ask: `¿A qué carpeta muevo "${origen.path}"?` }
+      // La carpeta destino puede no existir todavía: crearla es lo que él
+      // querría, y es lo que hace cualquiera al arrastrar algo a un sitio nuevo.
+      await api.mkdir(destino).catch(() => {})
+      const r = await api.move(origen.path, destino).catch((e) => ({ error: e.message }))
+      if (r.error) return { text: `No he podido mover "${origen.path}": ${r.error}` }
+      return {
+        text: `Movido ${origen.path} a ${destino}/.`,
+        action: {
+          op: 'mover', id: uid('fs'), de: origen.path, a: r.path,
+          summary: `Movido · ${origen.path.split('/').pop()} → ${destino}/`,
+          href: `#/archivos/${destino}`,
+        },
+      }
+    }
+
+    case 'guardar_nota': {
+      const contenido = String(A.contenido || '')
+      if (!contenido.trim()) return { ask: '¿Qué quieres que escriba dentro?' }
+      let nombre = String(A.nombre || '').trim().replace(/[\\/:*?"<>|]/g, '-')
+      if (!nombre) return { ask: '¿Cómo llamo al archivo?' }
+      if (!/\.[a-z0-9]{1,5}$/i.test(nombre)) nombre += '.md'
+      const carpeta = String(A.carpeta || carpetaDe(db, A) || doc?.dir || '').replace(/^\/+|\/+$/g, '')
+      if (carpeta) await api.mkdir(carpeta).catch(() => {})
+      const ruta = carpeta ? `${carpeta}/${nombre}` : nombre
+      const r = await api.writeText(ruta, contenido).catch((e) => ({ error: e.message }))
+      if (r.error) return { text: `No he podido guardarlo: ${r.error}` }
+      return {
+        text: `Guardado en ${ruta}.`,
+        action: { op: 'archivo', id: uid('fs'), summary: `Guardado · ${ruta}`, href: `#/archivos/${carpeta}` },
+      }
+    }
+
     case 'borrar': {
       const lista = LISTA[A.tipo]
       if (!lista) return { text: `No sé borrar cosas del tipo "${A.tipo}".` }
@@ -996,6 +1147,51 @@ function pregunta(que, faltan) {
   return `Antes de crear ${que} necesito un par de cosas: ${faltan.slice(0, -1).join(', ')} y ${ultimo}.`
 }
 
+/**
+ * De «el PDF de integrales» a una ruta de verdad.
+ *
+ * Antes solo valía el nombre exacto dentro de la carpeta de la asignatura, y el
+ * ayudante contestaba que no lo encontraba a cosas que estaban ahí. Ahora se
+ * mira, por este orden: la ruta tal cual, la carpeta que se le indique, la que
+ * está mirando, y por último una búsqueda en todo el directorio.
+ */
+async function resolverArchivo(db, A, doc) {
+  const pedido = String(A.nombre || A.que || '').trim()
+  if (!pedido) {
+    if (doc?.path) return { path: doc.path }
+    return { ask: '¿Qué documento? Dime el nombre, o ábrelo y vuelve a preguntarme.' }
+  }
+
+  // Una ruta completa que existe no hay que buscarla.
+  if (pedido.includes('/')) {
+    const existe = await api.list(pedido.split('/').slice(0, -1).join('/')).catch(() => null)
+    const hit = (existe?.items || []).find((f) => norm(f.name) === norm(pedido.split('/').pop()))
+    if (hit) return { path: hit.path }
+  }
+
+  const cerca = [carpetaDe(db, A), doc?.dir].filter(Boolean)
+  for (const carpeta of cerca) {
+    const r = await api.tree(carpeta).catch(() => null)
+    const todos = aplanar(r?.items || []).filter((f) => !f.dir)
+    const hit = todos.find((f) => norm(f.name) === norm(pedido)) || todos.find((f) => norm(f.name).includes(norm(pedido)))
+    if (hit) return { path: hit.path }
+  }
+
+  const sinExt = pedido.replace(/\.[^.]+$/, '')
+  const r = await api.search(sinExt, carpetaDe(db, A)).catch(() => null)
+  const hits = (r?.items || []).filter((f) => !f.dir)
+  if (hits.length === 1) return { path: hits[0].path }
+  if (hits.length > 1) {
+    const exacto = hits.find((f) => norm(f.name) === norm(pedido))
+    if (exacto) return { path: exacto.path }
+    return {
+      ask: `Hay varios que se llaman parecido a "${pedido}". ¿Cuál?\n` +
+        hits.slice(0, 8).map((f) => `· ${f.path}`).join('\n'),
+    }
+  }
+  return { ask: `No encuentro ningún archivo que se llame "${pedido}". ¿Cómo se llama exactamente, o en qué carpeta está?` }
+}
+
 function carpetaDe(db, A) {
   if (A.carpeta) return String(A.carpeta)
   const s = A.asignatura ? findSubject(db, A.asignatura) : null
@@ -1013,8 +1209,23 @@ function aplanar(items, out = []) {
   return out
 }
 
-/** Deshacer lo que el ayudante acaba de hacer, sea crear, borrar o cambiar. */
-export function undoAction(a, update) {
+/** Qué tarjetas del ayudante se pueden deshacer. */
+export const sePuedeDeshacer = (a) => a.op !== 'carpeta' && a.op !== 'archivo'
+
+/**
+ * Deshacer lo que el ayudante acaba de hacer.
+ *
+ * Es asíncrona porque mover un archivo se deshace moviéndolo de vuelta, y eso
+ * es un viaje al disco. Crear una carpeta o escribir un archivo no se deshacen:
+ * borrar cosas del disco «por si acaso» es exactamente lo que no debe hacer una
+ * app con tus apuntes dentro.
+ */
+export async function undoAction(a, update) {
+  if (a.op === 'mover') {
+    const volver = a.de.split('/').slice(0, -1).join('/')
+    await api.move(a.a, volver)
+    return
+  }
   update((d) => {
     if (a.op === 'crear') d[a.list] = (d[a.list] || []).filter((x) => x.id !== a.id)
     else if (a.op === 'borrar') {
@@ -1042,6 +1253,9 @@ export function undoAction(a, update) {
  * El modelo no puede consultar la base de datos por su cuenta, así que arranca
  * sabiendo dónde está parado: fecha, asignaturas y qué hay encima de la mesa.
  */
+const horasVoluntariado = (db) =>
+  ((db.volunteerDays || []).reduce((a, d) => a + (Number(d.minutes) || 0), 0) / 60).toFixed(1)
+
 export function systemPrompt(db, { doc = null } = {}) {
   const wp = weekProgress(db)
   const { from, to } = termWindow(db)
@@ -1062,13 +1276,27 @@ export function systemPrompt(db, { doc = null } = {}) {
       ? `Asignaturas: ${db.subjects.map((s) => `${s.name}${s.code ? ` (${s.code})` : ''}`).join(', ')}.`
       : 'Todavía no hay asignaturas creadas.',
     db.projects.length ? `Proyectos de trabajo: ${db.projects.map((p) => p.name).join(', ')}.` : '',
+    (db.volunteering || []).length
+      ? `Voluntariado: colabora con ${db.volunteering.map((v) => v.name).join(', ')}, ${horasVoluntariado(db)} h apuntadas.`
+      : '',
     exams.length ? `Exámenes próximos: ${exams.slice(0, 5).map((e) => `${e.title} de ${e.subject?.name} el ${e.date}`).join('; ')}.` : '',
-    doc ? `Ahora mismo tiene abierto el documento "${doc.name}" (${doc.path}). Cuando diga «este documento» o «esto», se refiere a ese: léelo con leer_documento sin argumentos.` : '',
+    '',
+    'Sus archivos:',
+    '- Todo vive en carpetas dentro de su directorio de trabajo. PUEDES leerlas, buscar en ellas, crear carpetas, mover archivos y escribir notas.',
+    '- Sabes leer texto, apuntes, código, PDF y Word. Un PDF escaneado no, porque son imágenes.',
+    doc?.dir !== undefined && doc?.dir !== null
+      ? `- Ahora mismo está en la carpeta "${doc.dir || 'la raíz del directorio'}". Cuando diga «aquí», es esa.`
+      : '',
+    doc?.path
+      ? `- Y tiene delante el documento "${doc.name}" (${doc.path}). Cuando diga «este documento» o «esto», es ese: léelo con leer_documento sin argumentos.`
+      : '',
     '',
     'Cómo trabajas:',
     '- Responde SIEMPRE en español, en segunda persona y sin rodeos. Dos o tres frases salvo que te pidan más.',
     '- No todo necesita herramienta. Una opinión, una duda de temario, ayuda a redactar o una charla se contestan directamente, con tu propio criterio. NUNCA digas «no tengo una función para eso»: si no hay herramienta, contesta igual.',
-    '- Para cualquier dato concreto de su vida (faltas, horas, fechas, tareas, entrenos) sí usa las herramientas. No te inventes números nunca.',
+    '- Para cualquier dato concreto de su vida (faltas, horas, fechas, tareas, entrenos, voluntariado) sí usa las herramientas. No te inventes números nunca.',
+    '- Si nombra un documento y no sabes dónde está, BÚSCALO con buscar_archivos antes de decir nada. Que no sepas la ruta no es motivo para decirle que no puedes.',
+    '- Si te pide ordenar, guardar algo en su sitio o hacer sitio para algo, hazlo: crear_carpeta y mover_archivo están para eso.',
     '- NO RELLENES NINGÚN CAMPO QUE ÉL NO TE HAYA DICHO. Si no ha dicho la asignatura, no pongas asignatura. Si no ha dicho el título, no te lo inventes a partir de su frase: deja el campo vacío y la herramienta te dirá qué preguntar.',
     '- Cuando una herramienta te pida datos que faltan, hazle esa pregunta y espera. No vuelvas a llamar a la herramienta hasta que te conteste.',
     '- Cuando hables de faltas, di cuántas lleva, cuántas le quedan y de cuántas clases sale el cálculo.',

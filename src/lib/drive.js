@@ -177,6 +177,26 @@ export async function listarCarpetas(nombre = '') {
   return salida
 }
 
+/**
+ * ¿Este archivo cuelga de la carpeta de prolife?
+ *
+ * Drive no tiene rutas, así que la única forma de saberlo es subir por los
+ * padres hasta dar con la raíz. `vistos` va guardando los que ya se sabe que
+ * sí, para que buscar doscientos archivos no sean doscientas escaladas.
+ */
+async function bajoLaRaiz(f, vistos, saltos = 0) {
+  if (saltos > 8) return false
+  for (const padre of f.parents || []) {
+    if (vistos.has(padre)) return true
+    const info = await json(`${API}/files/${padre}?fields=id,parents`).catch(() => null)
+    if (info && (await bajoLaRaiz(info, vistos, saltos + 1))) {
+      vistos.add(padre)
+      return true
+    }
+  }
+  return false
+}
+
 /** Un hijo concreto de una carpeta, por nombre. `null` si no está. */
 async function hijo(padreId, nombre) {
   const q = `name = '${escapar(nombre)}' and '${padreId}' in parents and trashed = false`
@@ -434,6 +454,65 @@ export const drive = {
     })
     olvidarRuta(p)
     return { ok: true }
+  },
+
+  /** Cambiar de carpeta. En Drive no es mover: es cambiarle el padre. */
+  move: async (p, to) => {
+    const f = await resolver(p)
+    if (!f) throw new DriveError(`No se encuentra ${p}`, 404)
+    const destino = await resolver(to || '')
+    if (!destino) throw new DriveError(`No se encuentra la carpeta ${to}`, 404)
+    const padres = await json(`${API}/files/${f.id}?fields=parents`)
+    await json(
+      `${API}/files/${f.id}?addParents=${destino.id}` +
+        `&removeParents=${encodeURIComponent((padres.parents || []).join(','))}&fields=id,parents`,
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+    )
+    olvidarRuta(p)
+    olvidarRuta(to)
+    return { ok: true, path: `${to ? to + '/' : ''}${f.name}` }
+  },
+
+  /**
+   * Buscar por nombre. Aquí sale gratis: Drive tiene índice y contesta él.
+   *
+   * Se acota a la carpeta de prolife recorriendo hacia arriba los padres de
+   * cada resultado, porque la consulta de Drive busca en todo el Drive y ahí
+   * hay mucho que no es de la app.
+   */
+  search: async (q, dentro = '') => {
+    const texto = String(q || '').trim()
+    if (!texto) return { ok: true, items: [] }
+    const base = dentro ? await resolver(dentro) : { id: raizGuardada() }
+    if (!base) return { ok: true, items: [] }
+    const r = await json(
+      `${API}/files?q=${encodeURIComponent(`name contains '${escapar(texto)}' and trashed = false`)}` +
+        '&fields=files(id,name,mimeType,size,modifiedTime,parents)&pageSize=200'
+    )
+    const dentroDe = new Set([base.id])
+    const items = []
+    for (const f of r.files || []) {
+      if (f.name.startsWith('.')) continue
+      if (!(await bajoLaRaiz(f, dentroDe))) continue
+      items.push({
+        name: f.name,
+        path: f.name,
+        dir: f.mimeType === CARPETA,
+        size: Number(f.size) || 0,
+        modified: Date.parse(f.modifiedTime) || 0,
+      })
+    }
+    return { ok: true, items }
+  },
+
+  /** En la tablet no hay motor de PDF: se lee lo que sea texto y ya. */
+  extract: async (p) => {
+    const f = await resolver(p)
+    if (!f) throw new DriveError(`No se encuentra ${p}`, 404)
+    if (/\.(pdf|docx)$/i.test(p)) {
+      throw new DriveError('Los PDF y los Word solo se pueden leer desde el ordenador.', 415)
+    }
+    return { ok: true, path: p, texto: await descargar(f.id).then((r) => r.text()), recortado: false }
   },
 
   /**

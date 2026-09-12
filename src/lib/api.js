@@ -106,7 +106,12 @@ const apiServidor = {
   readText: (p) => req(`/api/fs/text?p=${encodeURIComponent(p)}`),
   writeText: (p, content) => req('/api/fs/text', { method: 'PUT', body: { p, content } }),
   rename: (p, name) => req('/api/fs/rename', { method: 'POST', body: { p, name } }),
+  move: (p, to) => req('/api/fs/move', { method: 'POST', body: { p, to } }),
   remove: (p) => req('/api/fs/delete', { method: 'POST', body: { p } }),
+  /** El texto de un archivo aunque sea PDF o Word; para leerlo, no para editarlo. */
+  extract: (p) => req(`/api/fs/extract?p=${encodeURIComponent(p)}`),
+  search: (q, p = '', leibles = false) =>
+    req(`/api/fs/buscar?q=${encodeURIComponent(q)}&p=${encodeURIComponent(p)}${leibles ? '&leibles=1' : ''}`),
 
   upload: (p, files) => {
     const fd = new FormData()
@@ -180,7 +185,10 @@ const apiDrive = {
   readText: (p) => drive.readText(p),
   writeText: (p, content) => drive.writeText(p, content),
   rename: (p, name) => drive.rename(p, name),
+  move: (p, to) => drive.move(p, to),
   remove: (p) => drive.remove(p),
+  extract: (p) => drive.extract(p),
+  search: (q, p, leibles) => drive.search(q, p, leibles),
   upload: (p, files) => drive.upload(p, files),
 
   // Sin servidor no hay URL que valga: hay que traerse los bytes.

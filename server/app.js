@@ -15,6 +15,7 @@ import * as vscode from './code.js'
 import * as assistant from './assistant.js'
 import * as tailscale from './tailscale.js'
 import { applyOp } from './ops.js'
+import { extraerTexto, puedeLeer } from './leer.js'
 
 const KIND = {
   '.pdf': 'pdf',
@@ -624,6 +625,119 @@ export function createApp() {
       const stream = fs.createReadStream(abs, range ? { start, end } : undefined)
       stream.on('error', () => { if (!res.headersSent) res.status(500).end(); else res.destroy() })
       stream.pipe(res)
+    })
+  )
+
+  /**
+   * El texto de un archivo, venga de donde venga: `.md`, `.txt`, código, un PDF
+   * o un Word. Es lo que usa el ayudante para poder leer lo que tienes ahí.
+   *
+   * Aparte de `/api/fs/text` a propósito: aquel devuelve lo que hay escrito en
+   * el fichero y se puede volver a guardar encima; esto devuelve una lectura, y
+   * guardarla encima de un PDF lo destruiría.
+   */
+  app.get(
+    '/api/fs/extract',
+    wrap(async (req, res) => {
+      const rel = req.query.p || ''
+      const abs = safeJoin(cfg.baseDir, rel)
+      // `exists` de aquí arriba pregunta si es una CARPETA, y esto son archivos.
+      if (!fs.existsSync(abs)) throw Object.assign(new Error('Ese archivo no está'), { status: 404 })
+      if (fs.statSync(abs).isDirectory()) throw Object.assign(new Error('Eso es una carpeta'), { status: 400 })
+      const r = await extraerTexto(abs, path.basename(abs))
+      res.json({ ok: true, path: String(rel).split(path.sep).join('/'), ...r })
+    })
+  )
+
+  /**
+   * Buscar por nombre en todo el directorio.
+   *
+   * Sin esto, encontrar algo exigía saber ya en qué carpeta estaba, que es justo
+   * lo que no sabes cuando lo buscas. Se salta `.prolife` y las carpetas
+   * ocultas, y corta a los 300 resultados: es una caja de búsqueda, no un
+   * inventario.
+   */
+  app.get(
+    '/api/fs/buscar',
+    wrap((req, res) => {
+      const q = String(req.query.q || '').trim().toLowerCase()
+      const dentro = String(req.query.p || '')
+      const soloTexto = req.query.leibles === '1'
+      if (!q) return res.json({ ok: true, items: [] })
+
+      const raiz = safeJoin(cfg.baseDir, dentro)
+      if (!exists(raiz)) return res.json({ ok: true, items: [] })
+      const items = []
+
+      const walk = (abs, rel, depth) => {
+        if (depth > 8 || items.length >= 300) return
+        let hijos = []
+        try { hijos = fs.readdirSync(abs, { withFileTypes: true }) } catch { return }
+        for (const d of hijos) {
+          if (d.name.startsWith('.')) continue
+          if (items.length >= 300) return
+          const childAbs = path.join(abs, d.name)
+          const childRel = path.join(rel, d.name)
+          let info = null
+          try { info = entryInfo(childAbs, childRel, d.name) } catch { continue }
+          if (d.name.toLowerCase().includes(q) && (!soloTexto || info.dir || puedeLeer(d.name))) items.push(info)
+          if (info.dir) walk(childAbs, childRel, depth + 1)
+        }
+      }
+      walk(raiz, dentro, 0)
+      // Las carpetas primero y lo más reciente antes: buscando algo, lo de la
+      // semana pasada es casi siempre lo que buscas.
+      items.sort((a, b) => (a.dir === b.dir ? b.modified - a.modified : a.dir ? -1 : 1))
+      res.json({ ok: true, items })
+    })
+  )
+
+  /**
+   * Mover algo a otra carpeta. Renombrar cambia el nombre en su sitio; esto
+   * cambia de sitio.
+   *
+   * `fs.renameSync` no vale entre discos distintos —y el directorio de trabajo
+   * puede estar en uno y la carpeta destino en otro dentro de la misma unidad
+   * lógica, según cómo tenga montado Drive—, así que se reintenta copiando.
+   */
+  app.post(
+    '/api/fs/move',
+    wrap((req, res) => {
+      const from = safeJoin(cfg.baseDir, req.body.p)
+      const destDir = safeJoin(cfg.baseDir, req.body.to || '')
+      if (path.resolve(from) === path.resolve(cfg.baseDir)) {
+        throw Object.assign(new Error('No se puede mover la raíz'), { status: 403 })
+      }
+      if (!fs.existsSync(from)) throw Object.assign(new Error('Eso ya no está'), { status: 404 })
+      if (!exists(destDir)) throw Object.assign(new Error('El destino no es una carpeta'), { status: 400 })
+      // Meter una carpeta dentro de sí misma la haría desaparecer: el sistema
+      // deja hacerlo en algunos casos y el resultado no tiene arreglo.
+      const dentroDeSiMisma =
+        fs.statSync(from).isDirectory() &&
+        (path.resolve(destDir) === path.resolve(from) ||
+          path.resolve(destDir).startsWith(path.resolve(from) + path.sep))
+      if (dentroDeSiMisma) throw Object.assign(new Error('Una carpeta no puede ir dentro de sí misma'), { status: 400 })
+
+      const nombre = path.basename(from)
+      let destino = path.join(destDir, nombre)
+      if (path.resolve(destino) === path.resolve(from)) {
+        return res.json({ ok: true, path: String(req.body.p).split(path.sep).join('/'), sinCambios: true })
+      }
+      // Nunca se pisa lo que ya hubiera con ese nombre: se numera, igual que al subir.
+      let i = 1
+      while (fs.existsSync(destino)) {
+        const ext = path.extname(nombre)
+        const base = path.basename(nombre, ext)
+        destino = path.join(destDir, `${base} (${i++})${ext}`)
+      }
+      try {
+        fs.renameSync(from, destino)
+      } catch (e) {
+        if (e.code !== 'EXDEV') throw e
+        fs.cpSync(from, destino, { recursive: true })
+        fs.rmSync(from, { recursive: true, force: true })
+      }
+      res.json({ ok: true, path: path.relative(cfg.baseDir, destino).split(path.sep).join('/') })
     })
   )
 

@@ -163,7 +163,14 @@ medir el tiempo ya no obliga a trabajar aquí dentro.
 - **Maximizar** un panel con doble clic en su barra de pestañas.
 - Word, Excel y PowerPoint se abren directamente con su programa al pulsarlos en el árbol
   (igual que los `.zip`): convertirlos aquí destrozaría el formato.
-- Se arrastran archivos sobre la ventana para subirlos. El filtro del árbol busca por nombre.
+- **Ordenar sin salir a Windows.** Toca una carpeta y queda elegida: lo que crees o subas va
+  ahí, y arriba del árbol se lee siempre en qué carpeta caerá. Cada carpeta tiene además su
+  botón de *carpeta nueva aquí dentro* y de *subir aquí*, así que anidar carpetas es un clic.
+- **Arrastrar para mover.** Un archivo o una carpeta se llevan a otra carpeta arrastrándolos
+  por el árbol, y las pestañas que lo tuvieran abierto siguen apuntando bien. Si ya hay algo
+  con ese nombre, lo numera en vez de pisarlo, y una carpeta no puede acabar dentro de sí
+  misma. Soltar archivos del escritorio encima de una carpeta los sube **a esa**.
+- El filtro del árbol busca por nombre.
 - Disposición, tamaños y pestañas se recuerdan por espacio, y viajan al otro ordenador
   dentro del `db.json`: abres la asignatura en la universidad y te encuentras los mismos
   paneles que dejaste en casa.
@@ -221,20 +228,27 @@ asignatura y desglosado en Estadísticas.
 `Ctrl+I` abre un ayudante que habla con [Ollama](https://ollama.com) corriendo en tu propio
 ordenador. Nada de lo que le digas sale de la máquina.
 
-Conoce tus asignaturas, tu horario, tus faltas, tus horas, tus proyectos, tus entrenos y
-los documentos de tus carpetas, así que se le puede preguntar de verdad:
+Conoce tus asignaturas, tu horario, tus faltas, tus horas, tus proyectos, tus entrenos, tu
+voluntariado **y tus archivos**, así que se le puede preguntar de verdad:
 
 - *«¿cuántas faltas más me puedo permitir?»* → «llevas 1 de 8, quedan 21 clases y exigen el
   70%: puedes faltar a 7 más».
 - *«¿cómo llevo la semana?»*, *«¿qué tengo para los próximos 7 días?»*
-- *«resume el documento que tengo abierto»* → lee el archivo que tienes delante en el
-  espacio de trabajo y te contesta sobre él.
+- *«¿de qué va el tema 3?»* → lo busca por el nombre, lo abre y te contesta. **Lee PDF y
+  Word (.docx)**, no solo apuntes en texto. Un PDF escaneado no: eso son imágenes.
+- *«¿dónde tengo la memoria de prácticas?»* → busca en todo el directorio; no hace falta que
+  sepas en qué carpeta la dejaste.
+- *«resume este documento»*, *«¿qué hay aquí?»* → «esto» y «aquí» son el archivo y la carpeta
+  que tengas delante en Archivos, no hace falta explicárselo.
+- *«crea una carpeta Tema 3 y mete ahí el PDF»* → la crea y lo mueve.
+- *«guárdame el resumen en Cálculo»* → escribe el archivo.
 - *«créame un proyecto que se llame Nautilos»*, *«pon la asistencia de Desarrollo web al
   80%»*, *«apunta series, 75 minutos, RPE 8»*, *«bórralo»*.
 
-Puede consultar (asignaturas, proyectos, semana, agenda, horario, atletismo, documentos) y
-puede escribir: tareas, exámenes, eventos, proyectos, asignaturas, tiempo, entrenos,
-asistencia, los objetivos de Ajustes, y borrar lo que se haya equivocado.
+Puede consultar (asignaturas, proyectos, semana, agenda, horario, atletismo, voluntariado,
+carpetas, contenido de documentos, búsqueda por nombre) y puede escribir: tareas, exámenes,
+eventos, proyectos, asignaturas, tiempo, entrenos, asistencia, los objetivos de Ajustes,
+carpetas, notas, mover archivos, y borrar lo que se haya equivocado.
 
 **Lo que no sabe, lo pregunta.** Un modelo pequeño prefiere rellenar un hueco antes que
 admitir que le falta un dato: si le dices *«añádeme una tarea para el viernes»* se inventa
@@ -253,8 +267,9 @@ todo necesita herramienta: una opinión, una duda de temario o ayuda a redactar 
 directamente.
 
 Todo lo que crea, cambia o borra aparece en el chat con un botón de **deshacer** —también
-los borrados, que se restauran enteros—, y en Ajustes se le puede quitar el permiso de
-escribir.
+los borrados, que se restauran enteros, y los archivos movidos, que vuelven a su carpeta—, y
+en Ajustes se le puede quitar el permiso de escribir. Lo único sin deshacer es crear una
+carpeta o escribir una nota: borrar cosas de tu disco «por si acaso» no es cosa suya.
 
 Necesita Ollama instalado y un modelo descargado:
 

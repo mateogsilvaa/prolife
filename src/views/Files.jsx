@@ -31,8 +31,16 @@ export default function Files({ path = '' }) {
     <div className="ws-shell">
       <header className="ws-head">
         <Icon name="folder" size={15} />
-        <h2>Archivos</h2>
-        <span className="mono dim" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>{config?.baseDir}</span>
+        <h2 style={{ flexShrink: 0 }}>Archivos</h2>
+        {/* La ruta cede sitio antes que el título: con una ruta larga, «Archivos»
+            se quedaba en «A…» y la cabecera no decía ni en qué pantalla estabas. */}
+        <span
+          className="mono dim"
+          title={config?.baseDir}
+          style={{ fontSize: 11, minWidth: 0, flex: '0 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {config?.baseDir}
+        </span>
         <div className="spacer" />
         <div className="row wrap" style={{ gap: 4, justifyContent: 'flex-end' }}>
           {shortcuts.map((s) => (

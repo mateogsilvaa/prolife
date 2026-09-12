@@ -20,6 +20,10 @@ const LAYOUT_SYNC_MS = 1500
 const MAX_PANES = 3
 const emptyPane = () => ({ id: uid('p'), tabs: [], active: null })
 
+/** Todos los tramos de una ruta, para poder desplegar el árbol hasta ella. */
+const caminos = (p) =>
+  String(p || '').split('/').filter(Boolean).map((_, i, xs) => xs.slice(0, i + 1).join('/'))
+
 /**
  * Lo que no se puede enseñar aquí dentro sin destrozarlo: se lanza directamente
  * con el programa del sistema en vez de abrir una pestaña que solo dice eso.
@@ -80,6 +84,10 @@ export default function Workspace({ root }) {
   const [over, setOver] = useState(false)
   const [menu, setMenu] = useState(false)
   const [filter, setFilter] = useState('')
+  /** La carpeta elegida en el árbol: donde va lo próximo que se cree o se suba. */
+  const [sel, setSel] = useState(null)
+  /** A qué carpeta va lo que se elija en el diálogo de subir archivos. */
+  const destinoSubida = useRef(null)
 
   const input = useRef(null)
   const narrowRef = useRef(narrow)
@@ -382,20 +390,80 @@ export default function Workspace({ root }) {
 
   /* ------------------------------------------------------------ acciones */
 
-  const currentDir = useMemo(() => {
+  const abierta = useMemo(() => {
     const pane = panes[focusPane]
     const tab = pane?.tabs.find((t) => t.id === pane.active)
-    if (tab?.type !== 'file') return root
-    return tab.path.split('/').slice(0, -1).join('/') || root
-  }, [panes, focusPane, root])
+    if (tab?.type !== 'file') return null
+    return tab
+  }, [panes, focusPane])
+
+  /**
+   * Dónde va lo próximo que se cree o se suba.
+   *
+   * Antes salía del archivo que tuvieras abierto, y eso hacía imposible lo más
+   * normal: crear una carpeta dentro de otra sin haber abierto antes algo de
+   * dentro. Ahora manda la carpeta que hayas tocado en el árbol, que es donde
+   * estás mirando, y solo si no has tocado ninguna se cae al archivo abierto.
+   */
+  const currentDir = useMemo(() => {
+    if (sel != null) return sel
+    if (abierta) return abierta.path.split('/').slice(0, -1).join('/') || root
+    return root
+  }, [sel, abierta, root])
+
+  /**
+   * Lo que el usuario está mirando, para que el ayudante lo sepa.
+   *
+   * Vive en `localStorage` y no en la base porque se escribe a cada clic y
+   * porque es de este aparato: qué documento tengo delante ahora mismo no es
+   * un dato que deba viajar por Drive al otro ordenador.
+   */
+  useEffect(() => {
+    try {
+      localStorage.setItem('prolife.mirando', JSON.stringify({
+        path: abierta?.path || null,
+        name: abierta?.name || null,
+        dir: currentDir,
+        at: Date.now(),
+      }))
+    } catch { /* sin sitio: el ayudante se apaña sin saber dónde estás */ }
+  }, [abierta, currentDir])
 
   const upload = async (files, dirPath = currentDir) => {
     if (!files?.length) return
     try {
       const r = await api.upload(dirPath, files)
-      toast(`${r.files.length} archivo${r.files.length > 1 ? 's' : ''} guardado${r.files.length > 1 ? 's' : ''}`)
+      toast(`${r.files.length} archivo${r.files.length > 1 ? 's' : ''} en ${dirPath ? dirPath.split('/').pop() : 'la raíz'}`)
+      if (dirPath) setOpen((o) => new Set([...o, ...caminos(dirPath)]))
       await loadTree()
       if (r.files.length === 1 && !EXTERNAL_KINDS.has(r.files[0].kind)) openFile(r.files[0])
+    } catch (e) { toast(e.message, 'err') }
+  }
+
+  /**
+   * Mover algo a una carpeta arrastrándolo.
+   *
+   * Es la operación que faltaba para poder ordenar sin salir de la app: antes,
+   * meter un PDF en su carpeta había que hacerlo en el explorador de Windows.
+   */
+  const mover = async (desde, aCarpeta) => {
+    if (!desde || desde === aCarpeta) return
+    const suPadre = desde.split('/').slice(0, -1).join('/')
+    if (suPadre === aCarpeta) return
+    if (aCarpeta && (aCarpeta === desde || aCarpeta.startsWith(desde + '/'))) {
+      return toast('Una carpeta no puede ir dentro de sí misma', 'err')
+    }
+    try {
+      const r = await api.move(desde, aCarpeta)
+      setOpen((o) => new Set([...o, ...caminos(aCarpeta)]))
+      await loadTree()
+      // Las pestañas abiertas apuntaban a la ruta vieja: si no se corrigen,
+      // guardar desde una de ellas recrearía el archivo donde ya no está.
+      setPanes((ps) => ps.map((pane) => ({
+        ...pane,
+        tabs: pane.tabs.map((t) => (t.type === 'file' && t.path === desde ? { ...t, path: r.path } : t)),
+      })))
+      toast(`${desde.split('/').pop()} → ${aCarpeta ? aCarpeta.split('/').pop() : 'la raíz'}`)
     } catch (e) { toast(e.message, 'err') }
   }
 
@@ -414,13 +482,35 @@ export default function Workspace({ root }) {
     } catch (e) { toast(e.message, 'err') }
   }
 
-  const newFolder = async () => {
-    const name = await askFor({ title: 'Carpeta nueva', label: 'Nombre de la carpeta', placeholder: 'Tema 3' })
+  const newFolder = async (dentro = currentDir) => {
+    const name = await askFor({
+      title: 'Carpeta nueva',
+      label: dentro ? `Dentro de ${dentro}` : 'En la raíz del directorio',
+      placeholder: 'Tema 3',
+    })
     if (!name) return
+    const limpio = name.replace(/[\\/:*?"<>|]/g, '-').trim()
+    if (!limpio) return
+    const ruta = dentro ? `${dentro}/${limpio}` : limpio
     try {
-      await api.mkdir(inCurrentDir(name.replace(/[\\/:*?"<>|]/g, '-')))
+      await api.mkdir(ruta)
+      // Se despliega y se deja elegida: lo siguiente que uno hace al crear una
+      // carpeta es meterle algo dentro.
+      setOpen((o) => new Set([...o, ...caminos(ruta)]))
+      setSel(ruta)
       await loadTree()
     } catch (e) { toast(e.message, 'err') }
+  }
+
+  /**
+   * Abre el selector de archivos apuntando a una carpeta concreta.
+   *
+   * El `<input type=file>` no dice dónde hay que dejar lo elegido, así que el
+   * destino se guarda aquí hasta que vuelve el `change`.
+   */
+  const pedirArchivos = (carpeta) => {
+    destinoSubida.current = carpeta
+    input.current?.click()
   }
 
   const remove = async (file) => {
@@ -478,9 +568,20 @@ export default function Workspace({ root }) {
   return (
     <div
       className={`ws${narrow ? ' narrow' : ''}`}
-      onDragOver={(e) => { e.preventDefault(); setOver(true) }}
+      onDragOver={(e) => {
+        // Arrastrar un archivo DENTRO del árbol para moverlo no es soltar algo
+        // del escritorio: iluminar todo el panel ahí es mentir sobre el destino.
+        if (!e.dataTransfer.types?.includes('Files')) return
+        e.preventDefault()
+        setOver(true)
+      }}
       onDragLeave={() => setOver(false)}
-      onDrop={(e) => { e.preventDefault(); setOver(false); upload(e.dataTransfer.files) }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files?.length) return
+        e.preventDefault()
+        setOver(false)
+        upload(e.dataTransfer.files)
+      }}
     >
       {rail && narrow && <div className="ws-rail-back" onClick={() => setRail(false)} />}
       {rail && (
@@ -498,10 +599,36 @@ export default function Workspace({ root }) {
                 onChange={(e) => setFilter(e.target.value)}
               />
               <button className="btn ghost icon" title="Nueva nota" onClick={newNote}><Icon name="edit" size={13} /></button>
-              <button className="btn ghost icon" title="Nueva carpeta" onClick={newFolder}><Icon name="folder" size={13} /></button>
+              <button className="btn ghost icon" title="Carpeta nueva aquí" onClick={() => newFolder()}><Icon name="folder" size={13} /></button>
               <button className="btn ghost icon" title="Subir archivos" onClick={() => input.current?.click()}><Icon name="upload" size={13} /></button>
             </div>
-            <input ref={input} type="file" multiple hidden onChange={(e) => { upload(e.target.files); e.target.value = '' }} />
+            <input
+              ref={input}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                // La lista se copia antes de vaciar el input: vaciarlo vacía
+                // también su FileList, y la subida es asíncrona.
+                const elegidos = [...e.target.files]
+                const donde = destinoSubida.current ?? currentDir
+                destinoSubida.current = null
+                e.target.value = ''
+                upload(elegidos, donde)
+              }}
+            />
+
+            {/* Dónde va lo próximo. Sin esto, «nueva carpeta» era una lotería:
+                nada en pantalla decía en qué carpeta se iba a crear. */}
+            <button
+              className={`ws-destino${sel ? ' on' : ''}`}
+              title={sel ? 'Quitar la carpeta elegida' : 'Toca una carpeta del árbol para crear y subir dentro de ella'}
+              onClick={() => setSel(null)}
+            >
+              <Icon name="folder" size={11} />
+              <span className="ws-destino-ruta">{currentDir || 'raíz del directorio'}</span>
+              {sel && <Icon name="x" size={10} style={{ opacity: 0.6 }} />}
+            </button>
 
             <div className={`ws-tree${over ? ' over' : ''}`}>
               {treeError ? (
@@ -537,6 +664,11 @@ export default function Workspace({ root }) {
                   onSide={(f) => openFile(f, Math.min(panes.length, MAX_PANES - 1))}
                   onRename={rename}
                   onRemove={remove}
+                  onSelect={(p) => setSel((x) => (x === p ? null : p))}
+                  onNewIn={newFolder}
+                  onUploadIn={(carpeta, files) => (files ? upload(files, carpeta) : pedirArchivos(carpeta))}
+                  onMove={mover}
+                  sel={sel}
                   saved={saved}
                   activePaths={panes.flatMap((p) => p.tabs.filter((t) => t.type === 'file').map((t) => t.path))}
                   depth={0}
@@ -673,19 +805,59 @@ export default function Workspace({ root }) {
 
 /* ------------------------------------------------------------------ árbol */
 
-function Tree({ items, filter, open, toggle, onOpen, onSide, onRename, onRemove, activePaths, saved, depth }) {
+/**
+ * El árbol de carpetas, que ahora además se puede usar para ordenar.
+ *
+ * Tres cosas que antes no estaban y que eran justo las que obligaban a salirse
+ * de la app y hacerlo en el explorador de Windows: elegir una carpeta como
+ * destino, crear una dentro de otra sin rodeos, y arrastrar archivos de una
+ * carpeta a otra. Las carpetas admiten además que sueltes encima archivos del
+ * escritorio, y se suben ahí y no donde estuvieras.
+ */
+function Tree(props) {
+  const {
+    items, filter, open, toggle, onOpen, onSide, onRename, onRemove, onSelect, onNewIn, onUploadIn,
+    onMove, sel, activePaths, saved, depth,
+  } = props
+  const [encima, setEncima] = useState(null)
+
   const match = (it) => {
     if (!filter) return true
     if (it.name.toLowerCase().includes(filter)) return true
     return it.dir && (it.children || []).some(match)
   }
 
+  /** Lo que viene arrastrado: archivos del escritorio, o algo del propio árbol. */
+  const soltar = (carpeta) => (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setEncima(null)
+    if (e.dataTransfer.files?.length) return onUploadIn(carpeta, e.dataTransfer.files)
+    const desde = e.dataTransfer.getData('text/prolife-path')
+    if (desde) onMove(desde, carpeta)
+  }
+
   return items.filter(match).map((it) => (
     <div key={it.path}>
       <div
-        className={`ws-node${activePaths.includes(it.path) ? ' on' : ''}`}
+        className={`ws-node${activePaths.includes(it.path) ? ' on' : ''}${sel === it.path ? ' sel' : ''}${encima === it.path ? ' drop' : ''}`}
         style={{ paddingLeft: 8 + depth * 12 }}
-        onClick={() => (it.dir ? toggle(it.path) : onOpen(it))}
+        draggable
+        onDragStart={(e) => {
+          e.stopPropagation()
+          e.dataTransfer.setData('text/prolife-path', it.path)
+          e.dataTransfer.effectAllowed = 'move'
+        }}
+        onDragOver={it.dir ? (e) => { e.preventDefault(); e.stopPropagation(); setEncima(it.path) } : undefined}
+        onDragLeave={it.dir ? () => setEncima((x) => (x === it.path ? null : x)) : undefined}
+        onDrop={it.dir ? soltar(it.path) : undefined}
+        onClick={() => {
+          if (!it.dir) return onOpen(it)
+          // Un clic en una carpeta hace las dos cosas que uno espera: abrirla y
+          // dejarla elegida. Separarlas obligaría a explicar la diferencia.
+          onSelect(it.path)
+          toggle(it.path)
+        }}
       >
         {it.dir ? (
           <Icon name="chevronR" size={11} style={{ transform: open.has(it.path) || filter ? 'rotate(90deg)' : 'none', transition: 'transform .12s', opacity: 0.55 }} />
@@ -695,13 +867,15 @@ function Tree({ items, filter, open, toggle, onOpen, onSide, onRename, onRemove,
         <span className="ws-node-name">{it.name}</span>
         {saved?.has(it.path) && <span className="ws-offline-dot" title="Guardado: se puede abrir sin el ordenador" />}
         <span className="ws-node-actions">
+          {it.dir && <button title="Carpeta nueva aquí dentro" onClick={(e) => { e.stopPropagation(); onNewIn(it.path) }}><Icon name="plus" size={11} /></button>}
+          {it.dir && <button title="Subir archivos aquí" onClick={(e) => { e.stopPropagation(); onUploadIn(it.path) }}><Icon name="upload" size={11} /></button>}
           {!it.dir && <button title="Abrir al lado" onClick={(e) => { e.stopPropagation(); onSide(it) }}><Icon name="layers" size={11} /></button>}
           <button title="Renombrar" onClick={(e) => { e.stopPropagation(); onRename(it) }}><Icon name="edit" size={11} /></button>
           <button title="Eliminar" onClick={(e) => { e.stopPropagation(); onRemove(it) }}><Icon name="trash" size={11} /></button>
         </span>
       </div>
       {it.dir && (open.has(it.path) || filter) && it.children?.length > 0 && (
-        <Tree items={it.children} {...{ filter, open, toggle, onOpen, onSide, onRename, onRemove, activePaths, saved }} depth={depth + 1} />
+        <Tree {...props} items={it.children} depth={depth + 1} />
       )}
     </div>
   ))

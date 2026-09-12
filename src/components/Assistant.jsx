@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
 import { api } from '../lib/api.js'
 import { useStore } from '../lib/store.jsx'
-import { TOOL_SCHEMA, WRITE_TOOLS, runTool, undoAction, systemPrompt } from '../lib/assistantTools.js'
+import { TOOL_SCHEMA, WRITE_TOOLS, runTool, undoAction, sePuedeDeshacer, systemPrompt } from '../lib/assistantTools.js'
 import { startDrag } from '../lib/drag.js'
 
 /** Cuántas veces seguidas puede el modelo pedir herramientas antes de rendirse. */
@@ -10,38 +10,41 @@ const MAX_STEPS = 6
 
 const SUGGESTIONS = [
   '¿Cuántas faltas más me puedo permitir?',
-  '¿Cómo llevo la semana?',
   '¿Qué tengo pendiente para los próximos 7 días?',
-  'Resume el documento que tengo abierto',
+  'Resume el documento que tengo delante',
+  '¿Dónde tengo guardado el PDF de…?',
+  'Crea una carpeta Tema 3 aquí y mete ahí lo del tema 3',
 ]
 
 /**
- * Qué documento tiene delante ahora mismo.
+ * Qué está mirando ahora mismo: qué documento y en qué carpeta.
  *
- * Cuando dice «este documento» se refiere al que está abierto en el espacio de
- * trabajo. El espacio guarda sus pestañas en `localStorage` y, con retraso, en
- * el `db.json`: se mira primero el sitio que se escribe al instante.
+ * Antes esto solo funcionaba dentro del espacio de trabajo de una asignatura,
+ * y por eso «resume este documento» casi nunca acertaba: quien usa la app como
+ * organizador vive en Archivos, no en el espacio. Ahora el explorador —el
+ * mismo componente en los dos sitios— apunta en `localStorage` lo que tiene
+ * delante, y aquí se lee sin importar en qué pantalla esté.
+ *
+ * La carpeta importa tanto como el archivo: es lo que hace que «qué hay aquí»
+ * o «guárdame esto aquí» signifiquen algo.
  */
-function documentoAbierto(db) {
-  const parts = (window.location.hash || '').slice(1).split('?')[0].split('/').filter(Boolean).map(decodeURIComponent)
-  if (parts[0] !== 'espacio') return null
-  const [, kind, id] = parts
-  const entity =
-    kind === 'uni' ? db.subjects.find((s) => s.id === id)
-    : kind === 'trabajo' ? db.projects.find((p) => p.id === id)
-    : db.tasks.find((t) => t.id === id)
-  const root = entity?.folder
-  if (!root) return null
+/** Medio día. Pasado eso, «este documento» ya no se refiere a aquello. */
+const CADUCA_MS = 12 * 3600_000
 
-  let state = null
-  try { state = JSON.parse(localStorage.getItem('prolife.ws2:' + root) || 'null') } catch { state = null }
-  if (!state) state = db.workspaces?.[root] || null
-
-  for (const pane of state?.panes || []) {
-    const tab = pane.tabs?.find((t) => t.id === pane.active) || pane.tabs?.[pane.tabs.length - 1]
-    if (tab?.type === 'file' && tab.path) return { path: tab.path, name: tab.name || tab.path.split('/').pop() }
+function loQueMira() {
+  let m = null
+  try { m = JSON.parse(localStorage.getItem('prolife.mirando') || 'null') } catch { m = null }
+  if (!m) return null
+  // El archivo caduca y la carpeta no: que el ayudante resuma el PDF que
+  // miraste anteayer porque has dicho «esto» sería peor que preguntarte cuál.
+  // La carpeta, en cambio, es solo dónde buscar primero, y equivocarse ahí no
+  // cuesta nada.
+  const reciente = Date.now() - (Number(m.at) || 0) < CADUCA_MS
+  return {
+    path: reciente ? m.path || null : null,
+    name: reciente ? m.name || (m.path ? m.path.split('/').pop() : null) : null,
+    dir: m.dir || '',
   }
-  return null
 }
 
 /**
@@ -90,7 +93,7 @@ export default function Assistant({ open, onClose, width, setWidth }) {
     // Lo que el usuario ha escrito de verdad. Las herramientas lo usan para no
     // dejar pasar una asignatura o un proyecto que el modelo se haya inventado.
     const dicho = visible.filter((m) => m.role === 'user').map((m) => m.content).join(' \n ')
-    const doc = documentoAbierto(dbRef.current)
+    const doc = loQueMira()
 
     // Historial que ve el modelo: sin las tarjetas de acciones, que son cosa nuestra.
     const wire = [
@@ -148,8 +151,13 @@ export default function Assistant({ open, onClose, width, setWidth }) {
     }
   }
 
-  const undo = (action, i) => {
-    undoAction(action, update)
+  const undo = async (action, i) => {
+    try {
+      await undoAction(action, update)
+    } catch (e) {
+      toast('No se ha podido deshacer: ' + e.message, 'err')
+      return
+    }
     toast('Deshecho')
     setMsgs((m) => m.map((x, j) => (j === i ? { ...x, actions: x.actions.map((a) => (a.id === action.id ? { ...a, undone: true } : a)) } : x)))
   }
@@ -184,8 +192,9 @@ export default function Assistant({ open, onClose, width, setWidth }) {
           ) : msgs.length === 0 ? (
             <div className="chat-intro">
               <p className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>
-                Conoce tus asignaturas, tu horario, tus faltas y tus horas. Pregúntale, o dile que te
-                apunte algo. Corre entero en tu ordenador.
+                Conoce tus asignaturas, tu horario, tus faltas, tus horas y tu voluntariado. Lee tus
+                documentos —también los PDF y los Word—, busca archivos por el nombre y puede
+                ordenarte las carpetas. Corre entero en tu ordenador.
               </p>
               <div className="stack" style={{ gap: 5 }}>
                 {SUGGESTIONS.map((s) => (
@@ -238,7 +247,9 @@ function Bubble({ m, onUndo }) {
           <div key={a.id} className={`chat-action${a.undone ? ' undone' : ''}`}>
             <Icon name={a.undone ? 'x' : 'check'} size={12} />
             <a href={a.href} style={{ flex: 1, textDecoration: 'none' }}>{a.summary}</a>
-            {!a.undone && <button className="btn sm ghost" onClick={() => onUndo(a)}>Deshacer</button>}
+            {!a.undone && sePuedeDeshacer(a) && (
+              <button className="btn sm ghost" onClick={() => onUndo(a)}>Deshacer</button>
+            )}
           </div>
         ))}
       </div>

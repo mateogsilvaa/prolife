@@ -55,11 +55,13 @@
     "directories": {
       "output": "release"
     },
+    "npmRebuild": false,
     "files": [
       "dist/**",
       "electron/**",
       "server/**",
       "package.json",
+      "!node_modules/canvas/**",
       "!node_modules/pdfjs-dist/{build,cmaps,image_decoders,standard_fonts,types,web}/**",
       "!node_modules/pdfjs-dist/legacy/{image_decoders,web}/**",
       "!node_modules/pdfjs-dist/**/*.map",

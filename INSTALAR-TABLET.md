@@ -57,8 +57,9 @@ proyecto, arrastrar los eventos por el horario, la vista del calendario que se q
 la dejaste, los eventos que chocan puestos uno al lado del otro, el icono nuevo, y un
 ayudante que pregunta en vez de inventarse las cosas.
 
-> **Esta vez hay que actualizar los DOS ordenadores, no vale dejarlo a medias.** El
-> voluntariado añade datos nuevos al `db.json` y con ello sube el formato de la v4 a la v5.
+> **Esta vez hay que actualizar los DOS ordenadores, no vale dejarlo a medias.** Cada
+> versión que añade datos nuevos al `db.json` sube el formato — el voluntariado lo llevó a
+> la v5, y los cuatrimestres y festivos a la v6.
 > El ordenador que se quede sin actualizar lo detectará, te lo dirá con un aviso rojo y
 > **dejará de guardar** para no estropear nada — que es lo que tiene que hacer, pero mejor
 > saberlo antes que encontrárselo.

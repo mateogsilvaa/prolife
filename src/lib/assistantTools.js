@@ -3,7 +3,7 @@ import { today, iso, addDays, parseIso, startOfWeek, dur, DAYS_LONG, daysUntil }
 import { api } from './api.js'
 import {
   subjectStats, attendanceBudget, subjectWeek, weekProgress, classesOn,
-  upcomingExams, termWindow, classOccurrences,
+  upcomingExams, termWindow, classOccurrences, holidayOn, holidaysBetween, classesBetween,
 } from './stats.js'
 
 /**
@@ -413,6 +413,19 @@ export const TOOL_SCHEMA = [
   {
     type: 'function',
     function: {
+      name: 'marcar_festivo',
+      description:
+        'Marca uno o varios días como festivo o vacaciones: esos días no hay clase, así que no se agendan, no se puede faltar a ellas y no cuentan para la asistencia.',
+      parameters: P({
+        desde: FECHA,
+        hasta: S('Último día, si son varios. Vacío = solo un día.'),
+        nombre: S('Cómo lo llama, por ejemplo "Día de la Hispanidad" o "Semana Santa"'),
+      }, ['desde']),
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'crear_carpeta',
       description:
         'Crea una carpeta. Si la ruta lleva varios niveles ("Universidad/Cálculo/Tema 3"), crea los que falten.',
@@ -465,7 +478,7 @@ export const WRITE_TOOLS = new Set([
   'crear_tarea', 'completar_tarea', 'crear_proyecto', 'crear_asignatura', 'crear_examen',
   'crear_evento', 'registrar_tiempo', 'registrar_entreno', 'marcar_asistencia',
   'ajustar_asignatura', 'ajustar_objetivos', 'borrar',
-  'crear_carpeta', 'mover_archivo', 'guardar_nota',
+  'crear_carpeta', 'mover_archivo', 'guardar_nota', 'marcar_festivo',
 ])
 
 /* ---------------------------------------------------------- ejecución ---- */
@@ -1048,6 +1061,30 @@ export async function runTool(name, args = {}, ctx) {
       }
     }
 
+    case 'marcar_festivo': {
+      const desde = parseWhen(A.desde)
+      if (!desde) return { ask: A.desde ? `¿Qué día es "${A.desde}"?` : '¿Qué día quieres marcar como festivo?' }
+      const hasta = A.hasta ? parseWhen(A.hasta) : desde
+      if (!hasta) return { ask: `¿Hasta qué día? No sé qué fecha es "${A.hasta}".` }
+      if (hasta < desde) return { text: 'El último día es anterior al primero. Dile que revise las fechas.' }
+
+      const ya = holidayOn(db, desde)
+      if (ya && (ya.to || ya.from) >= hasta) {
+        return { text: `Esos días ya estaban marcados como "${ya.name || 'festivo'}". No he tocado nada.` }
+      }
+      // Cuántas clases quita: es lo que hace que se note si la fecha está mal.
+      const quita = classesBetween(db, desde, hasta)
+      const festivo = { id: uid('fest'), name: String(A.nombre || '').trim() || 'Festivo', from: desde, to: hasta }
+      update((d) => { d.holidays ||= []; d.holidays.push(festivo) })
+      const dias = desde === hasta ? `el ${desde}` : `del ${desde} al ${hasta}`
+      return {
+        text: `Marcado ${dias} como "${festivo.name}". ${
+          quita ? `Deja sin clase ${quita} ${quita === 1 ? 'hora de clase' : 'horas de clase'}, que ya no cuentan para la asistencia.` : 'Esos días no había clase de todos modos.'
+        }`,
+        action: creado('holidays', festivo, `Festivo · ${festivo.name} · ${dias}`, '#/calendario'),
+      }
+    }
+
     /* ------------------------------------------------- archivos y carpetas */
 
     case 'crear_carpeta': {
@@ -1261,6 +1298,8 @@ export function systemPrompt(db, { doc = null } = {}) {
   const { from, to } = termWindow(db)
   const hoy = parseIso(today())
   const clases = classesOn(db)
+  const hoyFestivo = holidayOn(db, today())
+  const proximosFestivos = holidaysBetween(db, today(), iso(addDays(new Date(), 60))).slice(0, 6)
   const exams = upcomingExams(db, 30)
 
   return [
@@ -1269,9 +1308,17 @@ export function systemPrompt(db, { doc = null } = {}) {
     '',
     `Hoy es ${DAYS_LONG[(hoy.getDay() + 6) % 7].toLowerCase()} ${today()}. El curso va del ${from} al ${to}.`,
     `Esta semana lleva hecho el ${wp.pct}% de su trabajo semanal (${dur(wp.seconds)} de ${wp.goal} h).`,
-    clases.length
+    hoyFestivo
+      ? `Hoy es festivo (${hoyFestivo.name || 'sin nombre'}): no hay clase y no cuenta para la asistencia.`
+      : clases.length
       ? `Hoy tiene clase de: ${clases.map((c) => `${c.subject.name} a las ${c.slot.start}`).join(', ')}.`
       : 'Hoy no tiene clases.',
+    (db.terms || []).length
+      ? `Cuatrimestres: ${db.terms.map((t) => `${t.name} (${t.from || '?'} → ${t.to || '?'})`).join('; ')}. Cada clase del horario pertenece a uno, así que una asignatura anual tiene clases en los dos y entre medias no hay ninguna.`
+      : '',
+    proximosFestivos.length
+      ? `Festivos y vacaciones que vienen: ${proximosFestivos.map((h) => `${h.name || 'festivo'} ${h.from}${(h.to || h.from) !== h.from ? ` → ${h.to}` : ''}`).join('; ')}. Esos días no hay clase y no cuentan para la asistencia.`
+      : '',
     db.subjects.length
       ? `Asignaturas: ${db.subjects.map((s) => `${s.name}${s.code ? ` (${s.code})` : ''}`).join(', ')}.`
       : 'Todavía no hay asignaturas creadas.',
@@ -1297,6 +1344,7 @@ export function systemPrompt(db, { doc = null } = {}) {
     '- Para cualquier dato concreto de su vida (faltas, horas, fechas, tareas, entrenos, voluntariado) sí usa las herramientas. No te inventes números nunca.',
     '- Si nombra un documento y no sabes dónde está, BÚSCALO con buscar_archivos antes de decir nada. Que no sepas la ruta no es motivo para decirle que no puedes.',
     '- Si te pide ordenar, guardar algo en su sitio o hacer sitio para algo, hazlo: crear_carpeta y mover_archivo están para eso.',
+    '- Si te dice que un día es festivo, que no hay clase o que son vacaciones, márcalo con marcar_festivo: es lo que hace que esas clases no le cuenten como faltas.',
     '- NO RELLENES NINGÚN CAMPO QUE ÉL NO TE HAYA DICHO. Si no ha dicho la asignatura, no pongas asignatura. Si no ha dicho el título, no te lo inventes a partir de su frase: deja el campo vacío y la herramienta te dirá qué preguntar.',
     '- Cuando una herramienta te pida datos que faltan, hazle esa pregunta y espera. No vuelvas a llamar a la herramienta hasta que te conteste.',
     '- Cuando hables de faltas, di cuántas lleva, cuántas le quedan y de cuántas clases sale el cálculo.',

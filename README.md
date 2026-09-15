@@ -242,13 +242,15 @@ voluntariado **y tus archivos**, así que se le puede preguntar de verdad:
   que tengas delante en Archivos, no hace falta explicárselo.
 - *«crea una carpeta Tema 3 y mete ahí el PDF»* → la crea y lo mueve.
 - *«guárdame el resumen en Cálculo»* → escribe el archivo.
+- *«el 12 de octubre es festivo»*, *«del 21 al 7 son vacaciones de Navidad»* → lo marca, y
+  esas clases dejan de contarte como faltas.
 - *«créame un proyecto que se llame Nautilos»*, *«pon la asistencia de Desarrollo web al
   80%»*, *«apunta series, 75 minutos, RPE 8»*, *«bórralo»*.
 
 Puede consultar (asignaturas, proyectos, semana, agenda, horario, atletismo, voluntariado,
 carpetas, contenido de documentos, búsqueda por nombre) y puede escribir: tareas, exámenes,
-eventos, proyectos, asignaturas, tiempo, entrenos, asistencia, los objetivos de Ajustes,
-carpetas, notas, mover archivos, y borrar lo que se haya equivocado.
+eventos, proyectos, asignaturas, tiempo, entrenos, asistencia, festivos, los objetivos de
+Ajustes, carpetas, notas, mover archivos, y borrar lo que se haya equivocado.
 
 **Lo que no sabe, lo pregunta.** Un modelo pequeño prefiere rellenar un hueco antes que
 admitir que le falta un dato: si le dices *«añádeme una tarea para el viernes»* se inventa
@@ -293,10 +295,22 @@ horaria: las clases del horario, los exámenes, los eventos y las entregas caen 
 - **El horario tiene fechas.** Cada clase vale entre un *desde* y un *hasta*; si los dejas
   vacíos hereda los del curso (Ajustes). Sin fecha de fin la clase se agendaría para siempre
   y no se podría contar cuántas faltas te puedes permitir, así que la app te lo avisa.
+- **Cuatrimestres.** Se definen una vez en Ajustes —cuándo acaba el primero, cuándo empieza
+  el segundo— y luego cada clase del horario dice a cuál pertenece. Así una **asignatura
+  anual** se apunta una sola vez y puede tener un horario en el primer cuatrimestre y otro
+  distinto en el segundo, sin repetir fechas en cada fila. Entre uno y otro, que es cuando
+  hay exámenes y vacaciones, no se agenda ninguna clase.
+- **Festivos y vacaciones.** Un día marcado como festivo **no tiene clase**: no es que la
+  clase salga y se perdone, es que no existe. No se agenda, no puedes faltar a ella y no
+  entra en el cálculo de la asistencia. Se marca desde el propio calendario, en el día que
+  estés mirando —y el botón te dice cuántas clases te quita antes de pulsarlo—, o en Ajustes
+  para rangos enteros como Navidad o Semana Santa. En el mes se ven rayados y con su nombre.
 - **Exámenes y entregas evaluables** por asignatura, con hora, aula, peso sobre la nota y la
   nota sacada. De ahí sale la nota provisional y cuánto llevas ya jugado.
 - **Faltas.** Pones la asistencia mínima exigida (general o por asignatura) y la app calcula
-  cuántas clases tiene el cuatrimestre, cuántas has faltado y **cuántas te quedan**.
+  cuántas clases tiene el cuatrimestre, cuántas has faltado y **cuántas te quedan** — ya
+  descontados los festivos, con la ficha diciéndote cuántas clases se llevaron, para que no
+  parezca que se han perdido.
 - **Categorías propias**: Salud, Conducir, Papeleo… con su color. Se crean sobre la marcha
   al añadir un evento o desde Ajustes.
 - **Repeticiones**: diaria, semanal (con días concretos), mensual o anual, con intervalo y

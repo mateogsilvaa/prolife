@@ -368,6 +368,21 @@ a { color: inherit; text-decoration: none; }
 .cal-ev { font-size: 10.5px; padding: 1px 5px; border-radius: 2px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 2px solid; }
 .cal-load { height: 2px; border-radius: 2px; background: var(--green); margin-top: 4px; }
 
+/* Un día sin clase. El rayado dice «aquí no pasa nada» sin gritar, y el
+   nombre del festivo cabe en una línea. */
+.cal-cell.festivo {
+  background: repeating-linear-gradient(
+    -45deg, transparent, transparent 6px,
+    color-mix(in srgb, var(--amber) 9%, transparent) 6px,
+    color-mix(in srgb, var(--amber) 9%, transparent) 12px
+  );
+}
+.cal-festivo {
+  font-size: 10px; color: var(--amber); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-bottom: 2px;
+}
+
 /* ------------------------------------------------------------------ gráficas */
 
 .bars { display: flex; align-items: flex-end; gap: 5px; height: 130px; }

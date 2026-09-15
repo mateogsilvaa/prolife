@@ -8,7 +8,7 @@ export function dbPath(baseDir) {
   return path.join(baseDir, '.prolife', 'db.json')
 }
 
-export const SCHEMA = 5
+export const SCHEMA = 6
 
 export const DEFAULT_CATEGORIES = [
   { id: 'cat-uni', name: 'Universidad', color: '#3c5a78', area: 'uni' },
@@ -52,6 +52,18 @@ export const EMPTY_DB = {
     links: [],
   },
   categories: DEFAULT_CATEGORIES,
+  /**
+   * Los cuatrimestres. Cada clase del horario puede decir a cuál pertenece, y
+   * así una asignatura anual se apunta una sola vez: sus clases del primero
+   * valen entre las fechas del primero y las del segundo entre las del segundo,
+   * sin que haya que repetir las fechas en cada fila.
+   */
+  terms: [],
+  /**
+   * Festivos y vacaciones. Un día marcado aquí no tiene clase, así que no se
+   * agenda, no se puede faltar a ella y no cuenta para la asistencia.
+   */
+  holidays: [],
   subjects: [],
   projects: [],
   tasks: [],
@@ -108,7 +120,7 @@ function migrate(raw) {
     db.categories.push({ id: 'cat-volunteer', name: 'Voluntariado', color: '#7a5c9e', area: 'volunteer' })
   }
 
-  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'volunteering', 'volunteerDays']) {
+  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
     if (!Array.isArray(db[key])) db[key] = []
   }
 
@@ -144,7 +156,9 @@ function migrate(raw) {
     weeklyGoalHours: 0,
     attendanceMin: null,
     ...s,
-    schedule: (s.schedule || []).map((sl) => ({ from: '', until: '', ...sl })),
+    // `term` llega en la v6: una clase que no diga de qué cuatrimestre es sigue
+    // rigiéndose por sus propias fechas, como hasta ahora.
+    schedule: (s.schedule || []).map((sl) => ({ from: '', until: '', term: '', ...sl })),
   }))
 
   if (!db.workspaces || typeof db.workspaces !== 'object' || Array.isArray(db.workspaces)) db.workspaces = {}

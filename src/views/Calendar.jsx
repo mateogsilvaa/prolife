@@ -5,13 +5,16 @@ import TaskList from '../components/TaskList.jsx'
 import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
 import ExamEditor, { newExam, kindLabel } from '../components/ExamEditor.jsx'
 import { useStore, uid, AREAS, PALETTE } from '../lib/store.jsx'
-import { slotActiveOn } from '../lib/stats.js'
+import { slotActiveOn, holidayOn, classesBetween } from '../lib/stats.js'
 import { expandEvents, FREQ, repeatLabel } from '../lib/recurrence.js'
 import { startDrag } from '../lib/drag.js'
 import {
   monthMatrix, MONTHS, DAYS, DAYS_LONG, today, iso, parseIso, weekday,
   dur, addDays, startOfWeek, weekLabel,
 } from '../lib/date.js'
+
+/** Qué mueven las flechas en cada vista, para poder decirlo en el título. */
+const MODO_ANTERIOR = { mes: 'Mes', semana: 'Semana', dia: 'Día' }
 
 const HOUR_H = 46
 const DAY_START = 7
@@ -111,7 +114,7 @@ export default function Calendar() {
       for (const s of db.subjects)
         (s.schedule || []).forEach((sl, slotIndex) => {
           // El horario ya no es eterno: cada clase vale entre sus dos fechas.
-          if (sl.day !== wd || !slotActiveOn(sl, date, db.settings)) return
+          if (sl.day !== wd || !slotActiveOn(sl, date, db)) return
           out.push({
             kind: 'class', label: s.name, color: s.color, start: sl.start, end: sl.end,
             detail: sl.room ? `Aula ${sl.room}` : 'Clase', href: `#/uni/${s.id}`, slotIndex, subject: s,
@@ -214,9 +217,13 @@ export default function Calendar() {
               </button>
             ))}
           </div>
-          <button className="btn ghost icon" onClick={() => shift(-1)}><Icon name="chevronL" size={15} /></button>
+          <button className="btn ghost icon" title={`${MODO_ANTERIOR[mode]} anterior`} onClick={() => shift(-1)}>
+            <Icon name="chevronL" size={15} />
+          </button>
           <button className="btn sm" onClick={() => { setAnchor(today()); setSel(today()) }}>Hoy</button>
-          <button className="btn ghost icon" onClick={() => shift(1)}><Icon name="chevronR" size={15} /></button>
+          <button className="btn ghost icon" title={`${MODO_ANTERIOR[mode]} siguiente`} onClick={() => shift(1)}>
+            <Icon name="chevronR" size={15} />
+          </button>
           <button className="btn" onClick={() => setExam(newExam({ date: sel }))}><Icon name="plus" size={13} /> Examen</button>
           <button className="btn primary" onClick={() => newEvent()}><Icon name="plus" size={13} /> Evento</button>
         </div>
@@ -285,6 +292,7 @@ export default function Calendar() {
 /* --------------------------------------------------------------------- mes */
 
 function MonthGrid({ anchor, sel, setSel, itemsOf, load, onOpen }) {
+  const { db } = useStore()
   const cells = useMemo(() => monthMatrix(anchor.getFullYear(), anchor.getMonth()), [anchor])
   const maxLoad = Math.max(...cells.map((c) => load(c.date)), 1)
 
@@ -295,13 +303,21 @@ function MonthGrid({ anchor, sel, setSel, itemsOf, load, onOpen }) {
         {cells.map((c) => {
           const its = itemsOf(c.date)
           const l = load(c.date)
+          const festivo = holidayOn(db, c.date)
           return (
             <div
               key={c.date}
-              className={`cal-cell${c.out ? ' out' : ''}${c.date === today() ? ' today' : ''}${c.date === sel ? ' sel' : ''}`}
+              className={`cal-cell${c.out ? ' out' : ''}${c.date === today() ? ' today' : ''}${c.date === sel ? ' sel' : ''}${festivo ? ' festivo' : ''}`}
               onClick={() => setSel(c.date)}
+              title={festivo ? festivo.name || 'Festivo' : undefined}
             >
               <div className="cal-day">{c.day}</div>
+              {/* Un festivo se ve de un vistazo en el mes, sin tener que entrar
+                  en el día: si no, no hay forma de saber por qué esa semana
+                  tiene la mitad de clases. */}
+              {festivo && (
+                <div className="cal-festivo">{festivo.name || 'Festivo'}</div>
+              )}
               {its.slice(0, 3).map((it, i) => (
                 <div
                   key={i}
@@ -482,7 +498,38 @@ function EventBlock({ it, days, dayIndex, top, height, onOpen, onDragEvent }) {
 }
 
 function DayPanel({ date, itemsOf, load, onOpen, onNew, onNewTask, onNewExam }) {
+  const { db, update } = useStore()
   const items = itemsOf(date)
+  const festivo = holidayOn(db, date)
+  // Cuántas clases habría hoy si no fuera festivo: es lo que se va a quitar, y
+  // decirlo es más útil que un botón mudo.
+  const quita = classesBetween(db, date, date)
+
+  const marcar = () =>
+    update((d) => {
+      d.holidays ||= []
+      d.holidays.push({ id: uid('fest'), name: 'Festivo', from: date, to: date })
+    })
+
+  const desmarcar = () =>
+    update((d) => {
+      const h = (d.holidays || []).find((x) => date >= x.from && date <= (x.to || x.from))
+      if (!h) return
+      // Un día suelto se quita entero; un día de en medio de las vacaciones no
+      // se puede «desmarcar» sin partir el rango en dos, así que se dice.
+      if (h.from === date && (h.to || h.from) === date) {
+        d.holidays = d.holidays.filter((x) => x.id !== h.id)
+      } else if (h.from === date) {
+        h.from = iso(addDays(parseIso(date), 1))
+      } else if ((h.to || h.from) === date) {
+        h.to = iso(addDays(parseIso(date), -1))
+      } else {
+        const fin = h.to || h.from
+        h.to = iso(addDays(parseIso(date), -1))
+        d.holidays.push({ id: uid('fest'), name: h.name, from: iso(addDays(parseIso(date), 1)), to: fin })
+      }
+    })
+
   return (
     <div className="stack">
       <div className="card">
@@ -492,6 +539,16 @@ function DayPanel({ date, itemsOf, load, onOpen, onNew, onNewTask, onNewExam }) 
           </h3>
           <span className="mono dim" style={{ fontSize: 11 }}>{dur(load(date))}</span>
         </div>
+        {festivo && (
+          <div className="notice" style={{ marginBottom: 10 }}>
+            <Icon name="sun" size={13} />
+            <span style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+              <b>{festivo.name || 'Festivo'}</b>
+              {(festivo.to || festivo.from) !== festivo.from && ` · del ${festivo.from} al ${festivo.to}`}
+              {' — '}hoy no hay clase, así que no cuenta para la asistencia.
+            </span>
+          </div>
+        )}
         {items.length ? (
           <div className="list">
             {items.map((it, i) => (
@@ -516,6 +573,20 @@ function DayPanel({ date, itemsOf, load, onOpen, onNew, onNewTask, onNewExam }) 
           <button className="btn sm" onClick={onNew}><Icon name="plus" size={12} /> Evento</button>
           <button className="btn sm ghost" onClick={onNewTask}><Icon name="plus" size={12} /> Tarea</button>
           <button className="btn sm ghost" onClick={onNewExam}><Icon name="plus" size={12} /> Examen</button>
+          <div className="spacer" />
+          {festivo ? (
+            <button className="btn sm ghost" onClick={desmarcar} title="Vuelve a haber clase este día">
+              <Icon name="x" size={12} /> Quitar el festivo
+            </button>
+          ) : (
+            <button
+              className="btn sm ghost"
+              onClick={marcar}
+              title={quita ? `Deja sin clase ${quita} ${quita === 1 ? 'asignatura' : 'asignaturas'} de hoy` : 'Hoy no había clase de todos modos'}
+            >
+              <Icon name="sun" size={12} /> Marcar festivo{quita ? ` (−${quita})` : ''}
+            </button>
+          )}
         </div>
       </div>
     </div>

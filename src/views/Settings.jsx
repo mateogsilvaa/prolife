@@ -5,6 +5,8 @@ import { LOGO_PATH, bumpLogo } from '../components/Brand.jsx'
 import { useStore, uid, PALETTE, isDesktop } from '../lib/store.jsx'
 import { api, enDrive } from '../lib/api.js'
 import { canStore, usage, clearAll } from '../lib/offline.js'
+import { classesBetween } from '../lib/stats.js'
+import { today } from '../lib/date.js'
 
 /**
  * Los archivos que se han guardado en ESTE aparato para poder abrirlos sin el
@@ -463,6 +465,9 @@ export default function Settings() {
             </p>
           </div>
         </div>
+
+        <Cuatrimestres />
+        <Festivos />
 
         {!enDrive && <VsCode />}
 
@@ -930,6 +935,150 @@ function LinkEditor({ title, hint, items, onChange }) {
         ))}
         {items.length === 0 && <p className="dim" style={{ fontSize: 12.5, margin: 0 }}>{hint}</p>}
       </div>
+    </div>
+  )
+}
+
+
+/**
+ * Los cuatrimestres del curso.
+ *
+ * Existen para poder tener una asignatura anual sin repetir fechas en cada
+ * clase del horario: se dicen una vez aquí —cuándo acaba el primero, cuándo
+ * empieza el segundo— y luego cada clase dice a cuál pertenece. Entre uno y
+ * otro, que es cuando hay exámenes y vacaciones, no se agenda nada.
+ */
+function Cuatrimestres() {
+  const { db, update } = useStore()
+  const terms = db.terms || []
+
+  const set = (id, patch) =>
+    update((d) => { d.terms = (d.terms || []).map((t) => (t.id === id ? { ...t, ...patch } : t)) })
+
+  const add = () =>
+    update((d) => {
+      d.terms ||= []
+      const n = d.terms.length + 1
+      d.terms.push({
+        id: uid('term'),
+        name: n === 1 ? '1º cuatrimestre' : n === 2 ? '2º cuatrimestre' : `Periodo ${n}`,
+        from: n === 1 ? d.settings.termStart || '' : '',
+        to: n === 1 ? '' : d.settings.termEnd || '',
+      })
+    })
+
+  const quitar = (id) =>
+    update((d) => {
+      d.terms = (d.terms || []).filter((t) => t.id !== id)
+      // Las clases que apuntaban a él se quedan con las fechas del curso en vez
+      // de con un periodo fantasma que ya no dice nada.
+      d.subjects = d.subjects.map((sub) => ({
+        ...sub,
+        schedule: (sub.schedule || []).map((sl) => (sl.term === id ? { ...sl, term: '' } : sl)),
+      }))
+    })
+
+  const usos = (id) =>
+    db.subjects.reduce((a, sub) => a + (sub.schedule || []).filter((sl) => sl.term === id).length, 0)
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Cuatrimestres</h3>
+        <div className="spacer" />
+        <button className="btn sm ghost" onClick={add}><Icon name="plus" size={12} /> Añadir</button>
+      </div>
+      {terms.length === 0 ? (
+        <p className="dim" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.6 }}>
+          Sin cuatrimestres, cada clase del horario usa sus propias fechas o las del curso. Créalos
+          si tienes asignaturas anuales: así una misma asignatura puede tener un horario en el
+          primero y otro distinto en el segundo, y en medio —exámenes y vacaciones— no se agenda
+          ninguna clase.
+        </p>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          {terms.map((t) => (
+            <div key={t.id} className="row" style={{ gap: 6 }}>
+              <input className="input" style={{ flex: 1, minWidth: 110 }} value={t.name}
+                placeholder="1º cuatrimestre" onChange={(e) => set(t.id, { name: e.target.value })} />
+              <input className="input" style={{ width: 148 }} type="date" value={t.from || ''}
+                onChange={(e) => set(t.id, { from: e.target.value })} />
+              <span className="dim" style={{ fontSize: 11.5 }}>a</span>
+              <input className="input" style={{ width: 148 }} type="date" value={t.to || ''}
+                onChange={(e) => set(t.id, { to: e.target.value })} />
+              <span className="badge" title="Clases del horario que usan este cuatrimestre">{usos(t.id)}</span>
+              <button className="btn ghost icon" title="Quitar" onClick={() => quitar(t.id)}>
+                <Icon name="x" size={13} />
+              </button>
+            </div>
+          ))}
+          <p className="dim" style={{ fontSize: 11.5, margin: 0, lineHeight: 1.55 }}>
+            En la ficha de cada asignatura, cada clase elige a qué cuatrimestre pertenece.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Festivos y vacaciones.
+ *
+ * Un día marcado aquí no tiene clase. No es que la clase salga y se perdone:
+ * es que no existe, y por eso no se agenda, no se puede faltar a ella y no
+ * entra en el cálculo de la asistencia.
+ */
+function Festivos() {
+  const { db, update } = useStore()
+  const dias = [...(db.holidays || [])].sort((a, b) => a.from.localeCompare(b.from))
+
+  const set = (id, patch) =>
+    update((d) => { d.holidays = (d.holidays || []).map((h) => (h.id === id ? { ...h, ...patch } : h)) })
+  const add = () =>
+    update((d) => { d.holidays ||= []; d.holidays.push({ id: uid('fest'), name: '', from: today(), to: today() }) })
+  const quitar = (id) =>
+    update((d) => { d.holidays = (d.holidays || []).filter((h) => h.id !== id) })
+
+  const clases = (h) =>
+    classesBetween(db, h.from, h.to || h.from)
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Festivos y vacaciones</h3>
+        <div className="spacer" />
+        <button className="btn sm ghost" onClick={add}><Icon name="plus" size={12} /> Añadir</button>
+      </div>
+      {dias.length === 0 ? (
+        <p className="dim" style={{ fontSize: 12.5, margin: 0, lineHeight: 1.6 }}>
+          Un día marcado aquí no tiene clase: no sale en el calendario, no puedes faltar a ella y no
+          cuenta para la asistencia. Sirve para un festivo suelto y para Navidad o Semana Santa
+          enteras — es un día de principio y otro de fin. También se marca desde el calendario, en
+          el día que estés mirando.
+        </p>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          {dias.map((h) => (
+            <div key={h.id} className="row" style={{ gap: 6 }}>
+              <input className="input" style={{ flex: 1, minWidth: 110 }} value={h.name}
+                placeholder="Festivo" onChange={(e) => set(h.id, { name: e.target.value })} />
+              <input className="input" style={{ width: 148 }} type="date" value={h.from}
+                onChange={(e) => set(h.id, { from: e.target.value })} />
+              <span className="dim" style={{ fontSize: 11.5 }}>a</span>
+              <input className="input" style={{ width: 148 }} type="date" value={h.to || h.from}
+                onChange={(e) => set(h.id, { to: e.target.value })} />
+              {/* Cuántas clases te quita: es el dato que dice si te has
+                  equivocado de fecha, y se ve antes de guardar nada. */}
+              <span className="badge" title="Clases que este festivo deja sin agendar">
+                {clases(h)} {clases(h) === 1 ? 'clase' : 'clases'}
+              </span>
+              <button className="btn ghost icon" title="Quitar" onClick={() => quitar(h.id)}>
+                <Icon name="x" size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

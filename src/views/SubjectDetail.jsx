@@ -8,8 +8,8 @@ import { SubjectForm } from './Uni.jsx'
 import { useStore } from '../lib/store.jsx'
 import { useTracker } from '../lib/tracker.jsx'
 import { api } from '../lib/api.js'
-import { subjectStats, attendanceBudget, classOccurrences, termWindow, slotRange } from '../lib/stats.js'
-import { dur, DAYS, iso, addDays, parseIso, today, fmtDate, startOfWeek, daysUntil } from '../lib/date.js'
+import { subjectStats, attendanceBudget, classOccurrences, termWindow, slotRange, slotInRange } from '../lib/stats.js'
+import { dur, DAYS, iso, addDays, parseIso, weekday, today, fmtDate, startOfWeek, daysUntil } from '../lib/date.js'
 
 const STATUS = ['present', 'absent', 'late', 'excused']
 const STATUS_LABEL = { present: 'Asistí', absent: 'Falté', late: 'Tarde', excused: 'Justificada' }
@@ -276,7 +276,7 @@ function Resumen({ subject: s }) {
           {(s.schedule || []).length ? (
             <div className="list">
               {s.schedule.map((sl, i) => {
-                const r = slotRange(sl, db.settings)
+                const r = slotRange(sl, db)
                 const over = r.until && r.until < today()
                 return (
                   <div key={i} className="list-row" style={{ opacity: over ? 0.5 : 1 }}>
@@ -322,7 +322,26 @@ function Attendance({ subject }) {
     return classOccurrences(db, subject, from, to).map((o) => ({
       date: o.date, slot: o.slotIndex, time: o.slot.start, room: o.slot.room,
     }))
-  }, [subject, db.settings.termStart, db.settings.termEnd])
+    // Los festivos y los cuatrimestres cambian qué clases existen: sin ellos en
+    // las dependencias, marcar un festivo no quitaba la clase de esta lista
+    // hasta recargar, aunque el cálculo de faltas ya la hubiera descontado.
+  }, [subject, db.settings.termStart, db.settings.termEnd, db.holidays, db.terms])
+
+  /** Clases que había en el horario y que se ha llevado un festivo. */
+  const porFestivos = useMemo(() => {
+    const { from, to } = termWindow(db)
+    let n = 0
+    for (const h of db.holidays || []) {
+      const desde = h.from < from ? from : h.from
+      const hasta = (h.to || h.from) > to ? to : h.to || h.from
+      if (desde > hasta) continue
+      for (let d = parseIso(desde); iso(d) <= hasta; d = addDays(d, 1)) {
+        const date = iso(d)
+        n += (subject.schedule || []).filter((sl) => sl.day === weekday(d) && slotInRange(sl, date, db)).length
+      }
+    }
+    return n
+  }, [subject, db.holidays, db.terms, db.settings.termStart, db.settings.termEnd])
 
   const statusOf = (o) =>
     db.attendance.find((a) => a.subjectId === subject.id && a.date === o.date && a.slot === o.slot)?.status || null
@@ -383,6 +402,13 @@ function Attendance({ subject }) {
           <div className="dim" style={{ fontSize: 12 }}>
             faltas más de {b.maxAbsences} permitidas sobre {b.totalCounted} clases
           </div>
+          {/* Sin esto, marcar un festivo baja el total de clases y parece que
+              se han perdido: decirlo convierte un susto en una explicación. */}
+          {porFestivos > 0 && (
+            <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+              {porFestivos === 1 ? '1 clase cae en festivo y no cuenta' : `${porFestivos} clases caen en festivo y no cuentan`}
+            </div>
+          )}
         </div>
         <div className="card" style={{ flex: 1, minWidth: 190 }}>
           <div className="eyebrow">Sin marcar</div>

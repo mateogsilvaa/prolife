@@ -55,28 +55,94 @@ export const pct = (x) => `${x > 0 ? '+' : ''}${Math.round(x * 100)}%`
 
 /* ------------------------------------------------------------------ horario */
 
+/* ------------------------------------------------- cuatrimestres y festivos */
+
+/** El cuatrimestre con ese id, si sigue existiendo. */
+export const termById = (db, id) => (id ? (db.terms || []).find((t) => t.id === id) || null : null)
+
 /**
- * Rango de fechas en el que se imparte una clase. Cada franja tiene el suyo
- * («esta práctica solo es en noviembre»); si no lo tiene, hereda el del curso.
- * Sin ninguno de los dos la clase sería eterna, así que eso se avisa aparte.
+ * ¿Qué festivo cae en esta fecha? Devuelve el que sea, o `null`.
+ *
+ * Los festivos se guardan como rangos con un día de principio y otro de fin,
+ * que es lo que hace falta para Navidad o Semana Santa. Un día suelto es un
+ * rango de un día: una sola forma de guardarlo, en vez de dos casos.
  */
-export function slotRange(slot, settings = {}) {
+export function holidayOn(db, date) {
+  return (db.holidays || []).find((h) => date >= h.from && date <= (h.to || h.from)) || null
+}
+
+/** Los festivos que caen dentro de un rango, ordenados. */
+export function holidaysBetween(db, from, to) {
+  return (db.holidays || [])
+    .filter((h) => (h.to || h.from) >= from && h.from <= to)
+    .sort((a, b) => a.from.localeCompare(b.from))
+}
+
+/**
+ * Rango de fechas en el que se imparte una clase.
+ *
+ * Tres orígenes, por orden: el cuatrimestre al que la clase diga que pertenece,
+ * sus propias fechas, y las del curso. El cuatrimestre va primero porque es lo
+ * que permite tener una asignatura anual sin repetir fechas en cada fila: sus
+ * clases del primero valen hasta que acaba el primero, las del segundo empiezan
+ * cuando empieza el segundo, y en medio —exámenes y vacaciones— no hay clase.
+ */
+export function slotRange(slot, db = {}) {
+  const settings = db.settings || db
+  const term = termById(db, slot?.term)
+  if (term) return { from: term.from || '', until: term.to || '' }
   return {
     from: slot?.from || settings.termStart || '',
     until: slot?.until || settings.termEnd || '',
   }
 }
 
-export function slotActiveOn(slot, date, settings = {}) {
-  const { from, until } = slotRange(slot, settings)
+/**
+ * ¿Hay esta clase este día?
+ *
+ * Aquí es donde entran los festivos, y a propósito: si el festivo se mirara en
+ * cada pantalla por separado, el calendario, la asistencia y el ayudante
+ * acabarían discrepando el día que a alguien se le olvidara mirarlo. Una clase
+ * que no existe no se agenda, no se puede faltar a ella y no cuenta para la
+ * asistencia, que es justo lo que uno espera de un festivo.
+ */
+export function slotActiveOn(slot, date, db = {}) {
+  return slotInRange(slot, date, db) && !holidayOn(db, date)
+}
+
+/** Lo mismo pero sin mirar los festivos: si toca por calendario y punto. */
+export function slotInRange(slot, date, db = {}) {
+  const { from, until } = slotRange(slot, db)
   if (from && date < from) return false
   if (until && date > until) return false
   return true
 }
 
+/**
+ * Cuántas clases habría entre dos fechas SI NO hubiera festivos.
+ *
+ * Es lo que permite enseñar, al marcar un festivo, cuántas clases quita: con
+ * `classOccurrences` saldría cero, porque ese ya se los salta. Ver el número
+ * antes de guardar es lo que avisa de que te has equivocado de fecha.
+ */
+export function classesBetween(db, from, to) {
+  if (!from || !to || to < from) return 0
+  let n = 0
+  for (let d = parseIso(from); iso(d) <= to; d = addDays(d, 1)) {
+    const date = iso(d)
+    const wd = weekday(d)
+    for (const s of db.subjects || []) {
+      for (const slot of s.schedule || []) {
+        if (slot.day === wd && slotInRange(slot, date, db)) n++
+      }
+    }
+  }
+  return n
+}
+
 /** ¿Hay alguna clase sin fecha de fin? Entonces el horario no termina nunca. */
 export function hasEndlessSlots(db) {
-  return db.subjects.some((s) => (s.schedule || []).some((sl) => !slotRange(sl, db.settings).until))
+  return db.subjects.some((s) => (s.schedule || []).some((sl) => !slotRange(sl, db).until))
 }
 
 /**
@@ -91,7 +157,7 @@ export function classOccurrences(db, subject, from, to) {
     const date = iso(d)
     const wd = weekday(d)
     slots.forEach((slot, slotIndex) => {
-      if (slot.day === wd && slotActiveOn(slot, date, db.settings)) {
+      if (slot.day === wd && slotActiveOn(slot, date, db)) {
         out.push({ date, slot, slotIndex, subject })
       }
     })
@@ -152,7 +218,7 @@ export function attendanceBudget(db, subjectId) {
     doomed: totalCounted - absences < mustAttend,
     mustAttend,
     /** Sin fechas de fin no se puede contar el total, así que el cálculo no vale. */
-    reliable: (subject?.schedule || []).every((sl) => slotRange(sl, db.settings).until),
+    reliable: (subject?.schedule || []).every((sl) => slotRange(sl, db).until),
     nextClass: upcoming[0] || null,
   }
 }
@@ -249,7 +315,7 @@ export function classesOn(db, date = today()) {
     // slotIndex es la posición dentro del horario de la asignatura: es la clave
     // con la que se guarda la asistencia, no la posición en esta lista.
     ;(s.schedule || []).forEach((slot, slotIndex) => {
-      if (slot.day === wd && slotActiveOn(slot, date, db.settings)) out.push({ subject: s, slot, slotIndex })
+      if (slot.day === wd && slotActiveOn(slot, date, db)) out.push({ subject: s, slot, slotIndex })
     })
   }
   return out.sort((a, b) => (a.slot.start || '').localeCompare(b.slot.start || ''))

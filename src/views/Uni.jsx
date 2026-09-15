@@ -182,17 +182,30 @@ export function SubjectForm({ subject, onClose }) {
     onClose()
   }
 
-  // Una clase nueva hereda las fechas del curso: es lo normal y se puede acortar.
-  const addSlot = () =>
+  const cuatris = db.terms || []
+
+  /**
+   * Una clase nueva se apunta al primer cuatrimestre si los hay, y si no hereda
+   * las fechas del curso. Lo más normal es que la siguiente clase sea del mismo
+   * periodo que la anterior, así que se copia el de la última.
+   */
+  const addSlot = () => {
+    const ultima = (s.schedule || [])[(s.schedule || []).length - 1]
+    const term = ultima?.term ?? (cuatris[0]?.id || '')
     set({
       schedule: [
         ...(s.schedule || []),
-        { day: 0, start: '09:00', end: '11:00', room: '', from: db.settings.termStart || '', until: db.settings.termEnd || '' },
+        {
+          day: 0, start: '09:00', end: '11:00', room: '', term,
+          from: term ? '' : db.settings.termStart || '',
+          until: term ? '' : db.settings.termEnd || '',
+        },
       ],
     })
+  }
   const setSlot = (i, p) => set({ schedule: s.schedule.map((x, j) => (j === i ? { ...x, ...p } : x)) })
 
-  const endless = (s.schedule || []).some((sl) => !slotRange(sl, db.settings).until)
+  const endless = (s.schedule || []).some((sl) => !slotRange(sl, db).until)
 
   return (
     <Modal
@@ -304,12 +317,46 @@ export function SubjectForm({ subject, onClose }) {
                   <button className="btn ghost icon" onClick={() => set({ schedule: s.schedule.filter((_, j) => j !== i) })}><Icon name="x" size={13} /></button>
                 </div>
                 <div className="row" style={{ gap: 6, marginTop: 7 }}>
-                  <span className="dim" style={{ fontSize: 11.5, width: 96 }}>Desde</span>
-                  <input className="input" style={{ width: 148 }} type="date" value={sl.from || ''} onChange={(e) => setSlot(i, { from: e.target.value })} />
-                  <span className="dim" style={{ fontSize: 11.5 }}>hasta</span>
-                  <input className="input" style={{ width: 148 }} type="date" value={sl.until || ''} onChange={(e) => setSlot(i, { until: e.target.value })} />
+                  {cuatris.length > 0 ? (
+                    <>
+                      <span className="dim" style={{ fontSize: 11.5, width: 96 }}>Cuándo</span>
+                      <select
+                        className="select"
+                        style={{ width: 170 }}
+                        value={sl.term || ''}
+                        onChange={(e) => setSlot(i, { term: e.target.value })}
+                      >
+                        {cuatris.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        <option value="">Fechas propias…</option>
+                      </select>
+                      {/* Las fechas del cuatrimestre se enseñan pero no se
+                          editan aquí: se cambian en Ajustes, en un solo sitio,
+                          y valen para todas las asignaturas a la vez. */}
+                      {sl.term ? (
+                        <span className="dim mono" style={{ fontSize: 11 }}>
+                          {(() => {
+                            const r = slotRange(sl, db)
+                            return r.from && r.until ? `${r.from} → ${r.until}` : 'sin fechas todavía'
+                          })()}
+                        </span>
+                      ) : (
+                        <>
+                          <input className="input" style={{ width: 140 }} type="date" value={sl.from || ''} onChange={(e) => setSlot(i, { from: e.target.value })} />
+                          <span className="dim" style={{ fontSize: 11.5 }}>a</span>
+                          <input className="input" style={{ width: 140 }} type="date" value={sl.until || ''} onChange={(e) => setSlot(i, { until: e.target.value })} />
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="dim" style={{ fontSize: 11.5, width: 96 }}>Desde</span>
+                      <input className="input" style={{ width: 148 }} type="date" value={sl.from || ''} onChange={(e) => setSlot(i, { from: e.target.value })} />
+                      <span className="dim" style={{ fontSize: 11.5 }}>hasta</span>
+                      <input className="input" style={{ width: 148 }} type="date" value={sl.until || ''} onChange={(e) => setSlot(i, { until: e.target.value })} />
+                    </>
+                  )}
                   <div className="spacer" />
-                  {!sl.until && (
+                  {!slotRange(sl, db).until && (
                     <span className="badge hot" title="Sin fecha de fin la clase se repite para siempre">no acaba nunca</span>
                   )}
                 </div>
@@ -321,8 +368,10 @@ export function SubjectForm({ subject, onClose }) {
           </div>
           <p className="dim" style={{ fontSize: 11.5, margin: '10px 0 0', lineHeight: 1.55 }}>
             {endless
-              ? 'Una clase sin fecha de fin se agenda hasta el fin de los tiempos y no deja calcular cuántas faltas te puedes permitir. Pon el fin del cuatrimestre.'
-              : 'Cada clase vale solo entre esas dos fechas. Vacío = las del curso, que se ponen en Ajustes.'}
+              ? 'Una clase sin fecha de fin se agenda hasta el fin de los tiempos y no deja calcular cuántas faltas te puedes permitir. Ponle un cuatrimestre, o una fecha de fin.'
+              : cuatris.length
+              ? 'Una asignatura anual se apunta aquí una sola vez: pon sus clases del primer cuatrimestre y las del segundo, cada una con el suyo. Entre uno y otro no se agenda nada.'
+              : 'Cada clase vale solo entre esas dos fechas. Vacío = las del curso, que se ponen en Ajustes. Si tienes asignaturas anuales, crea los cuatrimestres en Ajustes y elígelos aquí.'}
           </p>
         </div>
       </div>

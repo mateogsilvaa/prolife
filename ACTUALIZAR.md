@@ -85,6 +85,33 @@ guardada:
 La clave de emparejamiento **no se renueva** al actualizar, así que no hay que volver a
 emparejarla.
 
+## Si falla al generar el instalador
+
+Estos dos no tocan tus datos para nada: pasan antes de que exista el `.exe`.
+
+**«remove …\release\win-unpacked\d3dcompiler_47.dll: Access is denied»**
+
+Algo tiene ese archivo abierto y electron-builder no puede vaciar la carpeta para volver a
+llenarla. Casi siempre es la propia prolife corriendo desde ahí, o el antivirus, que acaba
+de escanear el DLL y todavía no lo ha soltado. Con la app cerrada —también el icono de
+junto al reloj—:
+
+```powershell
+taskkill /F /IM prolife.exe 2>$null
+taskkill /F /IM electron.exe 2>$null
+Remove-Item -Recurse -Force release
+npm run dist
+```
+
+Si `Remove-Item` también dice que no puede, reinicia el ordenador y repítelo: entonces era
+el antivirus. Borrar `release\` no pierde nada — es la carpeta donde se fabrica el
+instalador, no donde viven tus datos.
+
+**«Could not find any Visual Studio installation to use»**
+
+Versión vieja del proyecto. `git pull` y otra vez: desde la actualización de los festivos,
+el empaquetado ya no compila módulos nativos y no hace falta Visual Studio.
+
 ## Si algo va mal
 
 Todo esto se arregla desde la carpeta de datos, que sigue intacta:

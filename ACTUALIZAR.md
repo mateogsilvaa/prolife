@@ -107,6 +107,40 @@ Si `Remove-Item` también dice que no puede, reinicia el ordenador y repítelo: 
 el antivirus. Borrar `release\` no pierde nada — es la carpeta donde se fabrica el
 instalador, no donde viven tus datos.
 
+**«Cannot create symbolic link : El cliente no dispone de un privilegio requerido»**
+
+Sale al descomprimir `winCodeSign`, y se reintenta cuatro veces con el mismo resultado.
+Windows no deja crear enlaces simbólicos a un usuario normal, y ese paquete trae dos
+—`libcrypto.dylib` y `libssl.dylib`— que además son **de macOS** y aquí no sirven para
+nada. Todo lo demás se descomprime bien; 7-Zip devuelve error por esos dos y
+electron-builder se planta.
+
+Lo que lo arregla de una vez y para siempre es **activar el modo de programador** de
+Windows, que es justo el permiso que falta:
+
+> Configuración → *Privacidad y seguridad* → *Para programadores* → **Modo de programador:
+> Activado**
+
+Cierra la terminal, abre otra y `npm run dist`. No hay que reiniciar.
+
+Si prefieres no tocar esa opción, vale con abrir PowerShell **como administrador** (clic
+derecho en el icono → *Ejecutar como administrador*) y lanzar el `npm run dist` desde ahí.
+Hay que acordarse cada vez, por eso lo de arriba es mejor.
+
+Y si ninguna de las dos, se descomprime a mano y electron-builder se lo encuentra hecho:
+
+```powershell
+$c = "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
+Remove-Item -Recurse -Force $c -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force "$c\winCodeSign-2.6.0" | Out-Null
+Invoke-WebRequest -Uri "https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z" -OutFile "$c\wcs.7z"
+& ".\node_modules\7zip-bin\win\x64\7za.exe" x "$c\wcs.7z" "-o$c\winCodeSign-2.6.0" -y
+npm run dist
+```
+
+Volverá a quejarse de esos dos enlaces, pero da igual: aquí el error no para nada y el
+resto del paquete queda extraído, que es lo único que hacía falta.
+
 **«Could not find any Visual Studio installation to use»**
 
 Versión vieja del proyecto. `git pull` y otra vez: desde la actualización de los festivos,

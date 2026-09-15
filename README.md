@@ -23,6 +23,14 @@ Y para generar un instalador (`.exe` en Windows):
 npm run dist
 ```
 
+> **No hace falta Visual Studio ni compilar nada nativo.** La app no usa ningún módulo
+> nativo, así que el empaquetado lleva `npmRebuild: false` y electron-builder no llama a
+> node-gyp. Importa porque `pdfjs-dist` —el motor que lee los PDF— arrastra `canvas` como
+> dependencia *opcional*, que sí es nativa y sirve para **pintar** páginas; aquí solo se
+> saca el texto y no se usa jamás. Sin esa línea, generar el instalador en un Windows sin
+> Visual Studio se cae con *«Could not find any Visual Studio installation to use»* por un
+> módulo que no hace falta. Tampoco se empaqueta.
+
 **Actualizar una instalación que ya tienes en marcha, sin perder nada:**
 [ACTUALIZAR.md](ACTUALIZAR.md). En resumen: los datos no están dentro de la app, así que
 instalar encima no se lleva nada por delante.

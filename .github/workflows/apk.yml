@@ -26,7 +26,15 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # `packages` se pone a mano porque el valor por defecto de la acción es
+      # «tools platform-tools», y Google ha retirado del repositorio el paquete
+      # obsoleto `tools`. Al no encontrarlo, sdkmanager sale con error y la
+      # compilación se cae antes de empezar, con un «Failed to find package
+      # 'tools'» enterrado en mil líneas de licencias. No es que falte nada:
+      # es que se estaba pidiendo algo que ya no existe.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - name: Instalar dependencias
         run: npm ci

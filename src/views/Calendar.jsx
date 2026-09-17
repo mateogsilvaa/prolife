@@ -259,7 +259,7 @@ export default function Calendar() {
           <div className="eyebrow">Calendario</div>
           <h2 style={{ textTransform: 'capitalize' }}>{title}</h2>
         </div>
-        <div className="row wrap" style={{ justifyContent: 'flex-end' }}>
+        <div className="row wrap barra-cal" style={{ justifyContent: 'flex-end' }}>
           <div className="seg">
             {['mes', 'semana', 'dia'].map((m) => (
               <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>

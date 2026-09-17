@@ -57,8 +57,28 @@
 
 html, body, #root { height: 100%; }
 
+/**
+ * En el móvil, la altura de la ventana cambia sola: Safari encoge y estira su
+ * barra según se hace scroll. Con `100%` a secas, la app se dimensiona contra
+ * la ventana grande y la barra de abajo queda fuera de la pantalla hasta que
+ * tocas algo. `dvh` es exactamente «lo que se ve AHORA».
+ */
+@supports (height: 100dvh) {
+  html, body, #root { height: 100dvh; }
+}
+
+html {
+  /* Safari agranda el texto él solo al girar el teléfono si no se le dice. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
+  /* El tirón elástico del final de la página despega las barras fijas y deja
+     ver el fondo del navegador por debajo. Aquí no hay nada que descubrir. */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
@@ -269,6 +289,11 @@ a { color: inherit; text-decoration: none; }
 .seg button { padding: 5px 11px; font-size: 12.5px; color: var(--ink-2); border-right: 1px solid var(--line); }
 .seg button:last-child { border-right: none; }
 .seg button.on { background: var(--ink); color: var(--paper); font-weight: 600; }
+
+/* La caja de buscar de una lista. Estaba escrita en el propio elemento y por
+   eso en un móvil se quedaba en 320 px con un hueco muerto al lado: aquí se
+   puede decir que en un teléfono ocupe la fila entera. */
+.buscador { position: relative; flex: 1 1 220px; max-width: 320px; }
 
 .chip {
   display: inline-flex;
@@ -926,72 +951,178 @@ a { color: inherit; text-decoration: none; }
 /* ═══════════════════════════════════════════════════ el móvil ══════════ */
 
 /**
- * La barra de abajo solo existe en pantallas de teléfono. En el escritorio no
- * se pinta siquiera, para que no haya dos navegaciones compitiendo.
+ * prolife en un teléfono.
+ *
+ * Tres cosas que no son de gusto sino de que funcione, y que son las que hacían
+ * la app inmanejable en un iPhone:
+ *
+ * 1. Los campos a 16 px. Por debajo de eso, Safari hace zoom al tocarlos —y no
+ *    vuelve—, así que escribir el nombre de una tarea te dejaba la pantalla
+ *    torcida y con media interfaz fuera.
+ * 2. Las franjas del sistema. Con `viewport-fit=cover` en el `index.html`, los
+ *    `env(safe-area-inset-*)` por fin valen algo y se pueden respetar.
+ * 3. Las zonas de toque a 44 px, que es lo que mide un dedo.
+ *
+ * Lo demás sí es de gusto: menos cromo, más aire y una jerarquía que se lee de
+ * un vistazo, porque en el móvil se mira de pie y tres segundos.
  */
+
 .tabbar { display: none; }
 
 @media (max-width: 640px) {
-  /* Abajo manda la barra: la columna lateral sobra y estorba. */
+  /* ---------------------------------------------------------- lo básico -- */
+
+  body { font-size: 15px; line-height: 1.55; }
+
+  /* Tocar un campo NO puede hacer zoom. Es la diferencia entre una app y una
+     página web mal puesta en un móvil.
+     El `!important` está aquí a propósito y es de los pocos que se justifican:
+     hay campos con su tamaño escrito en el propio elemento —rutas y claves, que
+     se quieren pequeñas y en monoespaciada— y una regla normal no puede con
+     eso. En un móvil esto no es una preferencia de estilo, es un mínimo. */
+  .input, .select, .textarea { font-size: 16px !important; padding: 10px 12px; }
+
+  /* Un dedo mide 44 px, no 28. */
+  .btn { padding: 9px 14px; font-size: 14px; }
+  .btn.sm { padding: 8px 13px; font-size: 13px; }
+  .btn.icon { padding: 11px; }
+
+  /* --------------------------------------------------------- la armadura -- */
+
   .sidebar { display: none; }
+
+  .topbar {
+    height: auto; flex: none; gap: 8px;
+    padding: 8px 12px;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+  /* El medidor del día y el total son de leer, no de tocar: en 390 px se
+     quedan con el ancho que necesita lo que sí se usa. */
+  .timer-hoy { display: none; }
+  .timer-pill { padding: 4px 6px 4px 10px; min-width: 0; }
+  .timer-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 9rem; }
+  /* Cuando no hay nada en marcha, la cápsula es un marco alrededor de otro
+     marco: dos bordes para no decir nada. Se queda el botón solo, que es lo
+     único que se toca. */
+  .timer-pill:not(.live):not(.idle) { border-color: transparent; background: none; padding: 0; }
+  .timer-pill .btn { flex: none; white-space: nowrap; }
+  /* «Nada en marcha» al lado de un botón que dice «Trabajar en…» es la misma
+     frase dos veces, y en 390 px se la come el botón. Con el aviso fuera, el
+     punto gris tampoco señala ya nada. */
+  .timer-pill .timer-label.dim { display: none; }
+  .timer-pill:has(.timer-label.dim) > .dot { display: none; }
+
+  .view {
+    padding: 20px 16px calc(96px + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(16px + env(safe-area-inset-left, 0px));
+    padding-right: calc(16px + env(safe-area-inset-right, 0px));
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ------------------------------------------------------ barra de abajo -- */
 
   .tabbar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 120;
     display: grid; grid-template-columns: repeat(5, 1fr);
-    background: color-mix(in srgb, var(--surface) 94%, transparent);
-    backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     border-top: 1px solid var(--line);
-    /* El iPhone se come la franja de abajo con su barra de gestos. */
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .tabbar-item {
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    padding: 8px 2px 7px; font-size: 10.5px; color: var(--ink-3);
-    text-decoration: none; background: none; border: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 9px 2px 8px; font-size: 10.5px; letter-spacing: 0.01em;
+    color: var(--ink-3); text-decoration: none; background: none; border: 0;
+    position: relative; min-height: 52px; justify-content: center;
   }
   .tabbar-item.on { color: var(--ink); font-weight: 600; }
+  /* Un filete arriba en vez de un fondo: marca dónde estás sin partir la barra
+     en cinco cajas. */
+  .tabbar-item.on::before {
+    content: ''; position: absolute; top: -1px; left: 26%; right: 26%;
+    height: 2px; background: var(--accent); border-radius: 0 0 2px 2px;
+  }
   .tabbar-icono { position: relative; display: grid; place-items: center; height: 20px; }
   .tabbar-item.on .tabbar-icono { color: var(--accent); }
   .tabbar-punto {
-    position: absolute; top: -1px; right: -5px;
-    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    position: absolute; top: -2px; right: -6px;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 2px var(--surface);
   }
 
-  /* Sitio para la barra, más la franja del sistema. */
-  .view { padding: 18px 14px calc(88px + env(safe-area-inset-bottom, 0px)); }
+  /* ---------------------------------------------------------- contenido -- */
 
-  .topbar { height: 46px; flex: 0 0 46px; padding: 0 10px; gap: 6px; }
-  /* En 390 px no caben el medidor, el ayudante y el botón de tarea: se queda
-     lo que se usa de pie, que es apuntar una tarea. */
-  .topbar .btn.sm:not(.primary) { display: none; }
+  .page-head { flex-direction: column; align-items: stretch; gap: 14px; margin-bottom: 20px; }
+  .page-head h2 { font-size: 30px; line-height: 1.08; }
+  .page-head p { font-size: 14px; max-width: none; }
+  .page-head .row { justify-content: flex-start; }
 
-  .page-head { flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 18px; }
-  .page-head h2 { font-size: 27px; }
-  .page-head p { font-size: 13.5px; }
-  .card { padding: 14px; }
-  .modal { width: 100%; max-width: 100%; }
+  /* Menos cromo: en una columna de 358 px, cada borde y cada sombra es ruido. */
+  .card { padding: 16px; box-shadow: none; }
+  .card + .card { margin-top: 0; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; gap: 10px; }
 
-  /* El calendario del mes en 390 px: los días caben, los títulos no. Se dejan
-     los puntos de color, que dicen «aquí hay algo» sin mentir sobre qué. */
-  .cal-cell { min-height: 58px; padding: 3px; }
+  /* Las filas de lista se tocan: 44 px de alto y el texto que quepa. */
+  .list-row { min-height: 46px; padding-top: 10px; padding-bottom: 10px; }
+  .link-tile { padding: 11px 13px; font-size: 14px; }
+  .sub-card { padding: 16px; }
+
+  .stat .value { font-size: 30px; }
+  .row.wrap { gap: 6px; }
+  .chip { font-size: 12px; padding: 5px 10px; }
+
+  .buscador { flex-basis: 100%; max-width: none; }
+
+  /* Seis pestañas no caben en 358 px. Antes se cortaban por la derecha —las
+     últimas áreas ni existían—; ahora la tira se desliza con el dedo y no se
+     pierde ninguna. La barra de deslizar se quita porque encima de la tira
+     tapa el texto. */
+  .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .seg::-webkit-scrollbar { display: none; }
+  .seg button { flex: 0 0 auto; }
+
+  /* Un separador elástico dentro de una fila que se parte manda lo de después
+     al extremo derecho de la línea siguiente, y la barra queda en escalera. En
+     una columna estrecha todo va pegado a la izquierda y ya está. */
+  .row.wrap > .spacer { display: none; }
+
+  /* La barra del calendario: modo arriba, mover el mes en medio y las dos de
+     añadir abajo a mitades. Puesta a mano porque es la única fila con seis
+     mandos de tres tamaños distintos, y dejarla partirse sola daba una
+     escalera con un botón suelto en cada línea. */
+  .barra-cal { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .barra-cal > .seg { grid-column: span 4; }
+  .barra-cal > .seg button { flex: 1; text-align: center; }
+  .barra-cal > .btn:nth-child(3) { grid-column: span 2; }
+  .barra-cal > .btn:nth-child(5),
+  .barra-cal > .btn:nth-child(6) { grid-column: span 2; }
+  .barra-cal > .btn { justify-content: center; }
+
+  /* Un cuadro de diálogo a pantalla casi completa, con su propio scroll: en un
+     móvil, un modal centrado y pequeño deja el teclado encima del botón. */
+  .modal {
+    width: 100%; max-width: 100%; max-height: 88dvh;
+    display: flex; flex-direction: column;
+  }
+  .modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ---------------------------------------------------------- calendario -- */
+
+  /* En 48 px de celda no cabe ningún título: las cosas se quedan en rayas de
+     su color, que dicen «aquí hay algo» sin mentir sobre qué. */
+  .cal-cell { min-height: 60px; padding: 4px 3px; }
   .cal-ev {
     font-size: 0; padding: 0; height: 5px; border-radius: 3px;
-    border-left-width: 0; margin-bottom: 2px;
+    border-left-width: 0; margin-bottom: 3px;
     background: var(--c, var(--ink-3)) !important;
   }
   .cal-ev .mono { display: none; }
-  .cal-festivo { font-size: 8.5px; }
-  .cal-head { font-size: 9.5px; }
-  .cal-day { font-size: 11px; }
+  .cal-festivo { font-size: 9px; }
+  .cal-head { font-size: 10px; }
+  .cal-day { font-size: 12px; }
+  .split.with-aside { gap: 14px; }
 
-  /* Una franja horaria de 46 px por hora no se puede tocar con el dedo. */
-  .split.with-aside { gap: 12px; }
-
-  /* Las rejillas anchas se apilan ya, pero las filas de chips se desbordaban. */
-  .row.wrap { gap: 5px; }
-  .chip { font-size: 11px; padding: 3px 8px; }
-
-  /* El ayudante a pantalla completa: un cajón de 320 px sobre 390 es una rendija. */
+  /* El ayudante, a pantalla completa: un cajón de 320 px sobre 390 es una rendija. */
   .dock { width: 100% !important; }
   .dock-drag { display: none; }
 }

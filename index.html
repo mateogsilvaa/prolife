@@ -2,7 +2,10 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover` no es decoración: sin él, en un iPhone los
+         `env(safe-area-inset-*)` valen CERO, y la barra de abajo se pinta
+         debajo de la raya del gesto de inicio. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>prolife</title>
     <meta name="theme-color" content="#f5f3ee" />
     <meta name="description" content="Universidad, trabajo, atletismo y vida, en la carpeta real de tu ordenador." />

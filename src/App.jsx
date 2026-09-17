@@ -56,6 +56,17 @@ export default function App() {
   const [conectado, setConectado] = useState(() => !!raizGuardada())
   if (enDrive && !conectado) return <ConectarDrive onListo={() => { setConectado(true); location.reload() }} />
 
+  /**
+   * Sin Drive detrás, un 401 no es un aparato sin emparejar.
+   *
+   * El cartel del enlace de emparejamiento es del ordenador: habla de un
+   * servidor que en la tablet no existe. Cuando Google da por terminado el
+   * permiso —y lo hace cada siete días mientras el proyecto esté en pruebas—,
+   * lo que hay que enseñar es el botón de volver a entrar, no un callejón que
+   * manda a buscar algo que no tiene nada que ver.
+   */
+  if (enDrive && error?.auth) return <ConectarDrive caducada onListo={() => location.reload()} />
+
   if (error) {
     return (
       <div style={{ display: 'grid', placeItems: 'center', height: '100%', padding: 40, textAlign: 'center' }}>

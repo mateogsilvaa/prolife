@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Icon from './Icon.jsx'
 import { buscarCarpetas, listarCarpetas, fijarRaiz, raizGuardada, haySesion } from '../lib/drive.js'
-import { entrar, puedeEntrar, PETICION } from '../lib/google.js'
+import { entrar, puedeEntrar, PETICION, motivoDeSalida } from '../lib/google.js'
 
 /**
  * La primera pantalla del APK: entrar con Google y decir cuál es la carpeta.
@@ -14,8 +14,10 @@ import { entrar, puedeEntrar, PETICION } from '../lib/google.js'
  * Se reconocen solas las carpetas que llevan un `.prolife` dentro, que es lo
  * que el ordenador crea: así no hay que ir a buscar la ruta a mano.
  */
-export default function ConectarDrive({ onListo }) {
-  const [paso, setPaso] = useState(() => (raizGuardada() ? 'listo' : 'entrar'))
+export default function ConectarDrive({ onListo, caducada = false }) {
+  // Con la carpeta ya elegida, esta pantalla solo sale cuando la sesión se ha
+  // acabado: entonces el paso que toca es entrar, no elegir carpeta otra vez.
+  const [paso, setPaso] = useState(() => (caducada || !raizGuardada() ? 'entrar' : 'listo'))
   const [carpetas, setCarpetas] = useState(null)
   const [error, setError] = useState(null)
   const [ocupado, setOcupado] = useState(false)
@@ -27,6 +29,9 @@ export default function ConectarDrive({ onListo }) {
 
   // Si la sesión sigue viva de la última vez, se salta el primer paso.
   useEffect(() => {
+    // Con la carpeta ya elegida y la sesión caída, lo único que falta es
+    // entrar: saltar a elegir carpeta le haría repetir un paso que ya dio.
+    if (caducada && raizGuardada()) return
     haySesion().then((si) => { if (si && paso === 'entrar') setPaso('carpeta') })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -62,6 +67,9 @@ export default function ConectarDrive({ onListo }) {
     setOcupado(true)
     try {
       await entrar()
+      // Si la carpeta ya estaba elegida, volver a preguntarla sería hacerle
+      // repetir un paso que ya dio: lo que faltaba era la sesión.
+      if (raizGuardada()) return onListo?.()
       setPaso('carpeta')
     } catch (e) {
       setError(e.message)
@@ -84,16 +92,17 @@ export default function ConectarDrive({ onListo }) {
       <div style={{ maxWidth: '38rem', width: '100%' }}>
         <div className="eyebrow">prolife en la tablet</div>
         <h2 className="display" style={{ fontSize: 30, margin: '4px 0 10px' }}>
-          {paso === 'entrar' ? 'Conecta tu Google Drive' : 'Elige tu carpeta'}
+          {paso !== 'entrar' ? 'Elige tu carpeta' : caducada ? 'Vuelve a entrar en Google' : 'Conecta tu Google Drive'}
         </h2>
 
         {paso === 'entrar' && (
           <>
             <p className="muted" style={{ lineHeight: 1.6 }}>
-              Aquí no hay servidor: la tablet lee y escribe en la misma carpeta de Drive que
-              sincroniza tu ordenador. Por eso funciona con el ordenador apagado — pero necesita
-              tu permiso para entrar en Drive.
+              {caducada
+                ? 'Google ha dado por terminado el permiso de este aparato. No se ha perdido nada: tus cosas están en Drive y la carpeta sigue elegida. Solo hay que volver a dar permiso.'
+                : 'Aquí no hay servidor: la tablet lee y escribe en la misma carpeta de Drive que sincroniza tu ordenador. Por eso funciona con el ordenador apagado — pero necesita tu permiso para entrar en Drive.'}
             </p>
+            {caducada && <PorQueSeAcaba />}
             {!puedeEntrar() && (
               <div className="notice err" style={{ margin: '14px 0' }}>
                 <Icon name="x" size={13} />
@@ -104,7 +113,8 @@ export default function ConectarDrive({ onListo }) {
               </div>
             )}
             <button className="btn primary" onClick={conGoogle} disabled={ocupado || !puedeEntrar()}>
-              <Icon name="link" size={13} /> {ocupado ? 'Esperando a Google…' : 'Entrar con Google'}
+              <Icon name="link" size={13} />{' '}
+              {ocupado ? 'Esperando a Google…' : caducada ? 'Volver a entrar con Google' : 'Entrar con Google'}
             </button>
             <p className="dim" style={{ fontSize: 12, lineHeight: 1.6, marginTop: 14 }}>
               Se abre Chrome para escribir la contraseña, no esta app: es lo correcto, y lo único
@@ -194,6 +204,32 @@ export default function ConectarDrive({ onListo }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Por qué se ha acabado la sesión, cuando se sabe.
+ *
+ * Importa más de lo que parece: si el proyecto de Google está en «Pruebas»,
+ * Google caduca el permiso cada SIETE DÍAS, y entonces esto no es una avería
+ * sino una cita semanal. Verlo escrito es lo que diferencia «se ha roto otra
+ * vez» de «hay que publicar el proyecto y no vuelve a pasar».
+ */
+function PorQueSeAcaba() {
+  const motivo = motivoDeSalida()
+  return (
+    <div className="notice" style={{ margin: '14px 0', alignItems: 'flex-start' }}>
+      <Icon name="clock" size={13} />
+      <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+        {/* El punto va fuera y se le quita al mensaje el suyo: Google unas veces
+            lo trae y otras no, y «revoked..» delata que nadie miró esto. */}
+        {motivo && <>Google dijo: <span className="mono">{motivo.replace(/\.$/, '')}</span>.<br /></>}
+        Si esto pasa cada pocos días, es que el proyecto sigue en <b>Pruebas</b> en la consola de
+        Google: ahí los permisos caducan a los siete días. En{' '}
+        <span className="mono">console.cloud.google.com/auth/audience</span> → <b>Publicar la
+        aplicación</b> deja de caducar.
+      </span>
     </div>
   )
 }

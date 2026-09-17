@@ -39,8 +39,17 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      # `VITE_MODO` se pone explícito a propósito. Dentro del APK la app se
+      # sirve desde `https://localhost`, que es indistinguible de una página
+      # normal, así que saber que no hay servidor de prolife detrás dependía de
+      # que el puente de Capacitor estuviera puesto antes de que se evaluara el
+      # primer módulo. Funciona, pero es una carrera, y perderla significa una
+      # tablet pidiendo un enlace de emparejamiento que aquí no existe. Un APK
+      # es de Drive por construcción: mejor decirlo que deducirlo.
       - name: Compilar la interfaz
         run: npm run build
+        env:
+          VITE_MODO: drive
 
       - name: Meterla dentro del proyecto Android
         run: npx cap sync android

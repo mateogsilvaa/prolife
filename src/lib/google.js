@@ -40,6 +40,24 @@ export const PETICION = {
 }
 
 const REFRESCO_KEY = 'prolife.drive.refresco'
+/**
+ * Por qué se acabó la última sesión.
+ *
+ * Cuando Google rechaza el testigo de refresco no hay a quién preguntárselo
+ * después: el testigo se tira —si no, se reintentaría en bucle— y lo único que
+ * queda es una app sin sesión y sin saber si fue una contraseña cambiada, un
+ * permiso revocado o los siete días que Google le da a los proyectos en
+ * pruebas. Se apunta aquí para poder decirlo en la pantalla de volver a entrar.
+ */
+const MOTIVO_KEY = 'prolife.drive.motivo'
+
+export const motivoDeSalida = () => {
+  try {
+    return localStorage.getItem(MOTIVO_KEY) || ''
+  } catch {
+    return ''
+  }
+}
 
 /**
  * ¿Esto es el APK o una página web?
@@ -130,6 +148,7 @@ function entrarEnElApk() {
             redirect_uri: REDIRECCION,
           })
           if (datos.refresh_token) localStorage.setItem(REFRESCO_KEY, datos.refresh_token)
+          localStorage.removeItem(MOTIVO_KEY)
           guardarToken(datos)
           await cerrar()
           resolve(datos)
@@ -158,6 +177,7 @@ function entrarEnElApk() {
 /** Cerrar sesión de verdad: también el testigo de refresco, que es el duradero. */
 export function salir() {
   localStorage.removeItem(REFRESCO_KEY)
+  localStorage.removeItem(MOTIVO_KEY)
   cerrarSesion()
 }
 
@@ -262,9 +282,11 @@ usarSesion(async () => {
       guardarToken(datos)
       return datos.access_token
     })
-    .catch(() => {
-      // El refresco ya no vale (revocado, o cambió la contraseña): a entrar otra vez.
+    .catch((e) => {
+      // El refresco ya no vale (revocado, cambió la contraseña, o caducó por
+      // los siete días de los proyectos en pruebas): a entrar otra vez.
       localStorage.removeItem(REFRESCO_KEY)
+      try { localStorage.setItem(MOTIVO_KEY, e?.message || 'Google no ha aceptado la sesión guardada.') } catch { /* sin storage */ }
       return null
     })
     .finally(() => { renovando = null })

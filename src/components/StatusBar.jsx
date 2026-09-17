@@ -87,7 +87,9 @@ export default function StatusBar({ onReview }) {
         </span>
       )}
 
-      <div className="row" style={{ gap: 8 }}>
+      {/* En un móvil esto se esconde: es información de lectura y se come el
+          ancho que necesita lo que sí se toca. El total del día está en Hoy. */}
+      <div className="row timer-hoy" style={{ gap: 8 }}>
         <div style={{ width: 86 }}>
           <div className="meter"><i style={{ width: `${Math.min(100, (todaySecs / goal) * 100)}%` }} /></div>
         </div>

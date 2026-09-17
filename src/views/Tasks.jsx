@@ -47,7 +47,7 @@ export default function Tasks() {
       </div>
 
       <div className="row wrap" style={{ marginBottom: 20, gap: 8 }}>
-        <div className="row" style={{ position: 'relative', flex: '1 1 220px', maxWidth: 320 }}>
+        <div className="row buscador">
           <Icon name="search" size={14} style={{ position: 'absolute', left: 10, color: 'var(--ink-3)' }} />
           <input className="input" style={{ paddingLeft: 32 }} placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>

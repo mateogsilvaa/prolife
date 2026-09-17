@@ -143,6 +143,14 @@ const apiServidor = {
   aiStatus: (url) => req(`/api/ai/status?url=${encodeURIComponent(url || '')}`),
   aiChat: (body) => req('/api/ai/chat', { method: 'POST', body }),
 
+  gcalStatus: () => req('/api/gcal/status'),
+  gcalConfig: (body) => req('/api/gcal/config', { method: 'POST', body }),
+  gcalLogin: () => req('/api/gcal/login'),
+  gcalLogout: () => req('/api/gcal/logout', { method: 'POST', body: {} }),
+  gcalMostrar: (ids) => req('/api/gcal/mostrar', { method: 'POST', body: { ids } }),
+  gcalSync: () => req('/api/gcal/sync', { method: 'POST', body: {} }),
+  gcalEvents: (from, to) => req(`/api/gcal/events?from=${from}&to=${to}`),
+
   openUrl: (url) => req('/api/open', { method: 'POST', body: { url } }),
   openPath: (p) => req('/api/open', { method: 'POST', body: { p } }),
   openInCode: (p) => req('/api/open', { method: 'POST', body: { p, app: 'code' } }),
@@ -207,6 +215,16 @@ const apiDrive = {
   tailscaleServe: soloEnElOrdenador('Tailscale'),
   aiStatus: soloEnElOrdenador('El ayudante'),
   aiChat: soloEnElOrdenador('El ayudante'),
+  // El calendario lo sincroniza el ordenador, que es el único escritor del
+  // calendario de Google igual que lo es del db.json. Lo que apuntes en la
+  // tablet llega a Google cuando el ordenador se abre.
+  gcalConfig: soloEnElOrdenador('Google Calendar'),
+  gcalLogin: soloEnElOrdenador('Google Calendar'),
+  gcalLogout: soloEnElOrdenador('Google Calendar'),
+  gcalMostrar: soloEnElOrdenador('Google Calendar'),
+  gcalSync: soloEnElOrdenador('Google Calendar'),
+  gcalStatus: async () => ({ ok: true, configurado: false, conectado: false, calendarios: [], soloOrdenador: true }),
+  gcalEvents: async () => ({ ok: true, items: [] }),
   openPath: soloEnElOrdenador('Abrir la carpeta'),
   openInCode: soloEnElOrdenador('VS Code'),
   reveal: soloEnElOrdenador('Abrir la carpeta'),

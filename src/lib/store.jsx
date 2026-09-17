@@ -120,6 +120,36 @@ export function Provider({ children }) {
   // espejo de fuera de React nunca se queda atrás.
   useEffect(() => { dbRef.current = db }, [db])
 
+  /**
+   * Llevar los cambios a Google Calendar sin que haya que acordarse.
+   *
+   * Dos momentos: al abrir la app, y un rato después de dejar de tocar cosas.
+   * El rato importa —cambiar el horario son diez ediciones seguidas— y por eso
+   * no se sincroniza a cada tecla: cada sincronización es una tanda de
+   * llamadas a Google, y mandar diez tandas para acabar en el mismo sitio es
+   * castigar la cuenta para nada. Como sincronizar es reconciliar, esperar no
+   * pierde nada: la última vale por todas.
+   */
+  const gcalOn = useRef(false)
+  const gcalTimer = useRef(null)
+  useEffect(() => {
+    if (enDrive) return
+    api.gcalStatus()
+      .then((st) => {
+        gcalOn.current = !!st?.conectado
+        if (gcalOn.current) api.gcalSync().catch(() => {})
+      })
+      .catch(() => {})
+    return () => clearTimeout(gcalTimer.current)
+  }, [])
+
+  useEffect(() => {
+    if (!db || !gcalOn.current) return
+    clearTimeout(gcalTimer.current)
+    gcalTimer.current = setTimeout(() => api.gcalSync().catch(() => {}), 90_000)
+    return () => clearTimeout(gcalTimer.current)
+  }, [db])
+
   useEffect(() => {
     document.documentElement.dataset.theme = db?.settings?.theme === 'ink' ? 'ink' : 'paper'
   }, [db?.settings?.theme])

@@ -324,6 +324,40 @@ horaria: las clases del horario, los exámenes, los eventos y las entregas caen 
 - **Repeticiones**: diaria, semanal (con días concretos), mensual o anual, con intervalo y
   fecha de fin. Un día suelto se puede saltar sin romper la serie.
 
+## Google Calendar
+
+Tus clases, exámenes y eventos, en el móvil. Se conecta desde **Ajustes → Google Calendar**.
+
+La regla es la de siempre: **un solo escritor**. Dentro de tu cuenta se crea un calendario
+aparte llamado `prolife` que gobierna la app entera —lo llena, lo corrige y borra de ahí lo
+que ya no toca—. **Tu calendario personal no se toca nunca**; solo se lee, y únicamente los
+que tú marques, para poder verlos dentro del calendario de prolife en gris.
+
+- **Sincronizar es reconciliar**, no ir apuntando cambios: se calcula cómo tendría que estar
+  el calendario según el `db.json` de ahora, se mira cómo está y se corrige la diferencia.
+  Por eso sincronizar dos veces seguidas no cambia nada la segunda, y por eso da igual que
+  la app haya estado cerrada dos semanas.
+- **Los dos ordenadores pueden sincronizar.** El identificador de cada evento se deduce de
+  la cosa que representa, así que los dos calculan el mismo y el segundo actualiza en vez de
+  duplicar. No hay ninguna tabla de equivalencias que mantener.
+- **Las clases van como eventos que se repiten**, con su regla semanal y la fecha de fin de
+  su cuatrimestre — no como cientos de eventos sueltos. Los festivos entran como excepciones
+  de esa repetición: el día que marcas festivo, la clase desaparece también del móvil.
+- **Eliges qué se lleva**: clases, exámenes, eventos y, si quieres, las tareas con fecha y
+  los entrenos. Lo que desmarcas se retira de Google en la siguiente pasada.
+- Se sincroniza solo al abrir la app y un rato después de dejar de tocar cosas, más el botón
+  de *Sincronizar ahora*. El rato importa: cambiar un horario son diez ediciones seguidas y
+  no tiene sentido mandar diez tandas para acabar en el mismo sitio.
+
+Hace falta un cliente de OAuth propio, igual que para Drive en la tablet: en
+[console.cloud.google.com/auth/clients](https://console.cloud.google.com/auth/clients), tipo
+**Aplicación de escritorio**, con la **Google Calendar API** habilitada. El identificador y
+el secreto se pegan en Ajustes y se quedan en `~/.prolife/config.json` de ese ordenador —no
+en el repositorio y no en la carpeta que viaja por Drive—. El testigo de acceso también.
+
+Lo sincroniza el ordenador, no la tablet: lo que apuntes en la tablet llega a Google cuando
+abres la app en el ordenador, por la misma razón por la que el `db.json` lo escribe él solo.
+
 ## Voluntariado
 
 Un apartado propio para las horas de voluntariado, pensado no para medirlas sino para

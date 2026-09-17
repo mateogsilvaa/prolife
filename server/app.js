@@ -16,6 +16,8 @@ import * as assistant from './assistant.js'
 import * as tailscale from './tailscale.js'
 import { applyOp } from './ops.js'
 import { extraerTexto, puedeLeer } from './leer.js'
+import * as gcal from './gcal.js'
+import { sincronizar, AJUSTES_POR_DEFECTO } from './calsync.js'
 
 const KIND = {
   '.pdf': 'pdf',
@@ -758,6 +760,134 @@ export function createApp() {
       if (path.resolve(abs) === path.resolve(cfg.baseDir)) throw Object.assign(new Error('No'), { status: 403 })
       fs.rmSync(abs, { recursive: true, force: true })
       res.json({ ok: true })
+    })
+  )
+
+  /* ------------------------------------------------------ google calendar --- */
+
+  /**
+   * El calendario vive en el servidor y no en la interfaz porque el testigo de
+   * refresco —lo único que de verdad da acceso a la cuenta— tiene que quedarse
+   * en `~/.prolife/config.json`, del ordenador, y no en el navegador ni en la
+   * carpeta que viaja por Drive.
+   */
+  app.get(
+    '/api/gcal/status',
+    wrap(async (_req, res) => {
+      const base = {
+        ok: true,
+        configurado: gcal.configurado(),
+        conectado: gcal.conectado(),
+        calendarId: cfg.gcalCalendarId || '',
+        mostrar: cfg.gcalMostrar || [],
+        ultima: cfg.gcalUltima || null,
+        ajustes: { ...AJUSTES_POR_DEFECTO, ...(loadDb(cfg.baseDir).settings?.gcal || {}) },
+      }
+      if (!base.conectado) return res.json({ ...base, calendarios: [] })
+      // Que la lista de calendarios falle no puede dejar la pantalla en blanco:
+      // el resto del estado sigue siendo verdad y es lo que explica el fallo.
+      const calendarios = await gcal.listarCalendarios().catch((e) => ({ error: e.message }))
+      if (calendarios.error) return res.json({ ...base, calendarios: [], error: calendarios.error })
+      res.json({ ...base, calendarios })
+    })
+  )
+
+  app.post(
+    '/api/gcal/config',
+    wrap((req, res) => {
+      cfg = writeConfig({
+        gcalClientId: String(req.body?.clientId || '').trim(),
+        gcalClientSecret: String(req.body?.clientSecret || '').trim(),
+      })
+      res.json({ ok: true, configurado: gcal.configurado() })
+    })
+  )
+
+  app.get(
+    '/api/gcal/login',
+    wrap((req, res) => {
+      // El puerto sale de la propia petición: si la app se abrió en otro por
+      // estar el 4321 ocupado, la vuelta tiene que ir a ese y no al de fábrica.
+      const puerto = Number(req.socket.localPort) || cfg.port
+      res.json({ ok: true, url: gcal.urlDeEntrada(puerto), redireccion: gcal.redireccion(puerto) })
+    })
+  )
+
+  /** Aquí vuelve Google. Lo abre el navegador, así que contesta una página. */
+  app.get(
+    '/api/gcal/callback',
+    wrap(async (req, res) => {
+      const pagina = (titulo, detalle, color) => `<!doctype html><meta charset="utf-8">
+<title>prolife · Google Calendar</title>
+<body style="font:15px/1.6 system-ui,sans-serif;background:#f5f3ee;color:#1a1815;display:grid;place-items:center;height:100vh;margin:0">
+<div style="max-width:30rem;padding:28px;text-align:center">
+<div style="font-size:26px;color:${color};margin-bottom:8px">${titulo}</div>
+<p style="color:#56524a">${detalle}</p>
+<p style="color:#8d887c;font-size:13px">Ya puedes cerrar esta pestaña y volver a prolife.</p>
+</div>`
+      try {
+        await gcal.terminarEntrada({ code: req.query.code, state: req.query.state, error: req.query.error })
+        res.type('html').send(pagina('Conectado', 'prolife ya puede escribir en tu Google Calendar.', '#4f6b4a'))
+      } catch (e) {
+        res.status(e.status || 400).type('html').send(pagina('No ha podido ser', e.message, '#bf3f24'))
+      }
+    })
+  )
+
+  app.post(
+    '/api/gcal/logout',
+    wrap((_req, res) => {
+      gcal.salir()
+      cfg = readConfig()
+      res.json({ ok: true })
+    })
+  )
+
+  /** Qué calendarios tuyos se ven dentro de prolife. Solo se leen. */
+  app.post(
+    '/api/gcal/mostrar',
+    wrap((req, res) => {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((x) => typeof x === 'string').slice(0, 30) : []
+      cfg = writeConfig({ gcalMostrar: ids })
+      res.json({ ok: true, mostrar: ids })
+    })
+  )
+
+  app.post(
+    '/api/gcal/sync',
+    wrap(async (_req, res) => {
+      const r = await sincronizar(loadDb(cfg.baseDir))
+      cfg = writeConfig({ gcalUltima: { at: r.at, creados: r.creados, cambiados: r.cambiados, borrados: r.borrados } })
+      res.json(r)
+    })
+  )
+
+  /**
+   * Lo que hay en TUS calendarios entre dos fechas, para pintarlo dentro de
+   * prolife. Solo lectura: lo que pongas en Google es tuyo y la app no lo toca
+   * ni lo guarda en el `db.json`.
+   */
+  app.get(
+    '/api/gcal/events',
+    wrap(async (req, res) => {
+      const desde = String(req.query.from || '')
+      const hasta = String(req.query.to || '')
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !/^\d{4}-\d{2}-\d{2}$/.test(hasta)) {
+        throw Object.assign(new Error('Faltan las fechas'), { status: 400 })
+      }
+      const quiere = cfg.gcalMostrar || []
+      if (!gcal.conectado() || !quiere.length) return res.json({ ok: true, items: [] })
+
+      const propios = cfg.gcalCalendarId
+      const items = []
+      for (const id of quiere) {
+        // El calendario de prolife no se pinta: sus eventos ya están en la app,
+        // y verlos dos veces sería peor que no verlos.
+        if (id === propios) continue
+        const suyos = await gcal.eventosDe(id, desde, hasta).catch(() => [])
+        for (const e of suyos) items.push({ ...e, calendarId: id })
+      }
+      res.json({ ok: true, items })
     })
   )
 

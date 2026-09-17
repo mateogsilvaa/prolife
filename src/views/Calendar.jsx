@@ -1,10 +1,11 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import TaskList from '../components/TaskList.jsx'
 import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
 import ExamEditor, { newExam, kindLabel } from '../components/ExamEditor.jsx'
 import { useStore, uid, AREAS, PALETTE } from '../lib/store.jsx'
+import { api } from '../lib/api.js'
 import { slotActiveOn, holidayOn, classesBetween } from '../lib/stats.js'
 import { expandEvents, FREQ, repeatLabel } from '../lib/recurrence.js'
 import { startDrag } from '../lib/drag.js'
@@ -103,6 +104,50 @@ export default function Calendar() {
 
   const anchorDate = parseIso(anchor)
 
+  /**
+   * Lo que hay en tus calendarios de Google, para verlo aquí dentro.
+   *
+   * Se lee y ya: no entra en el `db.json` ni se puede editar desde aquí. Lo que
+   * pongas en Google es tuyo, y prolife solo escribe en el calendario suyo.
+   */
+  const [googles, setGoogles] = useState([])
+  const rango = useMemo(() => {
+    const centro = parseIso(anchor)
+    const ancho = mode === 'mes' ? 40 : mode === 'semana' ? 10 : 2
+    return { from: iso(addDays(centro, -ancho)), to: iso(addDays(centro, ancho)) }
+  }, [anchor, mode])
+
+  useEffect(() => {
+    let vivo = true
+    api.gcalEvents(rango.from, rango.to)
+      .then((r) => { if (vivo) setGoogles(r.items || []) })
+      // Sin Google conectado esto falla siempre, y un aviso rojo por cada vez
+      // que cambias de mes sería insoportable: el calendario se pinta igual.
+      .catch(() => { if (vivo) setGoogles([]) })
+    return () => { vivo = false }
+  }, [rango.from, rango.to])
+
+  /** Un evento de Google, en el idioma del calendario de prolife. */
+  const deGoogle = useMemo(() => {
+    const porDia = new Map()
+    for (const e of googles) {
+      const fecha = (e.start?.date || e.start?.dateTime || '').slice(0, 10)
+      if (!fecha) continue
+      const lista = porDia.get(fecha) || []
+      lista.push({
+        kind: 'google',
+        label: e.summary || '(sin título)',
+        color: 'var(--ink-3)',
+        start: e.start?.dateTime ? e.start.dateTime.slice(11, 16) : '',
+        end: e.end?.dateTime ? e.end.dateTime.slice(11, 16) : '',
+        detail: e.location || 'Google Calendar',
+        google: e,
+      })
+      porDia.set(fecha, lista)
+    }
+    return porDia
+  }, [googles])
+
   /** Todo lo que ocurre en un día: clases, exámenes, entregas, eventos y entrenos. */
   const itemsOf = useMemo(() => {
     const cats = new Map(db.categories.map((c) => [c.id, c]))
@@ -132,6 +177,8 @@ export default function Calendar() {
         })
       }
 
+      for (const g of deGoogle.get(date) || []) out.push(g)
+
       for (const ev of expandEvents(db.events, date, date)) {
         const c = cats.get(ev.categoryId)
         out.push({
@@ -160,7 +207,7 @@ export default function Calendar() {
 
       return out.sort((a, b) => (a.start || 'zz').localeCompare(b.start || 'zz'))
     }
-  }, [db])
+  }, [db, deGoogle])
 
   const load = (date) => db.sessions.filter((s) => s.date === date).reduce((a, s) => a + s.seconds, 0)
 
@@ -178,6 +225,9 @@ export default function Calendar() {
   /** Cada cosa del calendario se abre donde toca. */
   const openItem = (it) => {
     if (!it) return
+    // Un evento de Google se abre en Google: aquí no se puede editar, y fingir
+    // que sí acabaría en «guardado» sobre algo que no se ha guardado.
+    if (it.google) return void (it.google.htmlLink && api.openUrl(it.google.htmlLink))
     if (it.event) setEvent(it.event)
     else if (it.exam) setExam(it.exam)
     else if (it.task) setTask(it.task)

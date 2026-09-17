@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import Icon from '../components/Icon.jsx'
 import { LOGO_PATH, bumpLogo } from '../components/Brand.jsx'
@@ -468,6 +468,7 @@ export default function Settings() {
 
         <Cuatrimestres />
         <Festivos />
+        {!enDrive && <GoogleCalendar />}
 
         {!enDrive && <VsCode />}
 
@@ -1079,6 +1080,179 @@ function Festivos() {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * Google Calendar.
+ *
+ * Lo sincroniza el ordenador y no la tablet, y es la misma regla de siempre: un
+ * solo escritor. Dentro de tu cuenta se crea un calendario aparte llamado
+ * «prolife» que gobierna la app entera —lo llena, lo corrige y borra de ahí lo
+ * que ya no toca—; tu calendario personal solo se lee. Así no hay conflictos
+ * que resolver, porque no hay dos manos escribiendo lo mismo.
+ */
+function GoogleCalendar() {
+  const { db, update, toast } = useStore()
+  const [st, setSt] = useState(null)
+  const [id, setId] = useState('')
+  const [secreto, setSecreto] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+
+  const mirar = useCallback(() => {
+    api.gcalStatus().then(setSt).catch((e) => setSt({ error: e.message }))
+  }, [])
+  useEffect(() => { mirar() }, [mirar])
+
+  const guardarCredenciales = async () => {
+    try {
+      await api.gcalConfig({ clientId: id.trim(), clientSecret: secreto.trim() })
+      setId(''); setSecreto('')
+      mirar()
+      toast('Credenciales guardadas')
+    } catch (e) { toast(e.message, 'err') }
+  }
+
+  const conectar = async () => {
+    try {
+      const r = await api.gcalLogin()
+      await api.openUrl(r.url)
+      toast('Se ha abierto el navegador. Vuelve aquí cuando acabes.')
+    } catch (e) { toast(e.message, 'err') }
+  }
+
+  const sincronizar = async () => {
+    setOcupado(true)
+    try {
+      const r = await api.gcalSync()
+      const partes = [
+        r.creados ? `${r.creados} nuevos` : '',
+        r.cambiados ? `${r.cambiados} corregidos` : '',
+        r.borrados ? `${r.borrados} retirados` : '',
+      ].filter(Boolean)
+      toast(partes.length ? `Google Calendar al día: ${partes.join(', ')}` : 'Google Calendar ya estaba al día')
+      if (r.fallos?.length) toast(`${r.fallos.length} no han entrado: ${r.fallos[0].error}`, 'err')
+      mirar()
+    } catch (e) { toast(e.message, 'err') } finally { setOcupado(false) }
+  }
+
+  const alternar = async (calId) => {
+    const ahora = st?.mostrar || []
+    const ids = ahora.includes(calId) ? ahora.filter((x) => x !== calId) : [...ahora, calId]
+    setSt((x) => ({ ...x, mostrar: ids }))
+    await api.gcalMostrar(ids).catch((e) => toast(e.message, 'err'))
+  }
+
+  const setQue = (patch) => update((d) => { d.settings.gcal = { ...(d.settings.gcal || {}), ...patch } })
+  const que = { classes: true, exams: true, events: true, tasks: false, training: false, ...(db.settings.gcal || {}) }
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h3>Google Calendar</h3>
+        {st?.conectado && <span className="badge" style={{ background: 'var(--green-soft)', color: 'var(--green)', borderColor: 'transparent' }}>conectado</span>}
+        <div className="spacer" />
+        {st?.conectado && (
+          <button className="btn sm" onClick={sincronizar} disabled={ocupado}>
+            <Icon name="refresh" size={12} /> {ocupado ? 'Sincronizando…' : 'Sincronizar ahora'}
+          </button>
+        )}
+      </div>
+
+      <p className="dim" style={{ fontSize: 12.5, margin: '0 0 12px', lineHeight: 1.6 }}>
+        Tus clases, exámenes y eventos aparecen en el móvil. prolife crea un calendario suyo
+        dentro de tu cuenta y solo escribe ahí: <b>tu calendario personal no se toca nunca</b>,
+        solo se lee para poder verlo aquí dentro.
+      </p>
+
+      {!st ? (
+        <p className="dim" style={{ fontSize: 12.5, margin: 0 }}>Comprobando…</p>
+      ) : !st.configurado ? (
+        <>
+          <div className="notice" style={{ marginBottom: 12 }}>
+            <Icon name="clock" size={13} />
+            <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+              Hace falta un cliente de OAuth de tipo <b>Aplicación de escritorio</b> en{' '}
+              <span className="mono">console.cloud.google.com/auth/clients</span>, con la API de
+              Google Calendar habilitada. Se queda en este ordenador, no en el repositorio.
+            </span>
+          </div>
+          <div className="grid-2">
+            <div className="field">
+              <label>ID de cliente</label>
+              <input className="input mono" style={{ fontSize: 11.5 }} value={id} placeholder="…apps.googleusercontent.com"
+                onChange={(e) => setId(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Secreto de cliente</label>
+              <input className="input mono" style={{ fontSize: 11.5 }} type="password" value={secreto}
+                placeholder="GOCSPX-…" onChange={(e) => setSecreto(e.target.value)} />
+            </div>
+          </div>
+          <button className="btn" onClick={guardarCredenciales} disabled={!id.trim() || !secreto.trim()}>Guardar</button>
+        </>
+      ) : !st.conectado ? (
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn primary" onClick={conectar}><Icon name="link" size={13} /> Conectar con Google</button>
+          <span className="dim" style={{ fontSize: 12 }}>Se abre el navegador; la contraseña se teclea allí.</span>
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: 14 }}>
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>Qué se lleva a Google</div>
+            <div className="row wrap" style={{ gap: 12 }}>
+              {[
+                ['classes', 'Clases'],
+                ['exams', 'Exámenes y entregas'],
+                ['events', 'Eventos'],
+                ['tasks', 'Tareas con fecha'],
+                ['training', 'Entrenos'],
+              ].map(([k, label]) => (
+                <label key={k} className="row" style={{ gap: 6, cursor: 'pointer', fontSize: 12.5 }}>
+                  <input type="checkbox" checked={!!que[k]} onChange={(e) => setQue({ [k]: e.target.checked })} />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <p className="dim" style={{ fontSize: 11.5, margin: '6px 0 0' }}>
+              Las clases van como eventos que se repiten, con los festivos descontados. Lo que
+              desmarques aquí se retira de Google en la siguiente sincronización.
+            </p>
+          </div>
+
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>Qué calendarios tuyos se ven dentro de prolife</div>
+            <div className="row wrap" style={{ gap: 6 }}>
+              {(st.calendarios || []).filter((c) => c.id !== st.calendarId).map((c) => (
+                <button key={c.id} className={`chip${(st.mostrar || []).includes(c.id) ? ' on' : ''}`} onClick={() => alternar(c.id)}>
+                  <span className="dot" style={{ background: c.backgroundColor || 'var(--ink-3)' }} /> {c.summary}
+                </button>
+              ))}
+              {!(st.calendarios || []).length && <span className="dim" style={{ fontSize: 12 }}>No se ha podido leer la lista.</span>}
+            </div>
+            <p className="dim" style={{ fontSize: 11.5, margin: '6px 0 0' }}>
+              Solo se leen: salen en el calendario en gris y no se pueden editar desde aquí.
+            </p>
+          </div>
+
+          <div className="row" style={{ gap: 8 }}>
+            <span className="dim" style={{ fontSize: 11.5 }}>
+              {st.ultima
+                ? `Última vez: ${new Date(st.ultima.at).toLocaleString('es')} · ${st.ultima.creados} nuevos, ${st.ultima.cambiados} corregidos, ${st.ultima.borrados} retirados`
+                : 'Todavía no se ha sincronizado nunca.'}
+            </span>
+            <div className="spacer" />
+            <button className="btn ghost sm danger" onClick={async () => {
+              await api.gcalLogout().catch(() => {})
+              mirar()
+              toast('Desconectado. Lo que ya está en Google se queda como está.')
+            }}>Desconectar</button>
+          </div>
+        </div>
+      )}
+      {st?.error && <p className="dim" style={{ fontSize: 11.5, color: 'var(--accent)', margin: '10px 0 0' }}>{st.error}</p>}
     </div>
   )
 }

@@ -22,4 +22,4 @@ export const CLIENT_ID = '641970655049-4cmegapml8sl1s41fsm966525ffukc28.apps.goo
  * usa el flujo de testigo de Google Identity Services, que da un acceso de una
  * hora y ninguno duradero.
  */
-export const WEB_CLIENT_ID = 'PON-AQUI-TU-ID-DE-CLIENTE-WEB.apps.googleusercontent.com'
+export const WEB_CLIENT_ID = '641970655049-k0l4e1nr7vptohnluvglf12uo087vpu7.apps.googleusercontent.com'

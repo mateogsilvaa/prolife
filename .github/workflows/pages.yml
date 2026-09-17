@@ -1,0 +1,66 @@
+# Publica la versión web en GitHub Pages.
+#
+# Es la misma app, compilada en modo Drive: sin servidor detrás, leyendo y
+# escribiendo en la misma carpeta de Google Drive que sincroniza el ordenador —
+# igual que el APK de la tablet, pero sin instalar nada.
+#
+# Dos cosas que no son evidentes y que rompen la página en silencio si faltan:
+# `VITE_BASE`, porque en Pages la app cuelga de `/prolife/` y no de la raíz del
+# dominio; y `VITE_MODO`, porque ahí el protocolo es `https:` como el de
+# cualquier página y no hay ninguna señal que mirar para saber que no hay
+# servidor de prolife detrás.
+name: Web en GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Si llegan dos commits seguidos, se publica el último y ya: no tiene sentido
+# hacer cola para publicar una versión que va a quedar pisada en un minuto.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  compilar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Compilar en modo Drive
+        run: npm run build
+        env:
+          VITE_BASE: /prolife/
+          VITE_MODO: drive
+
+      # Las rutas de la app van en el hash, así que Pages nunca ve una ruta que
+      # no exista. Esto es solo por si alguien llega con un enlace viejo.
+      - name: Portada de repuesto
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  publicar:
+    needs: compilar
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

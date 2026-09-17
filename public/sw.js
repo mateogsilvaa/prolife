@@ -11,6 +11,16 @@
  * No hay lista escrita a mano —los nombres los pone Vite con un hash distinto en
  * cada compilación—: se sacan del propio `/`, que es lo único con nombre fijo.
  */
+/**
+ * Dónde cuelga la app.
+ *
+ * En el ordenador y en el APK es «/», pero en GitHub Pages es «/prolife/». Con
+ * la raíz escrita a mano, el service worker guardaba e iba a buscar una portada
+ * que allí no existe, y la app sin conexión abría en blanco. El ámbito del
+ * propio registro ya lo dice, así que no hay que configurarlo en ningún sitio.
+ */
+const RAIZ = new URL(self.registration?.scope || '/', self.location).pathname
+
 const VERSION = 'v1'
 const SHELL = `prolife-shell-${VERSION}`
 const DATA = `prolife-data-${VERSION}`
@@ -34,10 +44,10 @@ self.addEventListener('install', (e) => {
     (async () => {
       const c = await caches.open(SHELL)
       try {
-        const res = await fetch('/', { cache: 'reload' })
+        const res = await fetch(RAIZ, { cache: 'reload' })
         if (res.ok) {
           const html = await res.clone().text()
-          await c.put('/', res)
+          await c.put(RAIZ, res)
           const refs = [...html.matchAll(/(?:src|href)="(\/[^"]+)"/g)]
             .map((m) => m[1])
             .filter((u) => !u.startsWith('/api'))
@@ -104,11 +114,11 @@ self.addEventListener('fetch', (e) => {
           // enseñaba ese error para siempre.
           if (res.ok) {
             const copy = res.clone()
-            caches.open(SHELL).then((c) => c.put('/', copy))
+            caches.open(SHELL).then((c) => c.put(RAIZ, copy))
           }
           return res
         })
-        .catch(() => caches.match('/', { ignoreSearch: true, ...BUSCAR }))
+        .catch(() => caches.match(RAIZ, { ignoreSearch: true, ...BUSCAR }))
     )
     return
   }

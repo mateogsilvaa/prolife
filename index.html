@@ -6,9 +6,13 @@
     <title>prolife</title>
     <meta name="theme-color" content="#f5f3ee" />
     <meta name="description" content="Universidad, trabajo, atletismo y vida, en la carpeta real de tu ordenador." />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" href="/icon-192.png" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- Relativas y no absolutas: en GitHub Pages la app vive en /prolife/, y
+         una ruta que empiece por «/» se iría al dominio. Las rutas de la app
+         van en el hash, así que la parte de la dirección no cambia nunca y lo
+         relativo resuelve siempre bien. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon-192.png" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
     <meta name="mobile-web-app-capable" content="yes" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,7 +29,7 @@
       // le deja abrir sin el ordenador delante. En desarrollo estorba: serviría
       // el bundle de la vez anterior en vez del que acaba de recompilar Vite.
       if ('serviceWorker' in navigator && location.port !== '5199') {
-        addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+        addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}))
       }
     </script>
   </body>

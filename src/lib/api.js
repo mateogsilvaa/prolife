@@ -18,6 +18,10 @@ const KEY = 'prolife.key'
  */
 function modoDrive() {
   if (typeof window === 'undefined') return false
+  // La versión web se compila así a propósito: allí no hay servidor de prolife
+  // detrás ni lo va a haber, y el protocolo es `https:` como el de cualquier
+  // página, así que no hay ninguna señal que mirar en tiempo de ejecución.
+  if (import.meta.env?.VITE_MODO === 'drive') return true
   try {
     if (localStorage.getItem('prolife.modo') === 'drive') return true
   } catch {

@@ -1,6 +1,6 @@
 import { Browser } from '@capacitor/browser'
 import { App } from '@capacitor/app'
-import { CLIENT_ID } from './google.config.js'
+import { CLIENT_ID, WEB_CLIENT_ID } from './google.config.js'
 import { usarSesion, guardarToken, cerrarSesion } from './drive.js'
 
 /**
@@ -41,6 +41,20 @@ export const PETICION = {
 
 const REFRESCO_KEY = 'prolife.drive.refresco'
 
+/**
+ * ¿Esto es el APK o una página web?
+ *
+ * Los dos hablan con el mismo Drive, pero entran de forma distinta y no es un
+ * capricho de implementación: en el APK hay un aparato con una firma que Google
+ * puede comprobar, y por eso se le puede dar un testigo duradero. En una página
+ * no hay nada que comprobar, así que Google solo da acceso por una hora y lo
+ * renueva mientras haya sesión abierta en el navegador. Fingir que son lo mismo
+ * acabaría en una web que pide entrar cada vez que se recarga.
+ */
+const enElNavegador = () => !window.Capacitor?.isNativePlatform?.()
+
+const clienteDeAqui = () => (enElNavegador() ? WEB_CLIENT_ID : CLIENT_ID)
+
 /* ------------------------------------------------------------------ PKCE -- */
 
 const base64url = (bytes) =>
@@ -74,6 +88,11 @@ async function pedirTestigos(cuerpo) {
  * devuelva el control con el código dentro de la URL.
  */
 export function entrar() {
+  if (enElNavegador()) return entrarEnLaWeb()
+  return entrarEnElApk()
+}
+
+function entrarEnElApk() {
   return new Promise((resolve, reject) => {
     ;(async () => {
       if (!CLIENT_ID || CLIENT_ID.startsWith('PON-AQUI')) {
@@ -142,7 +161,74 @@ export function salir() {
   cerrarSesion()
 }
 
-export const puedeEntrar = () => !!CLIENT_ID && !CLIENT_ID.startsWith('PON-AQUI')
+export const puedeEntrar = () => {
+  const id = clienteDeAqui()
+  return !!id && !id.startsWith('PON-AQUI')
+}
+
+/* ------------------------------------------------------- entrar en la web -- */
+
+/**
+ * El conector de Google, cargado cuando hace falta y no antes.
+ *
+ * Se inyecta desde aquí en vez de ponerlo en el `index.html` para que la app de
+ * escritorio y el APK no vayan a buscar a Google un script que no van a usar.
+ */
+let gis = null
+function cargarGis() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve()
+  gis ||= new Promise((ok, mal) => {
+    const s = document.createElement('script')
+    s.src = 'https://accounts.google.com/gsi/client'
+    s.async = true
+    s.onload = ok
+    s.onerror = () => { gis = null; mal(new Error('No se ha podido cargar el conector de Google. ¿Hay conexión?')) }
+    document.head.appendChild(s)
+  })
+  return gis
+}
+
+/** El cliente de testigos, uno solo: crear otro por cada renovación los apila. */
+let cliente = null
+let esperando = null
+
+async function pedirTestigoWeb(prompt) {
+  await cargarGis()
+  if (!cliente) {
+    cliente = window.google.accounts.oauth2.initTokenClient({
+      client_id: WEB_CLIENT_ID,
+      scope: PERMISOS,
+      // La respuesta llega por aquí y no por el valor de retorno, así que hace
+      // falta guardar a quién contestarle.
+      callback: (r) => {
+        const quien = esperando
+        esperando = null
+        if (!quien) return
+        if (r.error) return quien.mal(new Error(r.error_description || r.error))
+        guardarToken({ access_token: r.access_token, expires_in: r.expires_in })
+        quien.ok(r.access_token)
+      },
+      error_callback: (e) => {
+        const quien = esperando
+        esperando = null
+        quien?.mal(new Error(e?.type === 'popup_closed' ? 'Has cerrado la ventana de Google.' : e?.message || 'Google ha cancelado la entrada.'))
+      },
+    })
+  }
+  if (esperando) throw new Error('Ya hay una entrada en marcha.')
+  return new Promise((ok, mal) => {
+    esperando = { ok, mal }
+    cliente.requestAccessToken({ prompt })
+  })
+}
+
+async function entrarEnLaWeb() {
+  if (!WEB_CLIENT_ID || WEB_CLIENT_ID.startsWith('PON-AQUI')) {
+    throw new Error('A esta versión web le falta el identificador de cliente. Ver src/lib/google.config.js.')
+  }
+  const token = await pedirTestigoWeb('consent')
+  return { access_token: token }
+}
 
 /**
  * El testigo de acceso dura una hora. En vez de hacer entrar a Mateo cada hora
@@ -157,6 +243,14 @@ usarSesion(async () => {
     if (guardado?.access_token && guardado.expira > Date.now()) return guardado.access_token
   } catch {
     /* sin sesión guardada: se intenta refrescar */
+  }
+
+  if (enElNavegador()) {
+    // Sin testigo de refresco —Google no se lo da a una página— se vuelve a
+    // pedir sin molestar: mientras haya sesión de Google abierta en el
+    // navegador, se renueva sin que él se entere.
+    if (!localStorage.getItem('prolife.drive.token')) return null
+    return pedirTestigoWeb('').catch(() => null)
   }
 
   const refresco = localStorage.getItem(REFRESCO_KEY)

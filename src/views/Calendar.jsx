@@ -372,7 +372,10 @@ function MonthGrid({ anchor, sel, setSel, itemsOf, load, onOpen }) {
                 <div
                   key={i}
                   className={`cal-ev${it.important ? ' hot' : ''}`}
-                  style={{ borderLeftColor: it.color, background: `color-mix(in srgb, ${it.color} ${it.important ? 20 : 9}%, transparent)` }}
+                  /* `--c` además del color pintado: en el móvil no cabe el
+                     título y la pastilla se queda en una raya de color, que
+                     necesita el color entero y no el 9% de fondo. */
+                  style={{ '--c': it.color, borderLeftColor: it.color, background: `color-mix(in srgb, ${it.color} ${it.important ? 20 : 9}%, transparent)` }}
                   onClick={(e) => { if (it.event || it.exam || it.task) { e.stopPropagation(); onOpen(it) } }}
                 >
                   {it.start ? <span className="mono">{it.start} </span> : null}

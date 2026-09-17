@@ -122,6 +122,11 @@ VS Code.
 **Paso a paso para actualizar el ordenador e instalar el APK:**
 [INSTALAR-TABLET.md](INSTALAR-TABLET.md).
 
+**Y hay versión web**, en `mateogsilvaa.github.io/prolife/`: la misma app compilada para el
+navegador, contra la misma carpeta de Drive. Sin instalar nada, desde cualquier móvil u
+ordenador, y se puede añadir a la pantalla de inicio como si fuera una app. Se publica sola
+en cada cambio que llega a `main`. Paso a paso: [INSTALAR-WEB.md](INSTALAR-WEB.md).
+
 **La forma antigua, contra el ordenador por Tailscale** (sigue funcionando, y es la única
 que sirve si no quieres dar de alta nada en Google): [INSTALAR-ANDROID.md](INSTALAR-ANDROID.md).
 
@@ -323,6 +328,15 @@ horaria: las clases del horario, los exámenes, los eventos y las entregas caen 
   al añadir un evento o desde Ajustes.
 - **Repeticiones**: diaria, semanal (con días concretos), mensual o anual, con intervalo y
   fecha de fin. Un día suelto se puede saltar sin romper la serie.
+
+## En el móvil
+
+Por debajo de 640 px la columna lateral desaparece y manda una **barra de abajo** con cinco
+sitios —Hoy, Tareas, Agenda, Uni y *Más*—, que es donde llega el pulgar. Cinco y no diez:
+cabe el nombre, el dedo acierta, y lo que no cabe está a un toque. En el mes del calendario
+los títulos no caben, así que las cosas se quedan en rayas del color de cada una: dicen
+«aquí hay algo» sin mentir sobre qué. El ayudante ocupa la pantalla entera en vez de un
+cajón de 320 px, y las franjas del sistema —la barra de gestos del iPhone— se respetan.
 
 ## Google Calendar
 

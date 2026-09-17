@@ -921,3 +921,82 @@ a { color: inherit; text-decoration: none; }
   .view { padding: 20px 16px 80px; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
 }
+
+
+/* ═══════════════════════════════════════════════════ el móvil ══════════ */
+
+/**
+ * La barra de abajo solo existe en pantallas de teléfono. En el escritorio no
+ * se pinta siquiera, para que no haya dos navegaciones compitiendo.
+ */
+.tabbar { display: none; }
+
+@media (max-width: 640px) {
+  /* Abajo manda la barra: la columna lateral sobra y estorba. */
+  .sidebar { display: none; }
+
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 120;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+    /* El iPhone se come la franja de abajo con su barra de gestos. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .tabbar-item {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 2px 7px; font-size: 10.5px; color: var(--ink-3);
+    text-decoration: none; background: none; border: 0;
+  }
+  .tabbar-item.on { color: var(--ink); font-weight: 600; }
+  .tabbar-icono { position: relative; display: grid; place-items: center; height: 20px; }
+  .tabbar-item.on .tabbar-icono { color: var(--accent); }
+  .tabbar-punto {
+    position: absolute; top: -1px; right: -5px;
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  }
+
+  /* Sitio para la barra, más la franja del sistema. */
+  .view { padding: 18px 14px calc(88px + env(safe-area-inset-bottom, 0px)); }
+
+  .topbar { height: 46px; flex: 0 0 46px; padding: 0 10px; gap: 6px; }
+  /* En 390 px no caben el medidor, el ayudante y el botón de tarea: se queda
+     lo que se usa de pie, que es apuntar una tarea. */
+  .topbar .btn.sm:not(.primary) { display: none; }
+
+  .page-head { flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 18px; }
+  .page-head h2 { font-size: 27px; }
+  .page-head p { font-size: 13.5px; }
+  .card { padding: 14px; }
+  .modal { width: 100%; max-width: 100%; }
+
+  /* El calendario del mes en 390 px: los días caben, los títulos no. Se dejan
+     los puntos de color, que dicen «aquí hay algo» sin mentir sobre qué. */
+  .cal-cell { min-height: 58px; padding: 3px; }
+  .cal-ev {
+    font-size: 0; padding: 0; height: 5px; border-radius: 3px;
+    border-left-width: 0; margin-bottom: 2px;
+    background: var(--c, var(--ink-3)) !important;
+  }
+  .cal-ev .mono { display: none; }
+  .cal-festivo { font-size: 8.5px; }
+  .cal-head { font-size: 9.5px; }
+  .cal-day { font-size: 11px; }
+
+  /* Una franja horaria de 46 px por hora no se puede tocar con el dedo. */
+  .split.with-aside { gap: 12px; }
+
+  /* Las rejillas anchas se apilan ya, pero las filas de chips se desbordaban. */
+  .row.wrap { gap: 5px; }
+  .chip { font-size: 11px; padding: 3px 8px; }
+
+  /* El ayudante a pantalla completa: un cajón de 320 px sobre 390 es una rendija. */
+  .dock { width: 100% !important; }
+  .dock-drag { display: none; }
+}
+
+/* Entre tablet y móvil la columna lateral sigue valiendo, pero estrecha. */
+@media (max-width: 860px) and (min-width: 641px) {
+  .view { padding: 22px 18px 80px; }
+}

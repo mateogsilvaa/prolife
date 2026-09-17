@@ -4,6 +4,7 @@ import StatusBar from './components/StatusBar.jsx'
 import TimeReview from './components/TimeReview.jsx'
 import Assistant from './components/Assistant.jsx'
 import Icon from './components/Icon.jsx'
+import BottomNav from './components/BottomNav.jsx'
 import Modal from './components/Modal.jsx'
 import Launcher from './components/Launcher.jsx'
 import TaskEditor, { newTask } from './components/TaskEditor.jsx'
@@ -130,6 +131,8 @@ function Shell() {
   return (
     <div className={`shell${ui.sidebar ? '' : ' no-sidebar'}${ui.zen ? ' zen' : ''}`}>
       {ui.sidebar && <Sidebar route={route} onAI={ui.toggleDock} dockOpen={ui.dock} />}
+      {/* Solo se ve en pantallas de móvil; el CSS decide cuál de las dos manda. */}
+      {!ui.zen && <BottomNav route={route} />}
 
       <div className="main">
         <div className="topbar">

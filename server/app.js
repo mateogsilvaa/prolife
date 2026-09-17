@@ -16,6 +16,7 @@ import * as assistant from './assistant.js'
 import * as tailscale from './tailscale.js'
 import { applyOp } from './ops.js'
 import { extraerTexto, puedeLeer } from './leer.js'
+import { comandoParaAbrir } from './abrir.js'
 import * as gcal from './gcal.js'
 import { sincronizar, AJUSTES_POR_DEFECTO } from './calsync.js'
 
@@ -905,14 +906,25 @@ export function createApp() {
     return child
   }
 
+  /**
+   * Abrir algo fuera de la app: una dirección en el navegador, o un archivo con
+   * su programa.
+   *
+   * Dentro de Electron manda su propio `shell`, que es la vía buena y la que no
+   * se equivoca con los caracteres raros. Fuera —con `npm run server` a pelo, o
+   * en las pruebas— se cae al lanzador del sistema, que es donde hay que tener
+   * cuidado: ver `comandoParaAbrir`.
+   */
   function openExternal(target) {
-    if (process.platform === 'win32') {
-      launch('cmd', ['/c', 'start', '', target], { windowsHide: true })
-    } else if (process.platform === 'darwin') {
-      launch('open', [target])
-    } else {
-      launch('xdg-open', [target])
+    const esUrl = /^https?:\/\//i.test(target)
+    if (process.versions.electron) {
+      import('electron')
+        .then(({ shell }) => (esUrl ? shell.openExternal(target) : shell.openPath(target)))
+        .catch(() => { const c = comandoParaAbrir(target, process.platform); launch(c.cmd, c.args, c.opts) })
+      return
     }
+    const c = comandoParaAbrir(target, process.platform)
+    launch(c.cmd, c.args, c.opts)
   }
 
   app.post(

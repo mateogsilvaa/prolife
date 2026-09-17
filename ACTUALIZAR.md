@@ -156,6 +156,7 @@ Todo esto se arregla desde la carpeta de datos, que sigue intacta:
 | Falta lo de los últimos días | Copia un `.json` de `.prolife\backups\` encima de `.prolife\db.json`, con la app cerrada. |
 | «Este db.json lo escribió una versión más nueva» | Ese ordenador se ha quedado atrás. Actualízalo y ya. |
 | La app no arranca | Reinstala la versión anterior. Tus datos no se han movido. |
+| Al conectar Google Calendar: *«Required parameter is missing: response_type»* | Versión anterior a este arreglo. En Windows la dirección se abría con `cmd`, que parte el comando en el primer `&`, y a Google le llegaba cortada. `git pull` y `npm run dist`. |
 
 Y la salida de emergencia de siempre: **copia `Documentos\ProLife\.prolife\db.json` a
 cualquier sitio antes de empezar**. Es un JSON de texto, legible; con ese archivo y una

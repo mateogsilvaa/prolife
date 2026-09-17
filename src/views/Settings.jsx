@@ -1100,6 +1100,8 @@ function GoogleCalendar() {
   const [id, setId] = useState('')
   const [secreto, setSecreto] = useState('')
   const [ocupado, setOcupado] = useState(false)
+  /** La dirección de entrada, por si el navegador no se abre solo. */
+  const [enlace, setEnlace] = useState('')
 
   const mirar = useCallback(() => {
     api.gcalStatus().then(setSt).catch((e) => setSt({ error: e.message }))
@@ -1118,6 +1120,9 @@ function GoogleCalendar() {
   const conectar = async () => {
     try {
       const r = await api.gcalLogin()
+      // Se enseña siempre, no solo si falla: abrir el navegador depende del
+      // sistema, y cuando eso se tuerce el enlace a mano es la única salida.
+      setEnlace(r.url)
       await api.openUrl(r.url)
       toast('Se ha abierto el navegador. Vuelve aquí cuando acabes.')
     } catch (e) { toast(e.message, 'err') }
@@ -1194,9 +1199,25 @@ function GoogleCalendar() {
           <button className="btn" onClick={guardarCredenciales} disabled={!id.trim() || !secreto.trim()}>Guardar</button>
         </>
       ) : !st.conectado ? (
-        <div className="row" style={{ gap: 8 }}>
-          <button className="btn primary" onClick={conectar}><Icon name="link" size={13} /> Conectar con Google</button>
-          <span className="dim" style={{ fontSize: 12 }}>Se abre el navegador; la contraseña se teclea allí.</span>
+        <div className="stack" style={{ gap: 10 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn primary" onClick={conectar}><Icon name="link" size={13} /> Conectar con Google</button>
+            <span className="dim" style={{ fontSize: 12 }}>Se abre el navegador; la contraseña se teclea allí.</span>
+          </div>
+          {enlace && (
+            <div className="notice">
+              <Icon name="link" size={13} />
+              <span style={{ fontSize: 12.5, lineHeight: 1.6, minWidth: 0 }}>
+                ¿No se ha abierto, o el navegador se queja? Copia esta dirección y pégala tú:
+                <span className="mono" style={{ display: 'block', fontSize: 10.5, wordBreak: 'break-all', userSelect: 'all', marginTop: 5 }}>
+                  {enlace}
+                </span>
+              </span>
+              <button className="btn sm ghost" onClick={() => {
+                navigator.clipboard?.writeText(enlace).then(() => toast('Enlace copiado'), () => toast('Cópialo a mano', 'err'))
+              }}>Copiar</button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="stack" style={{ gap: 14 }}>

@@ -268,13 +268,15 @@ export function drainOps(baseDir) {
   try {
     nombres = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort()
   } catch {
-    return { applied: 0, skipped: [], files: 0 }
+    return { applied: 0, skipped: [], files: 0, ops: [] }
   }
-  if (!nombres.length) return { applied: 0, skipped: [], files: 0 }
+  if (!nombres.length) return { applied: 0, skipped: [], files: 0, ops: [] }
 
   const db = loadDb(baseDir)
   const skipped = []
   const hechos = []
+  /** Las que han entrado, para poder volver a aplicarlas (ver el PUT de app.js). */
+  const entradas = []
   let applied = 0
 
   for (const nombre of nombres) {
@@ -299,12 +301,12 @@ export function drainOps(baseDir) {
     for (const op of ops) {
       const error = applyOp(db, op)
       if (error) skipped.push({ file: nombre, que: describeOp(op), error })
-      else applied++
+      else { applied++; entradas.push(op) }
     }
     hechos.push(file)
   }
 
-  if (!hechos.length) return { applied: 0, skipped, files: 0 }
+  if (!hechos.length) return { applied: 0, skipped, files: 0, ops: [] }
 
   // Guardar ANTES de borrar: si algo falla al escribir, las operaciones siguen
   // en el buzón y se vuelven a intentar. Al revés se perderían.
@@ -316,7 +318,7 @@ export function drainOps(baseDir) {
       /* si no se puede borrar, la próxima vez se aplica otra vez: son idempotentes */
     }
   }
-  return { applied, skipped, files: hechos.length }
+  return { applied, skipped, files: hechos.length, ops: entradas }
 }
 
 /** Lo que no se ha podido aplicar no se tira: se aparta para poder mirarlo. */

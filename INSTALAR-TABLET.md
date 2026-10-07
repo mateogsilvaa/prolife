@@ -114,6 +114,10 @@ Esto es lo único técnico que conviene entender, porque explica el aviso que ve
   ordenador lo recoge y lo aplica sobre su base la próxima vez que lo abras. Por eso la
   tablet dice *«guardado en Drive · el ordenador lo recoge al abrirse»* y no *«hecho»*.
 
+Con la app abierta en el ordenador, el buzón se vacía **cada medio minuto** —no solo al
+arrancar— y las dos pantallas se traen solas lo nuevo, sin recargar. Con el ordenador apagado,
+lo de la tablet espera en el buzón hasta que lo enciendas.
+
 Así sigue habiendo **un solo escritor** del `db.json`: el ordenador. Si escribieran los dos,
 Drive no sabría fusionarlos y ganaría el último en subir.
 

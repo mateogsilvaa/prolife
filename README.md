@@ -261,8 +261,13 @@ que tú marques, para poder verlos dentro del calendario de prolife en gris.
   de esa repetición: el día que marcas festivo, la clase desaparece también del móvil.
 - **Eliges qué se lleva**: clases, exámenes, eventos y, si quieres, las tareas con fecha y
   los entrenos. Lo que desmarcas se retira de Google en la siguiente pasada.
-- Se sincroniza solo al abrir la app y un rato después de dejar de tocar cosas, más el botón
-  de *Sincronizar ahora*. El rato importa: cambiar un horario son diez ediciones seguidas y
+- Se sincroniza solo al abrir la app, un minuto después de dejar de tocar cosas y cuando
+  entra algo de la tablet —también con la ventana minimizada, porque lo programa el servidor—,
+  más el botón de *Sincronizar ahora*.
+- **Si Google retira el permiso, se dice.** Hoy y Ajustes avisan en rojo de que está
+  desconectado y desde cuándo, o del último fallo. Un fallo de red ya no desconecta: solo un
+  `invalid_grant` de Google (permiso caducado o revocado). Si caduca cada semana, la pantalla
+  de consentimiento del proyecto sigue en «Prueba»: publícala. El rato importa: cambiar un horario son diez ediciones seguidas y
   no tiene sentido mandar diez tandas para acabar en el mismo sitio.
 
 Hace falta un cliente de OAuth propio, igual que para Drive en la tablet: en

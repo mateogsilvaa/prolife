@@ -147,7 +147,7 @@ const apiServidor = {
   aiStatus: (url) => req(`/api/ai/status?url=${encodeURIComponent(url || '')}`),
   aiChat: (body) => req('/api/ai/chat', { method: 'POST', body }),
 
-  gcalStatus: () => req('/api/gcal/status'),
+  gcalStatus: (ligero) => req(`/api/gcal/status${ligero ? '?ligero=1' : ''}`),
   gcalConfig: (body) => req('/api/gcal/config', { method: 'POST', body }),
   gcalLogin: () => req('/api/gcal/login'),
   gcalLogout: () => req('/api/gcal/logout', { method: 'POST', body: {} }),
@@ -186,7 +186,7 @@ const apiDrive = {
   getConfig: async () => ({ here: false, drive: true, baseDir: 'Google Drive' }),
 
   getDb: () => drive.getDb(),
-  dbStamp: async () => ({ stamp: (await drive.getDb())._stamp || 0, future: null }),
+  dbStamp: () => drive.dbStamp(),
   sendOps: (ops) => drive.sendOps(ops),
   // Guardar la base entera desde la tablet machacaría lo del ordenador: no existe.
   putDb: soloEnElOrdenador('Guardar la base entera'),

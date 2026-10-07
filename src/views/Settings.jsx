@@ -834,6 +834,18 @@ function GoogleCalendar() {
         </>
       ) : !st.conectado ? (
         <div className="stack" style={{ gap: 10 }}>
+          {st.ultima && (
+            <div className="notice err">
+              <Icon name="x" size={13} />
+              <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                Estaba conectado y Google retiró el permiso: desde el{' '}
+                {new Date(st.ultima.at).toLocaleDateString('es')} el móvil no recibe cambios. Suele ser
+                porque la pantalla de consentimiento del proyecto de Google sigue en <b>«Prueba»</b>,
+                y ahí Google caduca el permiso a los 7 días: publícala en{' '}
+                <span className="mono">console.cloud.google.com/auth/audience</span> y vuelve a conectar.
+              </span>
+            </div>
+          )}
           <div className="row" style={{ gap: 8 }}>
             <button className="btn primary" onClick={conectar}><Icon name="link" size={13} /> Conectar con Google</button>
             <span className="dim" style={{ fontSize: 12 }}>Se abre el navegador; la contraseña se teclea allí.</span>
@@ -855,6 +867,14 @@ function GoogleCalendar() {
         </div>
       ) : (
         <div className="stack" style={{ gap: 14 }}>
+          {st.fallo && (
+            <div className="notice err">
+              <Icon name="x" size={13} />
+              <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                La última vez no se pudo poner al día ({new Date(st.fallo.at).toLocaleString('es')}): {st.fallo.mensaje}
+              </span>
+            </div>
+          )}
           <div>
             <div className="eyebrow" style={{ marginBottom: 6 }}>Qué se lleva a Google</div>
             <div className="row wrap" style={{ gap: 12 }}>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import TaskList from '../components/TaskList.jsx'
 import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
@@ -8,6 +8,7 @@ import { EventForm } from './Calendar.jsx'
 import { TrainingForm } from './Training.jsx'
 import { useStore, uid, AREAS, refColor, refLabel } from '../lib/store.jsx'
 import { useTracker } from '../lib/tracker.jsx'
+import { api, enDrive } from '../lib/api.js'
 import { today, dur, fmtDate, daysUntil, DAYS, DAYS_LONG, startOfWeek, addDays, MONTHS, iso, parseIso } from '../lib/date.js'
 import { expandEvents } from '../lib/recurrence.js'
 import {
@@ -40,7 +41,11 @@ export default function Dashboard() {
 
   const agendaHoy = useMemo(() => dayAgenda(db, hoy), [db, hoy])
   const agendaManana = useMemo(() => dayAgenda(db, manana), [db, manana])
-  const avisos = useMemo(() => alerts(db), [db])
+  const gcal = useGcalAviso()
+  const avisos = useMemo(() => {
+    const a = alerts(db)
+    return gcal ? [gcal, ...a.filter((x) => x.tone !== 'ok')] : a
+  }, [db, gcal])
 
   const open = db.tasks.filter((t) => t.status !== 'done')
   const tareasHoy = open.filter((t) => t.due && daysUntil(t.due) <= 0)
@@ -327,6 +332,33 @@ function alerts(db) {
 
   if (!out.length) out.push({ tone: 'ok', icon: 'check', text: 'Todo en orden: nada urgente, ninguna asignatura al límite.', w: 9 })
   return out.sort((a, b) => a.w - b.w)
+}
+
+/**
+ * Google Calendar desconectado o fallando. Va aparte porque no sale del
+ * `db.json` sino del ordenador, y arriba del todo: un calendario que dejó de
+ * ponerse al día hace dos semanas sin que nadie lo dijera es justo lo que no
+ * puede volver a pasar.
+ */
+function useGcalAviso() {
+  const [aviso, setAviso] = useState(null)
+  useEffect(() => {
+    if (enDrive) return
+    let vivo = true
+    api.gcalStatus(true)
+      .then((st) => {
+        if (!vivo || !st?.configurado) return
+        const desde = st.ultima?.at ? ` (última vez al día: ${fmtDate(iso(new Date(st.ultima.at)))})` : ''
+        if (!st.conectado) {
+          setAviso({ tone: 'hot', icon: 'calendar', w: -1, href: '#/ajustes', text: <>Google Calendar está <b>desconectado</b>: el móvil no recibe los cambios{desde}. Vuelve a conectarlo en Ajustes.</> })
+        } else if (st.fallo) {
+          setAviso({ tone: 'warn', icon: 'calendar', w: -1, href: '#/ajustes', text: <>Google Calendar no se pudo poner al día{desde}: {st.fallo.mensaje}</> })
+        }
+      })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [])
+  return aviso
 }
 
 /* --------------------------------------------------------------- entreno */

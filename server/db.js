@@ -74,6 +74,12 @@ export const EMPTY_DB = {
   events: [],
   training: [],
   /**
+   * Lesiones: zona, desde cuándo y el alta. Las molestias sueltas no van aquí,
+   * van dentro de cada entreno (`training[].pains`); una lesión es lo que se
+   * sigue durante semanas hasta que se cierra.
+   */
+  injuries: [],
+  /**
    * Voluntariado: las entidades con las que colaboras y, aparte, cada jornada
    * que has hecho. Van separados porque lo que hay que justificar son las
    * jornadas —fecha, horas y fotos de ese día—, no la entidad.
@@ -96,6 +102,12 @@ export const EMPTY_DB = {
  *          guardarse aquí para que viaje entre ordenadores. No toca datos previos.
  * v4 → v5: aparece el voluntariado —entidades y jornadas— y su categoría de
  *          calendario. Tampoco toca nada de lo anterior: solo añade.
+ *
+ * Sin cambio de número: las lesiones (`injuries`), las molestias de cada
+ * entreno, la clase cancelada y la marca de «entregada» en los evaluables.
+ * Todo es añadido, y una versión anterior que abra la base los conserva tal
+ * cual —la migración copia lo que no conoce—, así que no hace falta obligar
+ * a actualizar los dos ordenadores a la vez.
  */
 
 /** Versión que trae el fichero tal cual está en disco. */
@@ -120,7 +132,7 @@ function migrate(raw) {
     db.categories.push({ id: 'cat-volunteer', name: 'Voluntariado', color: '#7a5c9e', area: 'volunteer' })
   }
 
-  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
+  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'injuries', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
     if (!Array.isArray(db[key])) db[key] = []
   }
 

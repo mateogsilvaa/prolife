@@ -411,6 +411,7 @@ const NOMBRES = {
   events: ['Evento', 'el evento'],
   sessions: ['Tiempo', 'el tramo de tiempo'],
   training: ['Entreno', 'el entreno'],
+  injuries: ['Lesión', 'la lesión'],
   attendance: ['Asistencia', 'la asistencia'],
   categories: ['Categoría', 'la categoría'],
   volunteering: ['Voluntariado', 'la entidad'],

@@ -1,11 +1,11 @@
 import React, { useState } from 'react'
 import Icon from './Icon.jsx'
-import { enDrive } from '../lib/api.js'
 import Modal from './Modal.jsx'
 import Launcher from './Launcher.jsx'
 import Brand from './Brand.jsx'
 import { useStore } from '../lib/store.jsx'
-import { today, daysUntil, iso, startOfWeek, addDays } from '../lib/date.js'
+import { iso, startOfWeek } from '../lib/date.js'
+import { overdueCount } from '../lib/stats.js'
 
 const NAV = [
   { g: 'Día a día', items: [
@@ -21,27 +21,21 @@ const NAV = [
   ]},
   { g: 'Registro', items: [
     { to: '#/estadisticas', icon: 'chart', label: 'Estadísticas' },
-    { to: '#/archivos', icon: 'folder', label: 'Archivos' },
     { to: '#/ajustes', icon: 'settings', label: 'Ajustes' },
   ]},
 ]
 
-export default function Sidebar({ route, onAI, dockOpen }) {
+export default function Sidebar({ route }) {
   const { db, update } = useStore()
   const [links, setLinks] = useState(false)
 
   const weekStart = iso(startOfWeek(new Date()))
   const counts = {
-    tasks: db.tasks.filter((t) => t.status !== 'done' && t.due && daysUntil(t.due) <= 0).length,
+    tasks: overdueCount(db),
     subjects: db.subjects.length,
     training: db.training.filter((t) => t.done && t.date >= weekStart).length,
   }
   const dark = db.settings.theme === 'ink'
-
-  // los espacios de trabajo se marcan bajo su área
-  const areaOf = { espacio: { uni: '#/uni', trabajo: '#/trabajo', tarea: '#/tareas' } }
-  const parts = route.parts
-  const effective = parts[0] === 'espacio' ? areaOf.espacio[parts[1]] || route.path : null
 
   return (
     <aside className="sidebar">
@@ -52,9 +46,7 @@ export default function Sidebar({ route, onAI, dockOpen }) {
           <div className="nav-group" key={g.g}>
             <div className="eyebrow">{g.g}</div>
             {g.items.map((it) => {
-              const active = effective
-                ? effective === it.to
-                : it.to === '#/' ? route.path === '/' : route.path.startsWith(it.to.slice(1))
+              const active = it.to === '#/' ? route.path === '/' : route.path.startsWith(it.to.slice(1))
               const n = counts[it.count]
               return (
                 <a key={it.to} href={it.to} className={`nav-item${active ? ' active' : ''}`}>
@@ -69,14 +61,6 @@ export default function Sidebar({ route, onAI, dockOpen }) {
       </nav>
 
       <div className="sidebar-foot">
-        {/* Sin ordenador no hay Ollama a quien preguntar. */}
-        {!enDrive && (
-          <button className={`nav-item${dockOpen ? ' active' : ''}`} onClick={onAI}>
-            <Icon name="sparkle" size={15} />
-            <span className="label">Ayudante</span>
-            <span className="kbd">Ctrl I</span>
-          </button>
-        )}
         <button className="nav-item" onClick={() => setLinks(true)}>
           <Icon name="link" size={15} />
           <span className="label">Enlaces</span>
@@ -90,7 +74,7 @@ export default function Sidebar({ route, onAI, dockOpen }) {
 
       {links && (
         <Modal title="Accesos rápidos" onClose={() => setLinks(false)}>
-          <Launcher onOpenDock={() => { setLinks(false); onAI() }} />
+          <Launcher />
         </Modal>
       )}
     </aside>

@@ -11,9 +11,9 @@ import { api } from '../lib/api.js'
 import { subjectStats, attendanceBudget, classOccurrences, termWindow, slotRange, slotInRange } from '../lib/stats.js'
 import { dur, DAYS, iso, addDays, parseIso, weekday, today, fmtDate, startOfWeek, daysUntil } from '../lib/date.js'
 
-const STATUS = ['present', 'absent', 'late', 'excused']
-const STATUS_LABEL = { present: 'Asistí', absent: 'Falté', late: 'Tarde', excused: 'Justificada' }
-const STATUS_MARK = { present: '·', absent: '✕', late: 'T', excused: 'J' }
+const STATUS = ['present', 'absent', 'late', 'excused', 'cancelled']
+export const STATUS_LABEL = { present: 'Asistí', absent: 'Falté', late: 'Tarde', excused: 'Justificada', cancelled: 'Cancelada' }
+const STATUS_MARK = { present: '·', absent: '✕', late: 'T', excused: 'J', cancelled: '⊘' }
 
 export default function SubjectDetail({ id }) {
   const { db, toast } = useStore()
@@ -57,9 +57,6 @@ export default function SubjectDetail({ id }) {
             <Icon name="play" size={12} fill="currentColor" /> {working ? 'Contando…' : 'Trabajar en esto'}
           </button>
           <LogTime area="uni" refId={s.id} label={s.name} />
-          <a className="btn" href={`#/espacio/uni/${s.id}`}>
-            <Icon name="layers" size={13} /> Espacio
-          </a>
           {s.isProgramming && (
             <button className="btn ghost" title="Abrir en VS Code" onClick={() => api.openInCode(s.repoPath || s.folder).then(() => toast('Abriendo VS Code…')).catch((e) => toast(e.message, 'err'))}>
               <Icon name="code" size={13} />
@@ -300,7 +297,6 @@ function Resumen({ subject: s }) {
           <div className="card-head"><h3>Carpeta en tu disco</h3></div>
           <p className="mono dim" style={{ fontSize: 11.5, margin: '0 0 10px', wordBreak: 'break-all' }}>{s.folder}</p>
           <div className="row" style={{ gap: 6 }}>
-            <a className="btn sm" href={`#/espacio/uni/${s.id}`}><Icon name="layers" size={12} /> Espacio</a>
             <button className="btn sm ghost" onClick={() => api.openPath(s.folder)}><Icon name="external" size={12} /> Explorador</button>
           </div>
         </div>
@@ -354,8 +350,14 @@ function Attendance({ subject }) {
    */
   const cycle = (o) => {
     const cur = statusOf(o)
+    // Una clase que todavía no ha pasado solo puede estar cancelada o no: es lo
+    // único que se sabe de antemano («el jueves no hay clase»).
+    if (o.date > today()) {
+      applyChange({ kind: 'asistencia', subjectId: subject.id, date: o.date, slot: o.slot, status: cur === 'cancelled' ? null : 'cancelled' })
+      return
+    }
     const next = cur === null ? 'present' : STATUS[(STATUS.indexOf(cur) + 1) % STATUS.length]
-    const clear = cur === 'excused'
+    const clear = cur === STATUS[STATUS.length - 1]
     applyChange({ kind: 'asistencia', subjectId: subject.id, date: o.date, slot: o.slot, status: clear ? null : next })
   }
 
@@ -375,14 +377,14 @@ function Attendance({ subject }) {
         <div className="display">Sin horario, sin asistencia</div>
         <p style={{ maxWidth: '44ch', margin: '0 auto' }}>
           Configura el horario semanal con sus fechas de inicio y fin, y aquí aparecerá una casilla
-          por cada clase del cuatrimestre. Clic para ir cambiando: asistí → falté → tarde → justificada.
+          por cada clase del cuatrimestre. Clic para ir cambiando: asistí → falté → tarde → justificada → cancelada.
         </p>
       </div>
     )
   }
 
   const byMonth = occurrences.reduce((acc, o) => { (acc[o.date.slice(0, 7)] ||= []).push(o); return acc }, {})
-  const counted = occurrences.filter((o) => o.date <= today() && statusOf(o) && statusOf(o) !== 'excused')
+  const counted = occurrences.filter((o) => o.date <= today() && statusOf(o) && !['excused', 'cancelled'].includes(statusOf(o)))
   const ok = counted.filter((o) => ['present', 'late'].includes(statusOf(o))).length
   const unmarked = occurrences.filter((o) => o.date <= today() && !statusOf(o)).length
 
@@ -404,6 +406,11 @@ function Attendance({ subject }) {
           </div>
           {/* Sin esto, marcar un festivo baja el total de clases y parece que
               se han perdido: decirlo convierte un susto en una explicación. */}
+          {b.cancelled > 0 && (
+            <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
+              {b.cancelled === 1 ? '1 clase cancelada, no cuenta' : `${b.cancelled} clases canceladas, no cuentan`}
+            </div>
+          )}
           {porFestivos > 0 && (
             <div className="dim" style={{ fontSize: 11, marginTop: 4 }}>
               {porFestivos === 1 ? '1 clase cae en festivo y no cuenta' : `${porFestivos} clases caen en festivo y no cuentan`}
@@ -449,9 +456,9 @@ function Attendance({ subject }) {
                 <button
                   key={o.date + o.slot}
                   className={`att-cell ${st || ''}`}
-                  style={{ opacity: future ? 0.35 : 1 }}
-                  title={`${o.date} ${o.time || ''} — ${st ? STATUS_LABEL[st] : 'sin marcar'}`}
-                  onClick={() => !future && cycle(o)}
+                  style={{ opacity: future && st !== 'cancelled' ? 0.35 : 1 }}
+                  title={`${o.date} ${o.time || ''} — ${st ? STATUS_LABEL[st] : future ? 'clic para marcarla como cancelada' : 'sin marcar'}`}
+                  onClick={() => cycle(o)}
                 >
                   {st ? STATUS_MARK[st] : parseIso(o.date).getDate()}
                 </button>

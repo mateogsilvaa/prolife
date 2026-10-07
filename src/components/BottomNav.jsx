@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import Icon from './Icon.jsx'
 import Modal from './Modal.jsx'
 import { useStore } from '../lib/store.jsx'
-import { daysUntil } from '../lib/date.js'
+import { overdueCount } from '../lib/stats.js'
 
 /**
  * La navegación cuando la pantalla es un móvil.
@@ -30,7 +30,6 @@ const RESTO = [
   { to: '#/atletismo', icon: 'dumbbell', label: 'Atletismo' },
   { to: '#/voluntariado', icon: 'heart', label: 'Voluntariado' },
   { to: '#/estadisticas', icon: 'chart', label: 'Estadísticas' },
-  { to: '#/archivos', icon: 'folder', label: 'Archivos' },
   { to: '#/ajustes', icon: 'settings', label: 'Ajustes' },
 ]
 
@@ -38,7 +37,7 @@ export default function BottomNav({ route }) {
   const { db, update } = useStore()
   const [mas, setMas] = useState(false)
 
-  const vencidas = db.tasks.filter((t) => t.status !== 'done' && t.due && daysUntil(t.due) <= 0).length
+  const vencidas = overdueCount(db)
   const activo = (to) => (to === '#/' ? route.path === '/' : route.path.startsWith(to.slice(1)))
   // «Más» se enciende cuando estás en una de las suyas: si no, en Ajustes no
   // hay nada marcado y la barra parece que se ha perdido.

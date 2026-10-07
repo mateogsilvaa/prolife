@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import QRCode from 'qrcode'
 import Icon from '../components/Icon.jsx'
 import { LOGO_PATH, bumpLogo } from '../components/Brand.jsx'
 import { useStore, uid, PALETTE, isDesktop } from '../lib/store.jsx'
@@ -7,6 +6,7 @@ import { api, enDrive } from '../lib/api.js'
 import { canStore, usage, clearAll } from '../lib/offline.js'
 import { classesBetween } from '../lib/stats.js'
 import { today } from '../lib/date.js'
+import { buildReport, reportName } from '../lib/report.js'
 
 /**
  * Los archivos que se han guardado en ESTE aparato para poder abrirlos sin el
@@ -51,290 +51,6 @@ function OfflineFiles() {
   )
 }
 
-/**
- * Si esta pantalla se está viendo desde el aparato que se quiere instalar, dice
- * directamente si va a poder instalarse o no, que es más útil que explicarlo.
- */
-function SecureHint() {
-  const secure = typeof window !== 'undefined' && window.isSecureContext
-  const sw = typeof navigator !== 'undefined' && 'serviceWorker' in navigator
-  const local = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname)
-
-  // En el ordenador esto no aporta nada: la app ya está donde tiene que estar.
-  if (local) return null
-
-  const ok = secure && sw
-  return (
-    <div className="card">
-      <div className="card-head">
-        <h3>Instalar en este aparato</h3>
-        {ok && <span className="badge">se puede</span>}
-      </div>
-      <div className={`notice${ok ? '' : ' err'}`}>
-        <Icon name={ok ? 'check' : 'x'} size={13} />
-        <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-          {ok
-            ? 'Esta dirección es segura. Usa «Añadir a pantalla de inicio» en el menú del navegador y prolife quedará instalada, con su icono y capaz de abrir aunque el ordenador no esté.'
-            : 'Esta dirección no es segura (http a secas), así que el navegador no deja instalarla ni guardar nada para consultar sin conexión. La app funciona igual, pero solo mientras el ordenador esté encendido y a tu alcance.'}
-        </span>
-      </div>
-      {!ok && (
-        <p className="dim" style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 0 }}>
-          Para arreglarlo, ve <strong>al ordenador</strong> → Ajustes → «Abrir en la tablet o el
-          móvil»: ahí abajo hay un botón, <strong>«Activar acceso fuera de casa»</strong>, que monta
-          la dirección <span className="mono">https://…ts.net</span> y te enseña un código QR para
-          abrirla aquí. Es lo mismo que hace que funcione desde la universidad. Lo único que tienes
-          que haber hecho tú antes es entrar en Tailscale con tu cuenta en los dos aparatos.
-        </p>
-      )}
-    </div>
-  )
-}
-
-/**
- * Todo el ritual de Tailscale, hecho desde aquí en vez de contado en un manual.
- *
- * Antes había que: instalar Tailscale, entrar con la cuenta, activar los
- * certificados en su web, teclear `tailscale serve --bg`, copiar la dirección
- * que devuelve y pegarle detrás la clave a mano. De todo eso, lo único que de
- * verdad tiene que pasar por un humano es entrar en Tailscale la primera vez
- * —abre un navegador, no tiene sentido automatizarlo—; el resto es exactamente
- * lo mismo que haría un comando, así que lo hace este botón.
- */
-function TailscaleSetup({ port, token }) {
-  const { toast } = useStore()
-  const [status, setStatus] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const [qr, setQr] = useState(null)
-
-  const check = () =>
-    api.tailscaleStatus().then(setStatus).catch(() => setStatus({ installed: false, error: 'no se ha podido comprobar' }))
-
-  useEffect(() => { check() }, [])
-
-  const activar = async () => {
-    setBusy(true)
-    try {
-      setStatus(await api.tailscaleServe())
-    } catch (e) {
-      toast(e.message, 'err')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const copy = (text) =>
-    navigator.clipboard?.writeText(text).then(() => toast('Copiado'), () => toast('No se ha podido copiar', 'err'))
-
-  const url = status?.dnsName ? `https://${status.dnsName}/?k=${encodeURIComponent(token || '')}` : ''
-
-  useEffect(() => {
-    if (!url) return setQr(null)
-    QRCode.toDataURL(url, { margin: 1, width: 220, color: { dark: '#1a1815', light: '#f5f3ee' } })
-      .then(setQr)
-      .catch(() => setQr(null))
-  }, [url])
-
-  if (!status) return <p className="dim" style={{ fontSize: 12.5 }}>Comprobando Tailscale…</p>
-
-  if (!status.installed) {
-    return (
-      <div className="notice">
-        <Icon name="link" size={13} />
-        <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-          No se encuentra Tailscale en este ordenador.{' '}
-          <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl('https://tailscale.com/download') }} style={{ textDecoration: 'underline' }}>
-            Instálalo
-          </a>, entra con tu cuenta y vuelve a esta pantalla.
-        </span>
-      </div>
-    )
-  }
-
-  if (!status.loggedIn) {
-    return (
-      <div className="notice">
-        <Icon name="link" size={13} />
-        <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-          Tailscale está instalado pero <strong>no has entrado con tu cuenta todavía</strong>: es un paso
-          aparte de instalarlo. Ábrelo desde el icono junto al reloj → <em>Log in</em>, o en una terminal{' '}
-          <span className="mono">tailscale up</span>. En cuanto entres, dale a comprobar.
-        </span>
-        <div className="spacer" />
-        <button className="btn sm" onClick={check}><Icon name="refresh" size={12} /> Comprobar</button>
-      </div>
-    )
-  }
-
-  if (!status.serving) {
-    return (
-      <>
-        <p className="dim" style={{ fontSize: 12.5, marginTop: 0 }}>
-          Tailscale ya está dentro de tu red. Falta un solo paso — es justo lo que teclearías tú, hecho
-          desde aquí:
-        </p>
-        <button className="btn primary" onClick={activar} disabled={busy}>
-          <Icon name="link" size={13} /> {busy ? 'Activando…' : 'Activar acceso fuera de casa'}
-        </button>
-        {status.error && (
-          <p className="dim mono" style={{ fontSize: 11, marginBottom: 0 }}>
-            {status.error.includes('cert') || status.error.includes('HTTPS')
-              ? 'Falta activar MagicDNS y HTTPS Certificates, una vez, en login.tailscale.com/admin/dns.'
-              : status.error}
-          </p>
-        )}
-      </>
-    )
-  }
-
-  return (
-    <div className="row wrap" style={{ gap: 16, alignItems: 'flex-start' }}>
-      {qr && (
-        <img
-          src={qr} width={128} height={128} alt="Código QR para abrir prolife en la tablet"
-          style={{ borderRadius: 'var(--r)', border: '1px solid var(--line)', flexShrink: 0 }}
-        />
-      )}
-      <div style={{ flex: 1, minWidth: 220 }}>
-        <p className="dim" style={{ fontSize: 12.5, marginTop: 0 }}>
-          Apunta la cámara de la tablet a este código — o copia el enlace y ábrelo ahí una sola vez:
-        </p>
-        <div className="row" style={{ gap: 8 }}>
-          <span className="mono" style={{ fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{url}</span>
-          <button className="btn sm" onClick={() => copy(url)}><Icon name="link" size={12} /> Copiar</button>
-        </div>
-        <p className="dim" style={{ fontSize: 11.5, marginBottom: 0 }}>
-          Después, «Añadir a pantalla de inicio» en el menú del navegador la deja instalada, con su
-          icono, y funcionando igual fuera de casa que en el salón.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-/**
- * Abrir prolife en la tablet. La app se instala desde el navegador —no hay
- * Play Store de por medio— y habla con este mismo ordenador, así que ve los
- * mismos archivos y la misma base de datos, sin copias ni sincronizaciones.
- *
- * A cambio, el servidor deja de escuchar solo en 127.0.0.1, y por eso desde ese
- * momento exige una clave a todo lo que no venga de aquí.
- */
-function Tablet() {
-  const { toast } = useStore()
-  const [state, setState] = useState(null)
-  const [show, setShow] = useState(false)
-
-  useEffect(() => {
-    api.getRemote().then(setState).catch(() => setState({ unavailable: true }))
-  }, [])
-
-  const save = async (body) => {
-    try {
-      setState(await api.setRemote(body))
-      toast('Guardado · reinicia prolife para que tome efecto')
-    } catch (e) {
-      toast(e.message, 'err')
-    }
-  }
-
-  const copy = (text) => {
-    navigator.clipboard?.writeText(text).then(
-      () => toast('Copiado'),
-      () => toast('No se ha podido copiar', 'err')
-    )
-  }
-
-  if (!state || state.unavailable) return null
-
-  const links = (state.addresses || []).map((a) => ({
-    ...a,
-    url: `http://${a.address}:${state.port}/`,
-    pair: `http://${a.address}:${state.port}/?k=${encodeURIComponent(state.token || '')}`,
-  }))
-
-  return (
-    <div className="card">
-      <div className="card-head">
-        <h3>Abrir en la tablet o el móvil</h3>
-        {state.enabled && <span className="badge hot">encendido</span>}
-      </div>
-
-      <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
-        Con esto encendido, prolife deja de escuchar solo en este ordenador y se puede abrir desde
-        otro aparato de tu red. Ve <strong>los mismos archivos</strong>, porque es este mismo
-        ordenador el que responde: no hay copia que sincronizar ni nada que se pueda desincronizar.
-      </p>
-
-      <label className="row" style={{ gap: 8, cursor: 'pointer', marginBottom: 4 }}>
-        <input type="checkbox" checked={!!state.enabled} onChange={(e) => save({ enabled: e.target.checked })} />
-        <span style={{ fontSize: 13 }}>Permitir el acceso desde otros aparatos de la red</span>
-      </label>
-
-      {state.enabled && (
-        <>
-          <div className="notice" style={{ margin: '12px 0' }}>
-            <Icon name="link" size={13} />
-            <span style={{ fontSize: 12.5, lineHeight: 1.6 }}>
-              El enlace de emparejamiento lleva la clave dentro: <strong>ábrelo una sola vez</strong> en la
-              tablet y no lo reenvíes por chat. Quien lo tenga entra a todo. Para usarlo fuera de casa,
-              no abras puertos del router: instala <strong>Tailscale</strong> en el ordenador y en la
-              tablet y usa la dirección que empieza por 100.
-            </span>
-          </div>
-
-          {links.length === 0 && (
-            <p className="dim" style={{ fontSize: 12.5 }}>
-              Este ordenador no tiene ninguna dirección de red ahora mismo. Conéctalo a la wifi.
-            </p>
-          )}
-
-          <div className="stack" style={{ gap: 8 }}>
-            {links.map((l) => (
-              <div key={l.address} className="row" style={{ gap: 8 }}>
-                <span className="mono" style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {l.url}
-                </span>
-                {l.vpn && <span className="badge">vale fuera de casa</span>}
-                <button className="btn sm" onClick={() => copy(l.pair)}>
-                  <Icon name="link" size={12} /> Copiar enlace de emparejamiento
-                </button>
-              </div>
-            ))}
-          </div>
-
-          <hr className="hr" style={{ margin: '14px 0' }} />
-
-          <h4 style={{ margin: '0 0 6px', fontSize: 13 }}>Instalarla como app, con su icono</h4>
-          <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
-            Para que Android ofrezca «Instalar app» —y para que abra sin el ordenador delante— hace
-            falta que la dirección sea <strong>https</strong>, y esa parte es cosa de Tailscale, no de
-            prolife. Lo que sigue lo hace esta pantalla por ti.
-          </p>
-          <TailscaleSetup port={state.port} token={state.token} />
-
-          <hr className="hr" style={{ margin: '14px 0' }} />
-
-          <div className="row" style={{ gap: 8 }}>
-            <button className="btn sm ghost" onClick={() => setShow(!show)}>
-              <Icon name={show ? 'eye' : 'link'} size={12} /> {show ? 'Ocultar' : 'Ver'} la clave
-            </button>
-            {show && <span className="mono" style={{ fontSize: 12, wordBreak: 'break-all' }}>{state.token}</span>}
-            <div className="spacer" />
-            <button
-              className="btn sm danger"
-              title="Los aparatos ya emparejados dejarán de entrar"
-              onClick={() => save({ renew: true })}
-            >
-              Renovar clave
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 export default function Settings() {
   const { db, update, config, setConfig, toast } = useStore()
   const [dir, setDir] = useState(config?.baseDir || '')
@@ -374,22 +90,12 @@ export default function Settings() {
           <LogoPicker />
         </div>
 
-        {/* Estas cuatro son del ordenador por definición —dónde vive la carpeta,
-            el enlace para emparejar, Ollama, VS Code— y en la tablet no se
-            enseñan: un cuadro que solo puede dar un error no es una función que
-            falte, es un callejón. Lo que sí se puede hacer, se hace. */}
+        {/* La carpeta es del ordenador por definición: en la tablet no se enseña. */}
         {!enDrive && <Sync dir={dir} setDir={setDir} />}
-
-        {!enDrive && <Tablet />}
-        <SecureHint />
         <OfflineFiles />
 
         <div className="card">
-          <div className="card-head"><h3>Medición automática del tiempo</h3></div>
-          <label className="row" style={{ gap: 8, cursor: 'pointer', marginBottom: 12 }}>
-            <input type="checkbox" checked={s.autoTrack !== false} onChange={(e) => setS({ autoTrack: e.target.checked })} />
-            <span style={{ fontSize: 13 }}>Medir sola el tiempo de trabajo</span>
-          </label>
+          <div className="card-head"><h3>Medición del tiempo</h3></div>
           <div className="grid-4">
             <div className="field">
               <label>Objetivo diario (min)</label>
@@ -425,16 +131,12 @@ export default function Settings() {
           </div>
 
           <p className="dim" style={{ fontSize: 12.5, margin: '14px 0 0', lineHeight: 1.6 }}>
-            Hay dos formas de medir y conviven. Si pulsas <strong>«Trabajar en…»</strong>, la sesión
-            cuenta hasta que la pares: da igual la pantalla en la que estés, si te vas al Word o si
-            trabajas en papel. Si no hay ninguna sesión en marcha, se cae en la detección
-            automática: el tiempo va al espacio de trabajo abierto y solo mientras la ventana tenga
-            el foco y {isDesktop ? 'el sistema detecte' : 'haya'} actividad de teclado o ratón.
-            Todo se corrige después desde <span className="kbd">Ctrl J</span>.
+            Pulsa <strong>«Trabajar en…»</strong> y la sesión cuenta hasta que la pares: da igual la
+            pantalla en la que estés, si te vas al Word o si trabajas en papel. Si se te olvidó,
+            «Apuntar tiempo» en cada asignatura o proyecto. Todo se corrige después desde{' '}
+            <span className="kbd">Ctrl J</span>.
           </p>
         </div>
-
-        {!enDrive && <Assistant />}
 
         <div className="card">
           <div className="card-head"><h3>Universidad</h3></div>
@@ -470,8 +172,6 @@ export default function Settings() {
         <Festivos />
         {!enDrive && <GoogleCalendar />}
 
-        {!enDrive && <VsCode />}
-
         <Categories />
 
         <div className="card">
@@ -503,6 +203,8 @@ export default function Settings() {
           onChange={(links) => setS({ links })}
         />
 
+        <Informe />
+
         <div className="card">
           <div className="card-head"><h3>Datos</h3></div>
           <div className="row wrap" style={{ gap: 20, marginBottom: 14 }}>
@@ -527,6 +229,75 @@ export default function Settings() {
         </div>
       </div>
     </>
+  )
+}
+
+/**
+ * El informe con todo: cada asignatura con su asistencia clase a clase, cada
+ * entreno con sus molestias, cada jornada, cada tarea y cada tramo de tiempo.
+ *
+ * Se guarda como archivo en `Informes/` dentro de tu carpeta —así queda junto
+ * a lo demás y viaja por Drive— y además se puede descargar directamente.
+ */
+function Informe() {
+  const { db, toast } = useStore()
+  const [busy, setBusy] = useState(false)
+  const [ultimo, setUltimo] = useState(null)
+
+  const guardar = async () => {
+    setBusy(true)
+    try {
+      const html = buildReport(db)
+      const nombre = reportName()
+      await api.mkdir('Informes')
+      const r = await api.upload('Informes', [new File([html], nombre, { type: 'text/html' })])
+      const ruta = `Informes/${r.files?.[0]?.name || nombre}`
+      setUltimo(ruta)
+      toast(`Informe guardado en ${ruta}`)
+      if (!enDrive) api.openPath(ruta).catch(() => {})
+    } catch (e) {
+      toast('No se pudo guardar el informe: ' + e.message, 'err')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const descargar = () => {
+    try {
+      const url = URL.createObjectURL(new Blob([buildReport(db)], { type: 'text/html' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = reportName()
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+    } catch (e) {
+      toast(e.message, 'err')
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-head"><h3>Informe completo</h3></div>
+      <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
+        Todo lo que hay en prolife en un solo documento: asignaturas con su asistencia clase a clase,
+        notas y entregas, tareas, eventos, el tiempo día a día, cada entreno con sus molestias y
+        lesiones, el voluntariado jornada a jornada y los ajustes. Es largo a propósito. Se abre en
+        cualquier navegador y desde ahí se imprime a PDF.
+      </p>
+      <div className="row wrap" style={{ gap: 6 }}>
+        <button className="btn primary" disabled={busy} onClick={guardar}>
+          <Icon name="report" size={13} /> {busy ? 'Generando…' : enDrive ? 'Guardar en Drive' : 'Generar y abrir'}
+        </button>
+        <button className="btn" onClick={descargar}><Icon name="download" size={13} /> Descargar</button>
+      </div>
+      {ultimo && (
+        <p className="dim mono" style={{ fontSize: 11.5, margin: '10px 0 0' }}>
+          {ultimo}{enDrive ? ' · en tu carpeta de Drive' : ''}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -728,81 +499,6 @@ function LogoPicker() {
   )
 }
 
-/** El ayudante local: qué Ollama y qué modelo, y hasta dónde le dejas llegar. */
-function Assistant() {
-  const { db, update, toast } = useStore()
-  const a = db.settings.assistant || {}
-  const [status, setStatus] = useState(null)
-  const setA = (patch) => update((d) => { d.settings.assistant = { ...d.settings.assistant, ...patch } })
-
-  const load = () => api.aiStatus(a.url).then(setStatus).catch((e) => setStatus({ running: false, models: [], error: e.message }))
-  useEffect(() => { load() }, [a.url])
-
-  return (
-    <div className="card">
-      <div className="card-head">
-        <h3>Ayudante local</h3>
-        <button className="btn sm ghost" onClick={load}><Icon name="refresh" size={12} /></button>
-      </div>
-
-      <p className="dim" style={{ fontSize: 12.5, marginTop: 0, lineHeight: 1.6 }}>
-        El panel de <span className="kbd">Ctrl I</span> habla con un{' '}
-        <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl('https://ollama.com') }} style={{ textDecoration: 'underline' }}>Ollama</a>{' '}
-        que corre en este mismo ordenador. Conoce tus asignaturas, tu horario, tus faltas y tus
-        horas, y puede apuntarte tareas y exámenes. Nada de lo que le digas sale de la máquina.
-      </p>
-
-      <div className="row wrap" style={{ gap: 16, marginBottom: 12 }}>
-        <div>
-          <div className="num" style={{ fontSize: 22, color: status?.running ? 'var(--green)' : 'var(--ink-3)' }}>
-            {!status ? '…' : status.running ? 'activo' : 'parado'}
-          </div>
-          <div className="eyebrow">ollama</div>
-        </div>
-        <div>
-          <div className="num" style={{ fontSize: 22 }}>{status?.models?.length ?? '—'}</div>
-          <div className="eyebrow">modelos</div>
-        </div>
-      </div>
-
-      <div className="grid-2">
-        <div className="field">
-          <label>Modelo</label>
-          {status?.models?.length ? (
-            <select className="select" value={a.model || ''} onChange={(e) => setA({ model: e.target.value })}>
-              <option value="">— el primero disponible —</option>
-              {status.models.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-            </select>
-          ) : (
-            <input className="input mono" style={{ fontSize: 12 }} placeholder="llama3.1:8b" value={a.model || ''} onChange={(e) => setA({ model: e.target.value })} />
-          )}
-        </div>
-        <div className="field">
-          <label>Dirección de Ollama</label>
-          <input className="input mono" style={{ fontSize: 12 }} placeholder="http://127.0.0.1:11434" value={a.url || ''} onChange={(e) => setA({ url: e.target.value })} />
-          <span className="dim" style={{ fontSize: 11 }}>Solo se permiten direcciones locales.</span>
-        </div>
-      </div>
-
-      <label className="row" style={{ gap: 8, cursor: 'pointer', marginTop: 10 }}>
-        <input type="checkbox" checked={a.allowWrite !== false} onChange={(e) => setA({ allowWrite: e.target.checked })} />
-        <span style={{ fontSize: 13 }}>Dejarle crear tareas, exámenes y tramos de tiempo</span>
-      </label>
-      <p className="dim" style={{ fontSize: 12, margin: '6px 0 0' }}>
-        Todo lo que cree aparece en el chat con un botón de deshacer. Sin esto, el ayudante solo
-        consulta y responde.
-      </p>
-
-      {status && !status.running && (
-        <pre className="mono" style={{ fontSize: 11.5, background: 'var(--surface-2)', padding: '8px 12px', borderRadius: 6, margin: '12px 0 0' }}>
-          ollama pull llama3.1:8b
-        </pre>
-      )}
-      {status?.error && <p className="dim mono" style={{ fontSize: 11, marginTop: 8 }}>{status.error}</p>}
-    </div>
-  )
-}
-
 function AddChip({ onAdd, placeholder }) {
   const [v, setV] = useState('')
   return (
@@ -817,68 +513,6 @@ function AddChip({ onAdd, placeholder }) {
       />
       <button className="btn sm ghost" disabled={!v.trim()} onClick={() => { onAdd(v.trim()); setV('') }}><Icon name="plus" size={11} /></button>
     </span>
-  )
-}
-
-/** Editor integrado: estado del servidor y consentimiento de licencia. */
-function VsCode() {
-  const { toast } = useStore()
-  const [s, setS] = useState(null)
-
-  const load = () => api.codeStatus().then(setS).catch((e) => setS({ error: e.message }))
-  useEffect(() => { load() }, [])
-
-  const setAccepted = async (v) => {
-    await api.codeAccept(v)
-    toast(v ? 'Licencia aceptada' : 'Consentimiento retirado, editor detenido')
-    load()
-  }
-
-  return (
-    <div className="card">
-      <div className="card-head">
-        <h3>Editor integrado (VS Code)</h3>
-        <button className="btn sm ghost" onClick={load}><Icon name="refresh" size={12} /></button>
-      </div>
-
-      {!s ? (
-        <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Comprobando…</p>
-      ) : !s.installed ? (
-        <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>
-          No se encuentra VS Code en el sistema. El editor empotrado usa tu propia instalación.
-        </p>
-      ) : (
-        <>
-          <div className="row wrap" style={{ gap: 16, marginBottom: 12 }}>
-            <div><div className="num" style={{ fontSize: 22 }}>{s.cli}</div><div className="eyebrow">versión detectada</div></div>
-            <div>
-              <div className="num" style={{ fontSize: 22, color: s.running ? 'var(--green)' : '' }}>{s.running ? 'activo' : 'parado'}</div>
-              <div className="eyebrow">servidor</div>
-            </div>
-          </div>
-
-          <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
-            <input type="checkbox" checked={!!s.accepted} onChange={(e) => setAccepted(e.target.checked)} />
-            <span style={{ fontSize: 13 }}>Acepto los términos de licencia del servidor de VS Code</span>
-          </label>
-
-          <p className="dim" style={{ fontSize: 12.5, margin: '10px 0 0', lineHeight: 1.55 }}>
-            Para abrir VS Code dentro de la app hay que arrancar <span className="mono">code serve-web</span>,
-            el servidor web oficial de Microsoft que viene con tu instalación. Exigen aceptar sus{' '}
-            <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl(s.licenseUrl) }} style={{ textDecoration: 'underline' }}>términos</a> y su{' '}
-            <a href="#" onClick={(e) => { e.preventDefault(); api.openUrl(s.privacyUrl) }} style={{ textDecoration: 'underline' }}>declaración de privacidad</a>.
-            Escucha solo en 127.0.0.1, con un testigo aleatorio por sesión y la telemetría desactivada.
-          </p>
-
-          {s.running && (
-            <button className="btn sm ghost" style={{ marginTop: 10 }} onClick={() => api.codeStop().then(load)}>
-              Detener el servidor
-            </button>
-          )}
-          {s.error && <p className="dim mono" style={{ fontSize: 11.5, marginTop: 8 }}>{s.error}</p>}
-        </>
-      )}
-    </div>
   )
 }
 

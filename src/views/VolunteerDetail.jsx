@@ -2,11 +2,11 @@ import React, { useMemo, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import Foto from '../components/Foto.jsx'
-import { EntidadForm, volunteerStats } from './Volunteering.jsx'
+import { EntidadForm, volunteerStats, emptyEntidad } from './Volunteering.jsx'
 import { EventForm } from './Calendar.jsx'
 import { useStore, uid } from '../lib/store.jsx'
 import { api } from '../lib/api.js'
-import { today, fmtDate, dur, parseIso } from '../lib/date.js'
+import { today, fmtDate, dur, parseIso, DAYS, MONTHS, weekday } from '../lib/date.js'
 
 /**
  * Una entidad de voluntariado y todas sus jornadas.
@@ -21,19 +21,22 @@ export default function VolunteerDetail({ id }) {
   const [editando, setEditando] = useState(false)
   const [jornada, setJornada] = useState(null)
   const [evento, setEvento] = useState(null)
+  const [otra, setOtra] = useState(null)
 
   const v = (db.volunteering || []).find((x) => x.id === id)
-  if (!v) {
-    return (
-      <div className="empty">
-        <div className="display">Esa entidad ya no existe</div>
-        <a className="btn" href="#/voluntariado">Volver</a>
-      </div>
-    )
-  }
+  const solo = (db.volunteering || []).length === 1
+  const st = volunteerStats(db, id)
 
-  const st = volunteerStats(db, v.id)
-  const dias = useMemo(() => [...st.dias].sort((a, b) => b.date.localeCompare(a.date)), [st.dias])
+  /** Las jornadas por meses, del más reciente al más antiguo. */
+  const porMes = useMemo(() => {
+    const m = new Map()
+    for (const d of [...st.dias].sort((a, b) => b.date.localeCompare(a.date))) {
+      const k = d.date.slice(0, 7)
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(d)
+    }
+    return [...m.entries()]
+  }, [st.dias])
 
   const porAno = useMemo(() => {
     const m = new Map()
@@ -44,7 +47,17 @@ export default function VolunteerDetail({ id }) {
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]))
   }, [st.dias])
 
+  if (!v) {
+    return (
+      <div className="empty">
+        <div className="display">Esa entidad ya no existe</div>
+        <a className="btn" href="#/voluntariado">Volver</a>
+      </div>
+    )
+  }
+
   const borrarJornada = (d) => {
+    if (!confirm(`¿Eliminar la jornada del ${fmtDate(d.date, { absolute: true })}? Las fotos siguen en tu carpeta.`)) return
     update((x) => {
       x.volunteerDays = (x.volunteerDays || []).filter((y) => y.id !== d.id)
       x.sessions = x.sessions.filter((s) => s.id !== 'vol_' + d.id)
@@ -54,9 +67,12 @@ export default function VolunteerDetail({ id }) {
 
   return (
     <>
-      <div className="row" style={{ marginBottom: 14 }}>
-        <a className="btn sm ghost" href="#/voluntariado"><Icon name="chevronL" size={13} /> Voluntariado</a>
-      </div>
+      {/* Con una sola entidad no hay lista a la que volver: se entra directo aquí. */}
+      {!solo && (
+        <div className="row" style={{ marginBottom: 14 }}>
+          <a className="btn sm ghost" href="#/voluntariado"><Icon name="chevronL" size={13} /> Voluntariado</a>
+        </div>
+      )}
 
       <div className="page-head">
         <div>
@@ -88,6 +104,11 @@ export default function VolunteerDetail({ id }) {
           <button className="btn ghost" title="Editar entidad" onClick={() => setEditando(true)}>
             <Icon name="settings" size={13} />
           </button>
+          {solo && (
+            <button className="btn ghost" title="Colaborar con otra entidad más" onClick={() => setOtra(emptyEntidad(1))}>
+              <Icon name="plus" size={13} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -143,50 +164,70 @@ export default function VolunteerDetail({ id }) {
       <div className="card">
         <div className="card-head">
           <h3>Jornadas</h3>
-          <span className="badge">{dias.length}</span>
+          <span className="badge">{st.dias.length}</span>
         </div>
 
-        {dias.length === 0 ? (
+        {st.dias.length === 0 ? (
           <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>
             Todavía no has apuntado ninguna. Cada una guarda el día, las horas y las fotos.
           </p>
         ) : (
-          <div className="stack" style={{ gap: 10 }}>
-            {dias.map((d) => (
-              <div key={d.id} className="card flat" style={{ padding: '12px 14px' }}>
-                <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="row" style={{ gap: 8 }}>
-                      <strong style={{ fontSize: 13, textTransform: 'capitalize' }}>{fmtDate(d.date)}</strong>
-                      <span className="mono dim" style={{ fontSize: 12 }}>{dur((Number(d.minutes) || 0) * 60, true)}</span>
-                      {!d.photos?.length && <span className="badge" title="Sin foto que la acredite">sin foto</span>}
-                    </div>
-                    {d.task && <div style={{ fontSize: 12.5, marginTop: 3 }}>{d.task}</div>}
-                    {d.notes && <div className="dim" style={{ fontSize: 12, marginTop: 3 }}>{d.notes}</div>}
-                  </div>
-                  <button className="btn ghost icon sm" title="Editar" onClick={() => setJornada(d)}>
-                    <Icon name="edit" size={12} />
-                  </button>
-                  <button className="btn ghost icon sm" title="Eliminar" onClick={() => borrarJornada(d)}>
-                    <Icon name="trash" size={12} />
-                  </button>
+          porMes.map(([mes, lista]) => {
+            const [y, m] = mes.split('-').map(Number)
+            const minutos = lista.reduce((a, d) => a + (Number(d.minutes) || 0), 0)
+            return (
+              <div key={mes} className="jornadas-mes">
+                <div className="jornadas-mes-head">
+                  <h4>{MONTHS[m - 1]} {y !== new Date().getFullYear() ? y : ''}</h4>
+                  <span className="dim" style={{ fontSize: 12 }}>
+                    {lista.length} {lista.length === 1 ? 'jornada' : 'jornadas'} · {dur(minutos * 60, true)}
+                  </span>
                 </div>
-
-                {d.photos?.length > 0 && (
-                  <div className="row wrap" style={{ gap: 6, marginTop: 10 }}>
-                    {d.photos.map((ruta) => (
-                      <Foto key={ruta} ruta={ruta} alto={78}
-                        onClick={() => api.openPath(ruta).catch(() => {})} />
-                    ))}
-                  </div>
-                )}
+                {lista.map((d) => {
+                  const f = parseIso(d.date)
+                  return (
+                    <div key={d.id} className="jornada" style={{ '--c': v.color }}>
+                      <div className="jornada-fecha">
+                        <div className="d">{f.getDate()}</div>
+                        <div className="w">{DAYS[weekday(f)]}</div>
+                      </div>
+                      <div className="jornada-cuerpo">
+                        <div className="jornada-titulo">{d.task || 'Jornada'}</div>
+                        <div className="jornada-meta">
+                          <span className="badge">{dur((Number(d.minutes) || 0) * 60, true)}</span>
+                          {d.photos?.length
+                            ? <span className="badge"><Icon name="image" size={10} /> {d.photos.length}</span>
+                            : <span className="badge hot" title="Sin foto que la acredite">sin foto</span>}
+                        </div>
+                        {d.notes && <div className="dim" style={{ fontSize: 12.5, marginTop: 6, whiteSpace: 'pre-wrap' }}>{d.notes}</div>}
+                        {d.photos?.length > 0 && (
+                          <div className="jornada-fotos">
+                            {d.photos.map((ruta) => (
+                              <Foto key={ruta} ruta={ruta} alto={64}
+                                onClick={() => api.openPath(ruta).catch(() => {})} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="jornada-acciones">
+                        <button className="btn ghost icon sm" title="Editar" onClick={() => setJornada(d)}>
+                          <Icon name="edit" size={12} />
+                        </button>
+                        <button className="btn ghost icon sm" title="Eliminar" onClick={() => borrarJornada(d)}>
+                          <Icon name="trash" size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            )
+          })
         )}
       </div>
 
       {editando && <EntidadForm entidad={v} onClose={() => setEditando(false)} />}
+      {otra && <EntidadForm entidad={otra} onClose={() => setOtra(null)} />}
       {evento && <EventForm event={evento} onClose={() => setEvento(null)} />}
       {jornada && <JornadaForm entidad={v} jornada={jornada} onClose={() => setJornada(null)} />}
     </>

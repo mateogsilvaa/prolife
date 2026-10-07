@@ -22,7 +22,7 @@ export default function StatusBar({ onReview }) {
   const state = !enabled ? 'off' : paused ? 'off' : !context ? 'none' : engaged ? 'live' : 'idle'
   const explain = {
     off: 'Medición pausada',
-    none: 'Nada en marcha: elige en qué trabajas o abre un espacio',
+    none: 'Nada en marcha: elige en qué trabajas',
     live: focus ? 'Sesión en marcha: cuenta aunque salgas de la app' : 'Contando: estás trabajando en esto',
     idle: 'En pausa: la app no tiene el foco o llevas un rato sin tocar nada',
   }[state]

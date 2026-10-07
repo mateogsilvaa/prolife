@@ -17,7 +17,7 @@ export function newExam(patch = {}) {
   return {
     id: uid('ex'), subjectId: null, title: '', kind: 'examen',
     date: today(), start: '', end: '', room: '', weight: 0,
-    notes: '', grade: null, ...patch,
+    notes: '', grade: null, delivered: false, ...patch,
   }
 }
 
@@ -93,6 +93,13 @@ export default function ExamEditor({ exam, onClose }) {
           <div className="field"><label>Hasta</label><input className="input" type="time" value={e.end || ''} onChange={(ev) => set({ end: ev.target.value })} /></div>
         </div>
 
+        {e.kind !== 'examen' && (
+          <label className="row" style={{ gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!e.delivered} onChange={(ev) => set({ delivered: ev.target.checked, deliveredAt: ev.target.checked ? Date.now() : null })} />
+            <span style={{ fontSize: 13 }}>Ya está entregada</span>
+          </label>
+        )}
+
         <div className="grid-3">
           <div className="field"><label>Aula</label><input className="input" value={e.room || ''} onChange={(ev) => set({ room: ev.target.value })} /></div>
           <div className="field">
@@ -111,8 +118,8 @@ export default function ExamEditor({ exam, onClose }) {
         </div>
 
         <p className="dim" style={{ fontSize: 12, margin: 0 }}>
-          Aparece en el calendario y en la ficha de la asignatura. La nota sirve para saber cuánto
-          llevas evaluado y qué te queda.
+          Aparece en el calendario y en la ficha de la asignatura{e.kind !== 'examen' ? ', y en Tareas hasta que la marques como entregada' : ''}.
+          La nota sirve para saber cuánto llevas evaluado y qué te queda.
         </p>
       </div>
     </Modal>
@@ -135,6 +142,7 @@ export function ExamRow({ exam, subject, onClick }) {
           {exam.room ? ` · ${exam.room}` : ''}
         </div>
       </div>
+      {exam.delivered && <span className="badge" style={{ color: 'var(--green)' }}>entregada</span>}
       {exam.grade != null && <span className="badge">{exam.grade}</span>}
       <span className="mono" style={{ fontSize: 11.5, textAlign: 'right', color: days !== null && days <= 3 && !past ? 'var(--accent)' : '' }}>
         {fmtDate(exam.date)}{exam.start ? ` ${exam.start}` : ''}

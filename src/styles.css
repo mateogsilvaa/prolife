@@ -436,6 +436,7 @@ a { color: inherit; text-decoration: none; }
 .att-cell.absent { background: var(--accent); border-color: var(--accent); color: #fff; }
 .att-cell.late { background: var(--amber); border-color: var(--amber); color: #fff; }
 .att-cell.excused { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); }
+.att-cell.cancelled { background: repeating-linear-gradient(135deg, var(--surface-2) 0 4px, transparent 4px 8px); border-style: dashed; color: var(--ink-3); text-decoration: line-through; }
 
 /* ----------------------------------------------------------------- archivos */
 
@@ -1130,4 +1131,85 @@ a { color: inherit; text-decoration: none; }
 /* Entre tablet y móvil la columna lateral sigue valiendo, pero estrecha. */
 @media (max-width: 860px) and (min-width: 641px) {
   .view { padding: 22px 18px 80px; }
+}
+
+/* ------------------------------------------------------- tablas de datos -- */
+
+.table-wrap { overflow-x: auto; margin: 0 -2px; }
+.tabla { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tabla th {
+  text-align: left; font-weight: 500; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-3); padding: 0 8px 7px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.tabla td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tabla tr:last-child td { border-bottom: none; }
+.tabla .r { text-align: right; white-space: nowrap; }
+
+/* ------------------------------------------------------------- Hoy -- */
+
+/* Lo que pide atención: una lista corta de avisos, cada uno con su acción. */
+.alerta { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.alerta:last-child { border-bottom: none; }
+.alerta .ico { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.alerta.hot .ico { background: var(--accent-soft); color: var(--accent); }
+.alerta.warn .ico { background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--amber); }
+.alerta.ok .ico { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
+.alerta .txt { flex: 1; min-width: 0; line-height: 1.4; }
+
+/* La agenda del día: una línea de tiempo vertical, con la hora delante. */
+.agenda { display: flex; flex-direction: column; }
+.agenda-row { display: flex; gap: 10px; align-items: stretch; padding: 7px 0; }
+.agenda-row .hora { width: 46px; flex: none; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); padding-top: 2px; }
+.agenda-row .barra { width: 3px; border-radius: 2px; flex: none; }
+.agenda-row .cuerpo { flex: 1; min-width: 0; }
+.agenda-row.pasada { opacity: 0.45; }
+.agenda-row.ahora .hora { color: var(--accent); font-weight: 600; }
+.att-quick { display: inline-flex; gap: 3px; }
+.att-quick button {
+  min-width: 30px; height: 28px; padding: 0 7px; border-radius: var(--r); border: 1px solid var(--line-strong);
+  font-size: 12px; color: var(--ink-2); background: var(--surface);
+}
+.att-quick button.on.present { background: var(--green); border-color: var(--green); color: #fff; }
+.att-quick button.on.absent { background: var(--accent); border-color: var(--accent); color: #fff; }
+.att-quick button.on.cancelled { background: var(--surface-2); border-style: dashed; color: var(--ink-3); text-decoration: line-through; }
+
+/* ------------------------------------------------- jornadas de voluntariado -- */
+
+.jornadas-mes { margin-bottom: 18px; }
+.jornadas-mes:last-child { margin-bottom: 0; }
+.jornadas-mes-head {
+  display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.jornadas-mes-head h4 { margin: 0; font-family: var(--serif); font-size: 18px; font-weight: 400; text-transform: capitalize; }
+.jornada { display: flex; gap: 14px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+.jornada:last-child { border-bottom: none; }
+.jornada-fecha {
+  width: 52px; flex: none; text-align: center; border-radius: var(--r); padding: 6px 0 5px;
+  background: color-mix(in srgb, var(--c) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+}
+.jornada-fecha .d { font-family: var(--serif); font-size: 22px; line-height: 1; color: var(--c); }
+.jornada-fecha .w { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin-top: 3px; }
+.jornada-cuerpo { flex: 1; min-width: 0; }
+.jornada-titulo { font-size: 14px; font-weight: 500; }
+.jornada-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.jornada-fotos { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; padding-bottom: 2px; }
+.jornada-acciones { display: flex; gap: 2px; align-items: flex-start; opacity: 0.55; transition: opacity 0.12s; }
+.jornada:hover .jornada-acciones { opacity: 1; }
+
+@media (max-width: 640px) {
+  .tabla { font-size: 12px; }
+  .tabla th, .tabla td { padding-left: 5px; padding-right: 5px; }
+  .cal-extra { display: none; }
+  .jornada-acciones { opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  /* Las pestañas y los selectores largos se desplazan de lado en vez de
+     salirse de la pantalla o quedarse cortados. */
+  .tabs { overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: none; white-space: nowrap; }
+  .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .seg button { flex: none; white-space: nowrap; }
 }

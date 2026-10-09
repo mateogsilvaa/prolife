@@ -137,7 +137,11 @@ export function eventosDeseados(db, { ajustes = {}, desde = null, hasta = null }
         if (arranque > until) return
 
         const recurrence = [`RRULE:FREQ=WEEKLY;BYDAY=${DIAS_RRULE[slot.day]};UNTIL=${until.replace(/-/g, '')}T235959Z`]
-        const fuera = festivosDeLaClase(db, slot, arranque, until)
+        // Las clases canceladas desaparecen del móvil igual que los festivos.
+        const canceladas = (db.attendance || [])
+          .filter((a) => a.subjectId === s.id && a.slot === i && a.status === 'cancelled' && a.date >= arranque && a.date <= until)
+          .map((a) => a.date)
+        const fuera = [...new Set([...festivosDeLaClase(db, slot, arranque, until), ...canceladas])].sort()
         // Una sola línea con todas: Google admite varias fechas por EXDATE y
         // así el evento no lleva veinte líneas de excepciones.
         if (fuera.length) {

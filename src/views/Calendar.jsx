@@ -160,9 +160,14 @@ export default function Calendar() {
         (s.schedule || []).forEach((sl, slotIndex) => {
           // El horario ya no es eterno: cada clase vale entre sus dos fechas.
           if (sl.day !== wd || !slotActiveOn(sl, date, db)) return
+          const cancelled = db.attendance.some(
+            (a) => a.subjectId === s.id && a.date === date && a.slot === slotIndex && a.status === 'cancelled'
+          )
           out.push({
-            kind: 'class', label: s.name, color: s.color, start: sl.start, end: sl.end,
-            detail: sl.room ? `Aula ${sl.room}` : 'Clase', href: `#/uni/${s.id}`, slotIndex, subject: s,
+            kind: 'class', label: cancelled ? `${s.name} · cancelada` : s.name,
+            color: cancelled ? 'var(--line-strong)' : s.color, start: sl.start, end: sl.end,
+            detail: cancelled ? 'Clase cancelada' : sl.room ? `Aula ${sl.room}` : 'Clase',
+            href: `#/uni/${s.id}`, slotIndex, subject: s, cancelled, date,
           })
         })
 
@@ -170,7 +175,7 @@ export default function Calendar() {
         if (ex.date !== date) continue
         const s = subjectsById.get(ex.subjectId)
         out.push({
-          kind: 'exam', label: ex.title, color: s?.color || 'var(--accent)',
+          kind: 'exam', label: `${ex.delivered ? '✓ ' : ''}${ex.title}`, color: s?.color || 'var(--accent)',
           start: ex.start, end: ex.end,
           detail: `${kindLabel(ex.kind)}${s ? ` · ${s.name}` : ''}${ex.room ? ` · ${ex.room}` : ''}`,
           exam: ex, important: true,
@@ -551,7 +556,13 @@ function EventBlock({ it, days, dayIndex, top, height, onOpen, onDragEvent }) {
 }
 
 function DayPanel({ date, itemsOf, load, onOpen, onNew, onNewTask, onNewExam }) {
-  const { db, update } = useStore()
+  const { db, update, applyChange } = useStore()
+  /** Avisaron de que no hay clase: sale de la asistencia igual que un festivo, pero solo esa. */
+  const cancelar = (it) =>
+    applyChange({
+      kind: 'asistencia', subjectId: it.subject.id, date, slot: it.slotIndex,
+      status: it.cancelled ? null : 'cancelled',
+    })
   const items = itemsOf(date)
   const festivo = holidayOn(db, date)
   // Cuántas clases habría hoy si no fuera festivo: es lo que se va a quitar, y
@@ -616,6 +627,15 @@ function DayPanel({ date, itemsOf, load, onOpen, onNew, onNewTask, onNewExam }) 
                     {it.event?.repeat?.freq ? ' · se repite' : ''}
                   </div>
                 </div>
+                {it.kind === 'class' && (
+                  <button
+                    className="btn sm ghost"
+                    title={it.cancelled ? 'Al final sí hay clase' : 'Esta clase no se da: no cuenta para la asistencia'}
+                    onClick={(e) => { e.stopPropagation(); cancelar(it) }}
+                  >
+                    {it.cancelled ? 'Hay clase' : 'Cancelada'}
+                  </button>
+                )}
               </div>
             ))}
           </div>

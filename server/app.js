@@ -137,6 +137,63 @@ export function createApp() {
   // El directorio puede cambiar en caliente desde Ajustes: la copia mira siempre el actual.
   scheduleBackups(() => cfg.baseDir)
 
+  /**
+   * Lo que ha entrado del buzón de la tablet, con la marca del db.json que
+   * quedó al guardarlo. Hace falta por una carrera concreta: la ventana de la
+   * app tiene la base cargada de antes; si el buzón se vacía y justo después
+   * la ventana guarda —manda la base ENTERA, la suya—, lo que llegó de la
+   * tablet desaparecería. El PUT mira desde qué marca trabajaba la ventana y
+   * vuelve a aplicar encima lo que entró después. Las operaciones dicen cómo
+   * tiene que quedar cada registro, así que aplicarlas dos veces no duplica.
+   */
+  const drenadas = []
+  const vaciarBuzon = () => {
+    const r = drainOps(cfg.baseDir)
+    if (r.applied || r.skipped.length) {
+      console.log(`buzón de la tablet: ${r.applied} cambios aplicados` +
+        (r.skipped.length ? `, ${r.skipped.length} descartados` : ''))
+    }
+    if (r.ops?.length) {
+      drenadas.push({ stamp: stamp(), ops: r.ops })
+      // Un día de historia sobra: ninguna ventana trabaja con una base tan vieja.
+      while (drenadas.length && drenadas[0].stamp < Date.now() - 86400_000) drenadas.shift()
+      programarGcal()
+    }
+    return r
+  }
+
+  /**
+   * Google Calendar se pone al día solo, también con lo que llega de la tablet
+   * mientras la ventana está minimizada. Con un rato de espera: varios cambios
+   * seguidos son una sola tanda de llamadas a Google.
+   */
+  let gcalTimer = null
+  const programarGcal = (ms = 45_000) => {
+    if (!gcal.conectado()) return
+    clearTimeout(gcalTimer)
+    gcalTimer = setTimeout(() => sincronizarGcal().catch(() => {}), ms)
+    gcalTimer.unref?.()
+  }
+  const sincronizarGcal = async () => {
+    try {
+      const r = await sincronizar(loadDb(cfg.baseDir))
+      cfg = writeConfig({ gcalUltima: { at: r.at, creados: r.creados, cambiados: r.cambiados, borrados: r.borrados }, gcalError: '' })
+      return r
+    } catch (e) {
+      // Se apunta para poder enseñarlo: un calendario que deja de ponerse al
+      // día sin que nadie lo diga es peor que un error en pantalla.
+      cfg = writeConfig({ gcalError: e.message, gcalErrorAt: Date.now() })
+      throw e
+    }
+  }
+
+  // El buzón se vacía cada medio minuto con la app abierta, no solo al
+  // arrancarla: si no, lo apuntado en la tablet no llegaba hasta reiniciar.
+  const buzonTimer = setInterval(() => {
+    try { vaciarBuzon() } catch { /* un fichero raro no puede tumbar el servidor */ }
+  }, 30_000)
+  buzonTimer.unref?.()
+
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 * 1024 } })
 
   /* ------------------------------------------------------------- acceso --- */
@@ -406,11 +463,7 @@ export function createApp() {
   app.get(
     '/api/db',
     wrap((_req, res) => {
-      const buzon = drainOps(cfg.baseDir)
-      if (buzon.applied || buzon.skipped.length) {
-        console.log(`buzón de la tablet: ${buzon.applied} cambios aplicados` +
-          (buzon.skipped.length ? `, ${buzon.skipped.length} descartados` : ''))
-      }
+      const buzon = vaciarBuzon()
       res.json({
         ...loadDb(cfg.baseDir),
         _stamp: stamp(), _schema: SCHEMA, _future: futureVersion(),
@@ -426,11 +479,20 @@ export function createApp() {
     '/api/db',
     wrap((req, res) => {
       const body = { ...req.body }
+      // Lo que entró del buzón después de que esta ventana cargara la base no
+      // está en lo que manda: se vuelve a poner encima antes de guardar.
+      const base = Number(body._base) || 0
+      for (const d of drenadas) {
+        if (d.stamp > base) for (const op of d.ops) applyOp(body, op)
+      }
+      delete body._base
       delete body._stamp
       delete body._schema
       delete body._future
       delete body._stale
       saveDb(cfg.baseDir, body)
+      // Google Calendar se pone al día un rato después de dejar de tocar cosas.
+      programarGcal(60_000)
       res.json({ ok: true, stamp: stamp() })
     })
   )
@@ -468,6 +530,12 @@ export function createApp() {
       // merece quedarse escrito. Si el fichero es de una versión más nueva,
       // `saveDb` lanza un 409 y no se toca nada, como en el resto de la app.
       saveDb(cfg.baseDir, db)
+      // Igual que con el buzón: que un guardado de la ventana no se lo lleve por delante.
+      const entradas = ops.filter((op) => !skipped.some((x) => x.id === (op?.id ?? null)))
+      if (entradas.length) {
+        drenadas.push({ stamp: stamp(), ops: entradas })
+        programarGcal()
+      }
       res.json({ ok: true, stamp: stamp(), applied, skipped })
     })
   )
@@ -774,7 +842,7 @@ export function createApp() {
    */
   app.get(
     '/api/gcal/status',
-    wrap(async (_req, res) => {
+    wrap(async (req, res) => {
       const base = {
         ok: true,
         configurado: gcal.configurado(),
@@ -782,9 +850,12 @@ export function createApp() {
         calendarId: cfg.gcalCalendarId || '',
         mostrar: cfg.gcalMostrar || [],
         ultima: cfg.gcalUltima || null,
+        // El último fallo, si es posterior al último éxito.
+        fallo: cfg.gcalError && (cfg.gcalErrorAt || 0) > (cfg.gcalUltima?.at || 0) ? { mensaje: cfg.gcalError, at: cfg.gcalErrorAt } : null,
         ajustes: { ...AJUSTES_POR_DEFECTO, ...(loadDb(cfg.baseDir).settings?.gcal || {}) },
       }
-      if (!base.conectado) return res.json({ ...base, calendarios: [] })
+      // `?ligero` es para los avisos de Hoy: el estado, sin preguntarle nada a Google.
+      if (!base.conectado || req.query.ligero) return res.json({ ...base, calendarios: [] })
       // Que la lista de calendarios falle no puede dejar la pantalla en blanco:
       // el resto del estado sigue siendo verdad y es lo que explica el fallo.
       const calendarios = await gcal.listarCalendarios().catch((e) => ({ error: e.message }))
@@ -857,9 +928,7 @@ export function createApp() {
   app.post(
     '/api/gcal/sync',
     wrap(async (_req, res) => {
-      const r = await sincronizar(loadDb(cfg.baseDir))
-      cfg = writeConfig({ gcalUltima: { at: r.at, creados: r.creados, cambiados: r.cambiados, borrados: r.borrados } })
-      res.json(r)
+      res.json(await sincronizarGcal())
     })
   )
 

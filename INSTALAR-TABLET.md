@@ -51,18 +51,24 @@ movido. Si algo baila, para aquí y mira la tabla del final.
 De uno en uno: actualiza el primero, ábrelo, **espera a que Drive termine de subir** (el
 icono deja de girar) y luego ve al segundo.
 
-**Qué hay de nuevo en esta versión:** el apartado de **Voluntariado** —jornadas con sus
-horas y sus fotos, para poder justificarlas—, apuntar tiempo a mano en una asignatura o un
-proyecto, arrastrar los eventos por el horario, la vista del calendario que se queda donde
-la dejaste, los eventos que chocan puestos uno al lado del otro, el icono nuevo, y un
-ayudante que pregunta en vez de inventarse las cosas.
+**Qué hay de nuevo en esta versión:**
 
-> **Esta vez hay que actualizar los DOS ordenadores, no vale dejarlo a medias.** Cada
-> versión que añade datos nuevos al `db.json` sube el formato — el voluntariado lo llevó a
-> la v5, y los cuatrimestres y festivos a la v6.
-> El ordenador que se quede sin actualizar lo detectará, te lo dirá con un aviso rojo y
-> **dejará de guardar** para no estropear nada — que es lo que tiene que hacer, pero mejor
-> saberlo antes que encontrárselo.
+- **Hoy** es ahora la pantalla de cada día: la agenda con la asistencia a un toque (✓ fui,
+  ✕ falté, ⊘ cancelada), los avisos de lo que se te escapa, lo que vence y el entreno.
+- **Clase cancelada**: no cuenta ni como ida ni como falta.
+- **Atletismo**: calendario de entrenos, estadísticas (qué tipo haces más, qué días vas…) y
+  registro de **molestias y lesiones** con zona, dolor y seguimiento hasta el alta.
+- **Tareas**: las prácticas y entregas evaluables salen ahí solas y se marcan como entregadas.
+- **Estadísticas** por áreas: universidad, atletismo, tiempo y hábitos, tareas, voluntariado.
+- **Ajustes → Informe completo**: un documento con absolutamente todo.
+- **Voluntariado** entra directo en tu entidad si solo tienes una, y las jornadas se ven mejor.
+- **Fuera**: los espacios de trabajo, Archivos, el ayudante y el emparejamiento de Ajustes.
+  No se borra nada: tus archivos siguen en su carpeta y el `db.json` guarda todo igual.
+
+> **Esta versión no cambia el formato del `db.json`**: solo añade cosas, y una versión
+> anterior que lo abra las conserva tal cual. Puedes actualizar un ordenador hoy y el otro
+> mañana sin que ninguno se plante. Aun así, actualiza los dos cuando puedas: el que se quede
+> atrás no sabrá enseñarte las lesiones ni contar bien las clases canceladas.
 
 ---
 
@@ -91,14 +97,8 @@ Drive, la misma carpeta que ya sincronizas.
 marcar faltas; crear, editar y borrar tareas y eventos; apuntar entrenos, tiempo y jornadas
 de voluntariado; cambiar ajustes y categorías; subir y leer apuntes, PDFs y fotos.
 
-Lo único que no está es lo que **es** del ordenador y no tendría sentido allí:
-
-| Qué | Por qué |
-|---|---|
-| El directorio de trabajo | Es una carpeta de un disco concreto |
-| El ayudante (Ollama) | El modelo corre en el ordenador |
-| El editor VS Code | Igual |
-| Abrir carpetas del disco, Tailscale, el enlace de emparejamiento | Del ordenador por definición |
+Lo único que no está es lo que **es** del ordenador y no tendría sentido allí: el directorio
+de trabajo, que es una carpeta de un disco concreto.
 
 En la tablet esos cuadros no se enseñan siquiera, para que no haya botones que solo puedan
 dar un error.
@@ -113,6 +113,10 @@ Esto es lo único técnico que conviene entender, porque explica el aviso que ve
   copia, mira qué ha quedado distinto y deja *solo eso* en un buzón, `.prolife/ops/`. El
   ordenador lo recoge y lo aplica sobre su base la próxima vez que lo abras. Por eso la
   tablet dice *«guardado en Drive · el ordenador lo recoge al abrirse»* y no *«hecho»*.
+
+Con la app abierta en el ordenador, el buzón se vacía **cada medio minuto** —no solo al
+arrancar— y las dos pantallas se traen solas lo nuevo, sin recargar. Con el ordenador apagado,
+lo de la tablet espera en el buzón hasta que lo enciendas.
 
 Así sigue habiendo **un solo escritor** del `db.json`: el ordenador. Si escribieran los dos,
 Drive no sabría fusionarlos y ganaría el último en subir.

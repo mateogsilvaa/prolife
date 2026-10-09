@@ -2,9 +2,51 @@ import React, { useMemo, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import { useStore, AREAS } from '../lib/store.jsx'
 import { weekSummary, recentWeeks, weekProgress, delta, pct } from '../lib/stats.js'
-import { dur, DAYS, DAYS_LONG, startOfWeek, addDays, weekLabel, iso, parseIso, MONTHS } from '../lib/date.js'
+import { dur, DAYS, DAYS_LONG, startOfWeek, addDays, weekLabel, iso, parseIso, MONTHS, fmtDate } from '../lib/date.js'
+import { uniStats, timeStats, taskStats, volunteerSummary } from '../lib/insights.js'
+import { TrainingStatsPanel } from './Training.jsx'
+
+const TABS = [
+  ['semana', 'La semana'],
+  ['uni', 'Universidad'],
+  ['atletismo', 'Atletismo'],
+  ['tiempo', 'Tiempo y hábitos'],
+  ['tareas', 'Tareas'],
+  ['voluntariado', 'Voluntariado'],
+]
+const TAB_KEY = 'prolife.stats.tab'
 
 export default function Stats() {
+  const [tab, setTabRaw] = useState(() => {
+    try {
+      const t = localStorage.getItem(TAB_KEY)
+      return TABS.some(([k]) => k === t) ? t : 'semana'
+    } catch {
+      return 'semana'
+    }
+  })
+  const setTab = (t) => {
+    setTabRaw(t)
+    try { localStorage.setItem(TAB_KEY, t) } catch { /* da igual */ }
+  }
+  return (
+    <>
+      <div className="tabs" style={{ overflowX: 'auto' }}>
+        {TABS.map(([k, l]) => (
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
+        ))}
+      </div>
+      {tab === 'semana' && <Semana />}
+      {tab === 'uni' && <Universidad />}
+      {tab === 'atletismo' && <TrainingStatsPanel />}
+      {tab === 'tiempo' && <Tiempo />}
+      {tab === 'tareas' && <Tareas />}
+      {tab === 'voluntariado' && <Voluntariado />}
+    </>
+  )
+}
+
+function Semana() {
   const { db } = useStore()
   const [offset, setOffset] = useState(0) // 0 = semana actual
   const [range, setRange] = useState(12)
@@ -264,4 +306,289 @@ function narrative(cur, prev, avg, rows, db) {
   else if (flojo >= 0 && flojo < 5) frase += `El ${DAYS_LONG[flojo].toLowerCase()} quedó en blanco.`
 
   return frase.trim()
+}
+
+/* ------------------------------------------------------------ universidad */
+
+const pctTxt = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`)
+const nota = (x) => (x == null ? '—' : x.toFixed(2).replace(/\.?0+$/, ''))
+
+function Universidad() {
+  const { db } = useStore()
+  const u = useMemo(() => uniStats(db), [db])
+  if (!u.rows.length) return <div className="empty"><div className="display">Sin asignaturas</div></div>
+  const maxH = Math.max(...u.rows.map((r) => r.seconds), 1)
+
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      <div className="grid-4">
+        <div className="stat">
+          <div className="eyebrow">Horas de estudio</div>
+          <div className="value num">{(u.seconds / 3600).toFixed(0)}<span>h</span></div>
+          <div className="delta dim">en {u.rows.length} asignaturas</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Asistencia real</div>
+          <div className="value num">{pctTxt(u.attendance)}</div>
+          <div className="delta dim">{u.present} de {u.marked} clases · {u.absent} faltas{u.cancelled ? ` · ${u.cancelled} canceladas` : ''}</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Nota media provisional</div>
+          <div className="value num">{nota(u.creditsGrade ?? u.avgGrade)}</div>
+          <div className="delta dim">{u.creditsGrade != null ? 'ponderada por créditos' : 'de lo ya evaluado'}</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Sin margen de faltas</div>
+          <div className="value num" style={{ color: u.atRisk.length ? 'var(--accent)' : 'var(--green)' }}>{u.atRisk.length}</div>
+          <div className="delta dim">{u.atRisk.length ? u.atRisk.map((r) => r.subject.name).join(', ') : 'vas bien en todas'}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head"><h3>Asignatura a asignatura</h3></div>
+        <div className="table-wrap">
+          <table className="tabla">
+            <thead>
+              <tr>
+                <th>Asignatura</th><th /><th className="r">Horas</th><th className="r">Últ. 4 sem.</th>
+                <th className="r">Asistencia</th><th className="r">Faltas</th><th className="r">Margen</th>
+                <th className="r">Nota</th><th className="r">Evaluado</th><th className="r">Entregas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {u.rows.map((r) => (
+                <tr key={r.subject.id}>
+                  <td>
+                    <a href={`#/uni/${r.subject.id}`} className="row" style={{ gap: 6, textDecoration: 'none' }}>
+                      <span className="dot" style={{ background: r.subject.color }} />{r.subject.name}
+                    </a>
+                  </td>
+                  <td style={{ width: '14%' }}><div className="meter"><i style={{ width: `${(r.seconds / maxH) * 100}%`, background: r.subject.color }} /></div></td>
+                  <td className="r mono">{(r.seconds / 3600).toFixed(1)}</td>
+                  <td className="r mono dim">{(r.seconds28 / 3600).toFixed(1)}</td>
+                  <td className="r mono">{pctTxt(r.attendance)}</td>
+                  <td className="r mono">{r.absent}</td>
+                  <td className="r mono" style={{ color: r.budget.doomed ? 'var(--accent)' : r.budget.left <= 1 && r.budget.totalCounted ? 'var(--amber)' : '' }}>
+                    {r.budget.totalCounted ? (r.budget.doomed ? '0' : r.budget.left) : '—'}
+                  </td>
+                  <td className="r mono">{nota(r.grade)}</td>
+                  <td className="r mono dim">{r.weightDone ? `${r.weightDone}%` : '—'}</td>
+                  <td className="r mono dim">{r.deliverables ? `${r.delivered}/${r.deliverables}` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="dim" style={{ fontSize: 11.5, margin: '10px 0 0' }}>
+          «Margen» son las faltas que aún te puedes permitir. Las clases canceladas y las justificadas no cuentan.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ tiempo */
+
+function Tiempo() {
+  const { db } = useStore()
+  const t = useMemo(() => timeStats(db), [db])
+  if (!t.total) return <div className="empty"><div className="display">Sin tiempo registrado</div></div>
+  const maxM = Math.max(...t.months.map((m) => m.seconds), 1)
+  const maxWd = Math.max(...t.wdAvg, 1)
+  const maxH = Math.max(...t.byHour, 1)
+  const horas = Array.from({ length: 18 }, (_, i) => i + 6)
+
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      <div className="grid-4">
+        <div className="stat">
+          <div className="eyebrow">Tiempo total</div>
+          <div className="value num">{(t.total / 3600).toFixed(0)}<span>h</span></div>
+          <div className="delta dim">{t.first ? `desde el ${fmtDate(t.first, { absolute: true })}` : ''}</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Un día con algo</div>
+          <div className="value num">{(t.avgActiveDay / 3600).toFixed(1)}<span>h de media</span></div>
+          <div className="delta dim">{t.activeDays} días con tiempo apuntado</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Tu mejor día</div>
+          <div className="value num" style={{ fontSize: 30 }}>{t.bestDay ? dur(t.bestDay[1]) : '—'}</div>
+          <div className="delta dim">{t.bestDay ? fmtDate(t.bestDay[0], { absolute: true }) : ''}</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Racha más larga</div>
+          <div className="value num">{t.bestStreak}<span>días</span></div>
+          <div className="delta dim">{t.peakHour !== null ? `rindes más hacia las ${t.peakHour}:00` : ''}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head"><h3>Mes a mes, por áreas</h3><span className="dim mono" style={{ fontSize: 11 }}>últimos 12</span></div>
+        <div className="bars" style={{ height: 150 }}>
+          {t.months.map((m) => (
+            <div className="col" key={m.key} title={`${MONTHS[m.month]} ${m.year}: ${dur(m.seconds)}`}>
+              {Object.entries(AREAS).map(([k, v]) => {
+                const h = ((m.byArea[k] || 0) / maxM) * 100
+                return h ? <div key={k} className="seg-bar" style={{ height: `${h}%`, background: v.color }} /> : null
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="axis">{t.months.map((m) => <span key={m.key}>{MONTHS[m.month].slice(0, 3)}</span>)}</div>
+        <div className="row wrap" style={{ gap: 12, marginTop: 12 }}>
+          {Object.entries(AREAS).map(([k, v]) => (
+            <span key={k} className="row" style={{ gap: 5, fontSize: 11.5 }}>
+              <span className="dot" style={{ background: v.color }} /> {v.label} · {((t.byArea[k] || 0) / 3600).toFixed(0)} h
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="split even">
+        <div className="card">
+          <div className="card-head"><h3>Qué día rindes más</h3><span className="dim" style={{ fontSize: 11.5 }}>media de los días con algo</span></div>
+          <div className="bars" style={{ height: 120 }}>
+            {t.wdAvg.map((v, i) => (
+              <div className="col" key={i} title={`${DAYS_LONG[i]}: ${dur(v)} de media`}>
+                <div className="seg-bar" style={{ height: `${(v / maxWd) * 100}%`, background: v === Math.max(...t.wdAvg) ? 'var(--accent)' : 'var(--ink)' }} />
+              </div>
+            ))}
+          </div>
+          <div className="axis">{DAYS.map((d, i) => <span key={d}>{d}<br />{t.wdAvg[i] ? dur(t.wdAvg[i]) : '—'}</span>)}</div>
+        </div>
+
+        <div className="card">
+          <div className="card-head"><h3>A qué hora trabajas</h3><span className="dim" style={{ fontSize: 11.5 }}>solo lo medido con cronómetro</span></div>
+          {t.peakHour === null ? (
+            <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Usa «Trabajar en…» y aquí se verán tus horas buenas.</p>
+          ) : (
+            <>
+              <div className="bars" style={{ height: 120, gap: 2 }}>
+                {horas.map((h) => (
+                  <div className="col" key={h} title={`${h}:00 · ${dur(t.byHour[h])}`}>
+                    <div className="seg-bar" style={{ height: `${(t.byHour[h] / maxH) * 100}%`, background: h === t.peakHour ? 'var(--accent)' : 'var(--line-strong)' }} />
+                  </div>
+                ))}
+              </div>
+              <div className="axis" style={{ gap: 2 }}>{horas.map((h) => <span key={h}>{h % 3 === 0 ? h : ''}</span>)}</div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ tareas */
+
+function Tareas() {
+  const { db } = useStore()
+  const t = useMemo(() => taskStats(db), [db])
+  const maxW = Math.max(...t.weeks.map((w) => Math.max(w.done, w.created)), 1)
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      <div className="grid-4">
+        <div className="stat">
+          <div className="eyebrow">Completadas</div>
+          <div className="value num">{t.done}</div>
+          <div className="delta dim">{t.open} abiertas · {t.overdue} atrasadas</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">A tiempo</div>
+          <div className="value num">{pctTxt(t.onTime)}</div>
+          <div className="delta dim">{t.late ? `${t.late} tarde · ${t.avgDelay.toFixed(1)} días de retraso medio` : 'ninguna tarde'}</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Entregas evaluables</div>
+          <div className="value num">{t.delivered}<span>/ {t.deliverables}</span></div>
+          <div className="delta dim">{t.pendingDeliverables} por entregar{t.deliveredLate ? ` · ${t.deliveredLate} marcadas tarde` : ''}</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Ritmo</div>
+          <div className="value num">{(t.weeks.slice(-4).reduce((a, w) => a + w.done, 0) / 4).toFixed(1)}<span>/sem</span></div>
+          <div className="delta dim">tareas cerradas, media del último mes</div>
+        </div>
+      </div>
+
+      <div className="split even">
+        <div className="card">
+          <div className="card-head"><h3>Creadas y cerradas por semana</h3><span className="dim mono" style={{ fontSize: 11 }}>últimas 12</span></div>
+          <div className="bars" style={{ height: 130 }}>
+            {t.weeks.map((w) => (
+              <div className="col" key={w.start} title={`${weekLabel(w.start)} · ${w.created} creadas · ${w.done} cerradas`} style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 1 }}>
+                <div className="seg-bar" style={{ height: `${(w.created / maxW) * 100}%`, background: 'var(--line-strong)' }} />
+                <div className="seg-bar" style={{ height: `${(w.done / maxW) * 100}%`, background: 'var(--green)' }} />
+              </div>
+            ))}
+          </div>
+          <div className="row" style={{ gap: 12, marginTop: 10, fontSize: 11.5 }}>
+            <span className="row" style={{ gap: 5 }}><span className="dot" style={{ background: 'var(--line-strong)' }} /> creadas</span>
+            <span className="row" style={{ gap: 5 }}><span className="dot" style={{ background: 'var(--green)' }} /> cerradas</span>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-head"><h3>Por área</h3></div>
+          <div className="stack" style={{ gap: 9 }}>
+            {t.byArea.filter((a) => a.open || a.done).map((a) => (
+              <div key={a.area} className="row" style={{ gap: 8, fontSize: 12.5 }}>
+                <span className="dot" style={{ background: AREAS[a.area].color }} />
+                <span style={{ width: 100 }}>{AREAS[a.area].label}</span>
+                <div className="meter" style={{ flex: 1 }}>
+                  <i style={{ width: `${(a.done / Math.max(1, a.done + a.open)) * 100}%`, background: AREAS[a.area].color }} />
+                </div>
+                <span className="mono dim" style={{ width: 110, textAlign: 'right' }}>{a.done} hechas · {a.open} abiertas</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ----------------------------------------------------------- voluntariado */
+
+function Voluntariado() {
+  const { db } = useStore()
+  const v = useMemo(() => volunteerSummary(db), [db])
+  if (!v.n) return <div className="empty"><div className="display">Sin jornadas todavía</div></div>
+  const maxM = Math.max(...v.months.map((m) => m.minutes), 1)
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      <div className="grid-4">
+        <div className="stat">
+          <div className="eyebrow">Horas</div>
+          <div className="value num">{(v.minutes / 60).toFixed(1)}<span>h</span></div>
+          <div className="delta dim">{v.n} jornadas</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Por jornada</div>
+          <div className="value num">{(v.avg / 60).toFixed(1)}<span>h</span></div>
+          <div className="delta dim">de media</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Fotos</div>
+          <div className="value num">{v.photos}</div>
+          <div className="delta dim">{v.noPhoto ? `${v.noPhoto} jornadas sin ninguna` : 'todas acreditadas'}</div>
+        </div>
+        <div className="stat">
+          <div className="eyebrow">Última vez</div>
+          <div className="value num" style={{ fontSize: 26 }}>{v.last ? fmtDate(v.last.date) : '—'}</div>
+          <div className="delta dim">{v.wd.some((x) => x) ? `sueles ir los ${DAYS_LONG[v.wd.indexOf(Math.max(...v.wd))].toLowerCase()}` : ''}</div>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-head"><h3>Horas por mes</h3><span className="dim mono" style={{ fontSize: 11 }}>últimos 12</span></div>
+        <div className="bars" style={{ height: 130 }}>
+          {v.months.map((m) => (
+            <div className="col" key={m.key} title={`${MONTHS[m.month]} ${m.year}: ${(m.minutes / 60).toFixed(1)} h · ${m.n} jornadas`}>
+              <div className="seg-bar" style={{ height: `${(m.minutes / maxM) * 100}%`, background: AREAS.volunteer.color }} />
+            </div>
+          ))}
+        </div>
+        <div className="axis">{v.months.map((m) => <span key={m.key}>{MONTHS[m.month].slice(0, 3)}</span>)}</div>
+      </div>
+    </div>
+  )
 }

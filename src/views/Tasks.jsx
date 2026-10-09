@@ -2,15 +2,20 @@ import React, { useMemo, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import TaskList from '../components/TaskList.jsx'
 import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
+import DeliverableList from '../components/DeliverableList.jsx'
+import ExamEditor, { ExamRow, newExam } from '../components/ExamEditor.jsx'
 import { useStore, AREAS } from '../lib/store.jsx'
-import { daysUntil, today, fmtDate } from '../lib/date.js'
+import { daysUntil } from '../lib/date.js'
+import { isDeliverable, upcomingExams } from '../lib/stats.js'
 
+/** `due` en las tareas, `date` en las entregas evaluables: lo mismo con otro nombre. */
+const when = (x) => x.due ?? x.date
 const GROUPS = [
-  { id: 'atrasadas', label: 'Atrasadas', test: (t) => t.due && daysUntil(t.due) < 0 },
-  { id: 'hoy', label: 'Hoy', test: (t) => t.due && daysUntil(t.due) === 0 },
-  { id: 'semana', label: 'Próximos 7 días', test: (t) => t.due && daysUntil(t.due) > 0 && daysUntil(t.due) <= 7 },
-  { id: 'despues', label: 'Más adelante', test: (t) => t.due && daysUntil(t.due) > 7 },
-  { id: 'sinfecha', label: 'Sin fecha', test: (t) => !t.due },
+  { id: 'atrasadas', label: 'Atrasadas', test: (x) => when(x) && daysUntil(when(x)) < 0 },
+  { id: 'hoy', label: 'Hoy', test: (x) => when(x) && daysUntil(when(x)) === 0 },
+  { id: 'semana', label: 'Próximos 7 días', test: (x) => when(x) && daysUntil(when(x)) > 0 && daysUntil(when(x)) <= 7 },
+  { id: 'despues', label: 'Más adelante', test: (x) => when(x) && daysUntil(when(x)) > 7 },
+  { id: 'sinfecha', label: 'Sin fecha', test: (x) => !when(x) },
 ]
 
 export default function Tasks() {
@@ -19,19 +24,32 @@ export default function Tasks() {
   const [q, setQ] = useState('')
   const [showDone, setShowDone] = useState(false)
   const [adding, setAdding] = useState(null)
+  const [exam, setExam] = useState(null)
 
+  const term = q.trim().toLowerCase()
   const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase()
     return db.tasks.filter(
       (t) =>
         (area === 'all' || t.area === area) &&
         (showDone || t.status !== 'done') &&
         (!term || t.title.toLowerCase().includes(term) || (t.notes || '').toLowerCase().includes(term))
     )
-  }, [db.tasks, area, q, showDone])
+  }, [db.tasks, area, term, showDone])
+
+  /** Prácticas y entregas de las asignaturas: cuentan como tareas de la uni. */
+  const evaluables = useMemo(() => {
+    if (area !== 'all' && area !== 'uni') return []
+    return (db.exams || [])
+      .filter((e) => isDeliverable(e) && (showDone || !e.delivered))
+      .filter((e) => !term || e.title.toLowerCase().includes(term) || (e.notes || '').toLowerCase().includes(term))
+      .map((e) => ({ ...e, subject: db.subjects.find((s) => s.id === e.subjectId) || null }))
+  }, [db.exams, db.subjects, area, term, showDone])
 
   const open = filtered.filter((t) => t.status !== 'done')
   const done = filtered.filter((t) => t.status === 'done').sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0))
+  const evalOpen = evaluables.filter((e) => !e.delivered)
+  const evalDone = evaluables.filter((e) => e.delivered).sort((a, b) => (b.deliveredAt || 0) - (a.deliveredAt || 0))
+  const examenes = upcomingExams(db, 45).filter((e) => !isDeliverable(e))
 
   return (
     <>
@@ -39,11 +57,20 @@ export default function Tasks() {
         <div>
           <div className="eyebrow">Quehaceres</div>
           <h2>Tareas</h2>
-          <p>{open.length} abiertas · {db.tasks.filter((t) => t.status === 'done').length} completadas en total</p>
+          <p>
+            {open.length} abiertas
+            {evalOpen.length > 0 && ` · ${evalOpen.length} ${evalOpen.length === 1 ? 'entrega evaluable' : 'entregas evaluables'} por hacer`}
+            {' · '}{db.tasks.filter((t) => t.status === 'done').length} completadas en total
+          </p>
         </div>
-        <button className="btn primary" onClick={() => setAdding(newTask({ area: area === 'all' ? 'uni' : area }))}>
-          <Icon name="plus" size={13} /> Nueva tarea
-        </button>
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn" onClick={() => setExam(newExam({ kind: 'entrega' }))}>
+            <Icon name="plus" size={13} /> Entrega evaluable
+          </button>
+          <button className="btn primary" onClick={() => setAdding(newTask({ area: area === 'all' ? 'uni' : area }))}>
+            <Icon name="plus" size={13} /> Nueva tarea
+          </button>
+        </div>
       </div>
 
       <div className="row wrap" style={{ marginBottom: 20, gap: 8 }}>
@@ -68,34 +95,50 @@ export default function Tasks() {
           const list = open
             .filter(g.test)
             .sort((a, b) => b.priority - a.priority || (a.due || 'z').localeCompare(b.due || 'z'))
-          if (!list.length) return null
+          const evs = evalOpen.filter(g.test).sort((a, b) => a.date.localeCompare(b.date))
+          if (!list.length && !evs.length) return null
           return (
             <div className="card" key={g.id}>
               <div className="card-head">
                 <h3 style={{ color: g.id === 'atrasadas' ? 'var(--accent)' : '' }}>{g.label}</h3>
-                <span className="badge">{list.length}</span>
+                <span className="badge">{list.length + evs.length}</span>
               </div>
-              <TaskList tasks={list} />
+              {evs.length > 0 && <DeliverableList items={evs} />}
+              {list.length > 0 && <TaskList tasks={list} />}
             </div>
           )
         })}
 
-        {open.length === 0 && (
+        {open.length === 0 && evalOpen.length === 0 && (
           <div className="empty">
             <div className="display">Cero pendientes</div>
             <p>Nada que hacer en este filtro. Disfrútalo.</p>
           </div>
         )}
 
-        {showDone && done.length > 0 && (
+        {examenes.length > 0 && (area === 'all' || area === 'uni') && (
           <div className="card">
-            <div className="card-head"><h3 className="dim">Completadas</h3><span className="badge">{done.length}</span></div>
-            <TaskList tasks={done.slice(0, 40)} />
+            <div className="card-head">
+              <h3>Exámenes que vienen</h3>
+              <span className="dim" style={{ fontSize: 11.5 }}>próximos 45 días</span>
+            </div>
+            <div className="list">
+              {examenes.map((e) => <ExamRow key={e.id} exam={e} subject={e.subject} onClick={() => setExam(e)} />)}
+            </div>
+          </div>
+        )}
+
+        {showDone && (done.length > 0 || evalDone.length > 0) && (
+          <div className="card">
+            <div className="card-head"><h3 className="dim">Completadas</h3><span className="badge">{done.length + evalDone.length}</span></div>
+            {evalDone.length > 0 && <DeliverableList items={evalDone.slice(0, 20)} />}
+            {done.length > 0 && <TaskList tasks={done.slice(0, 40)} />}
           </div>
         )}
       </div>
 
       {adding && <TaskEditor task={adding} onClose={() => setAdding(null)} />}
+      {exam && <ExamEditor exam={exam} onClose={() => setExam(null)} />}
     </>
   )
 }

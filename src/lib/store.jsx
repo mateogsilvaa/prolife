@@ -91,10 +91,7 @@ export function Provider({ children }) {
         // El `db.json` de Drive lo escribe solo el ordenador, así que lo que la
         // tablet dejó en el buzón todavía no está dentro. Se vuelve a aplicar
         // encima: si no, al reabrir la app parecería que se ha perdido.
-        if (enDrive) {
-          podarBuzon(d._stamp || 0)
-          for (const op of enBuzon(d._stamp || 0)) applyOp(d, op)
-        }
+        if (enDrive) encimaLoPropio(d)
         stamp.current = d._stamp || 0
         setFuture(d._future || null)
         setOffline(!!d._stale)
@@ -130,25 +127,15 @@ export function Provider({ children }) {
    * castigar la cuenta para nada. Como sincronizar es reconciliar, esperar no
    * pierde nada: la última vale por todas.
    */
-  const gcalOn = useRef(false)
-  const gcalTimer = useRef(null)
+  // El resto de pasadas las programa el propio servidor después de cada
+  // guardado y de cada cosa que entra de la tablet, así que también ocurren con
+  // la ventana minimizada.
   useEffect(() => {
     if (enDrive) return
     api.gcalStatus()
-      .then((st) => {
-        gcalOn.current = !!st?.conectado
-        if (gcalOn.current) api.gcalSync().catch(() => {})
-      })
+      .then((st) => { if (st?.conectado) api.gcalSync().catch(() => {}) })
       .catch(() => {})
-    return () => clearTimeout(gcalTimer.current)
   }, [])
-
-  useEffect(() => {
-    if (!db || !gcalOn.current) return
-    clearTimeout(gcalTimer.current)
-    gcalTimer.current = setTimeout(() => api.gcalSync().catch(() => {}), 90_000)
-    return () => clearTimeout(gcalTimer.current)
-  }, [db])
 
   useEffect(() => {
     document.documentElement.dataset.theme = db?.settings?.theme === 'ink' ? 'ink' : 'paper'
@@ -173,7 +160,7 @@ export function Provider({ children }) {
      */
     if (futureRef.current || offlineRef.current) return
     try {
-      const res = await api.putDb(data)
+      const res = await api.putDb({ ...data, _base: stamp.current })
       stamp.current = res.stamp || stamp.current
       attempt.current = 0
       // La copia para consultar sin el ordenador se queda al día con lo que
@@ -223,34 +210,92 @@ export function Provider({ children }) {
    * escrito el mismo fichero. No se resuelve solo: se avisa y se recarga, que
    * es lo honesto. Lo tuyo sin guardar se guarda antes de mirar.
    */
+  /**
+   * Traerse la base nueva cuando ha cambiado fuera: la tablet, el otro
+   * ordenador o el buzón que el servidor vacía cada medio minuto.
+   *
+   * Antes solo se ofrecía un botón de «Recargar», y la tablet además no se
+   * enteraba nunca (ver `drive.dbStamp`): había que cerrar la app para ver lo
+   * nuevo. Ahora se trae sola. La única condición es no tener nada propio a
+   * medio guardar: entonces sí se avisa, porque traer la base de fuera
+   * pisaría lo que acabas de hacer.
+   */
+  const refrescar = useCallback(async () => {
+    const antes = dbRef.current
+    const d = await api.getDb()
+    // Si mientras llegaba has tocado algo, se deja para la próxima vuelta.
+    if (pending.current || failing.current || dbRef.current !== antes) {
+      if (!enDrive) setRemote(true)
+      return
+    }
+    if (enDrive) encimaLoPropio(d)
+    stamp.current = d._stamp || 0
+    setFuture(d._future || null)
+    dbRef.current = d
+    setDb(d)
+    setRemote(false)
+    saveDbSnapshot(d)
+    if (d._drained?.applied) {
+      toast(`${d._drained.applied} ${d._drained.applied === 1 ? 'cambio' : 'cambios'} de la tablet al día`)
+    }
+  }, [toast])
+
+  const comprobando = useRef(false)
+  const comprobar = useCallback(async () => {
+    if (!dbRef.current || pending.current || document.hidden || comprobando.current) return
+    comprobando.current = true
+    try {
+      const { stamp: disk, future: diskFuture } = await api.dbStamp()
+      if (diskFuture) setFuture(diskFuture)
+      // Volvió el ordenador: lo primero, contarle lo apuntado mientras no
+      // estaba — antes de ofrecer recargar, o la recarga traería su base sin
+      // esos cambios y parecería que se han perdido.
+      if (offlineRef.current) {
+        await enviarColaRef.current?.()
+        setBack(true)
+      }
+      // margen de un segundo: el mtime del disco no es exacto
+      else if (disk && Math.abs(disk - stamp.current) > 1500) await refrescar()
+    } catch {
+      /* seguimos sin conexión; el aviso de arriba ya lo dice */
+    } finally {
+      comprobando.current = false
+    }
+  }, [refrescar])
+
   useEffect(() => {
     if (!db) return
-    const int = setInterval(async () => {
-      if (pending.current || document.hidden) return
-      try {
-        const { stamp: disk, future: diskFuture } = await api.dbStamp()
-        if (diskFuture) setFuture(diskFuture)
-        // Volvió el ordenador: lo primero, contarle lo apuntado mientras no
-        // estaba — antes de ofrecer recargar, o la recarga traería su base sin
-        // esos cambios y parecería que se han perdido. No se recarga solo, por
-        // si estabas leyendo algo: se ofrece, igual que con los cambios de fuera.
-        if (offlineRef.current) {
-          await enviarColaRef.current?.()
-          setBack(true)
-        }
-        // margen de un segundo: el mtime del disco no es exacto
-        else if (disk && Math.abs(disk - stamp.current) > 1500) setRemote(true)
-      } catch {
-        /* seguimos sin ordenador; el aviso de arriba ya lo dice */
-      }
-    }, 20000)
+    const int = setInterval(comprobar, 15000)
     return () => clearInterval(int)
-  }, [db])
+  }, [db, comprobar])
+
+  // Al volver a la app —la tablet sale de segundo plano, la ventana recupera
+  // el foco— se mira en el momento, sin esperar a la siguiente vuelta.
+  useEffect(() => {
+    const ahora = () => { if (!document.hidden) comprobar() }
+    document.addEventListener('visibilitychange', ahora)
+    window.addEventListener('focus', ahora)
+    return () => {
+      document.removeEventListener('visibilitychange', ahora)
+      window.removeEventListener('focus', ahora)
+    }
+  }, [comprobar])
 
   const reload = useCallback(async () => {
     await flush()
     location.reload()
   }, [flush])
+
+  /**
+   * En la tablet, el `db.json` de Drive solo lleva lo que el ordenador ya ha
+   * recogido. Lo apuntado aquí que todavía no ha llegado —en el buzón, o en la
+   * cola sin enviar— se pone encima para que no parezca perdido.
+   */
+  function encimaLoPropio(d) {
+    podarBuzon(d._stamp || 0)
+    for (const op of enBuzon(d._stamp || 0)) applyOp(d, op)
+    for (const op of cola()) applyOp(d, op)
+  }
 
   /**
    * update(draft => { ...mutar... }) — el único camino para escribir en la base.
@@ -392,7 +437,7 @@ export function Provider({ children }) {
       // 401 en silencio. `keepalive` sí las lleva y sobrevive igual al cierre;
       // su límite de 64 KB es el mismo que tenía el beacon, así que no se pierde
       // nada que antes funcionara.
-      api.putDb(pending.current, { keepalive: true }).catch(() => {})
+      api.putDb({ ...pending.current, _base: stamp.current }, { keepalive: true }).catch(() => {})
     }
     window.addEventListener('beforeunload', onLeave)
     return () => window.removeEventListener('beforeunload', onLeave)

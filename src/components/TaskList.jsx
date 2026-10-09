@@ -54,11 +54,6 @@ export default function TaskList({ tasks, empty = 'Nada pendiente por aquí.', s
                 </div>
               </div>
               <div className="task-actions">
-                {!done && (
-                  <a className="btn ghost icon" href={`#/espacio/tarea/${t.id}`} title="Abrir espacio de trabajo">
-                    <Icon name="layers" size={12} />
-                  </a>
-                )}
                 <button className="btn ghost icon" title="Editar" onClick={() => setEditing(t)}><Icon name="edit" size={12} /></button>
               </div>
             </div>

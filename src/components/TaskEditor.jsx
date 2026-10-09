@@ -43,13 +43,6 @@ export default function TaskEditor({ task, onClose }) {
     onClose()
   }
 
-  const openSpace = () => {
-    if (!t.title.trim()) return toast('Ponle un título antes', 'err')
-    persist()
-    onClose()
-    location.hash = `#/espacio/tarea/${t.id}`
-  }
-
   const remove = () => {
     if (!confirm('¿Eliminar la tarea? Los archivos de su carpeta no se borran.')) return
     update((d) => { d.tasks = d.tasks.filter((x) => x.id !== t.id) })
@@ -65,7 +58,6 @@ export default function TaskEditor({ task, onClose }) {
         <>
           {exists && <button className="btn ghost danger" onClick={remove}><Icon name="trash" size={13} /> Eliminar</button>}
           <div className="spacer" />
-          <button className="btn" onClick={openSpace}><Icon name="layers" size={13} /> Abrir espacio</button>
           <button className="btn primary" onClick={save}>Guardar</button>
         </>
       }
@@ -125,11 +117,6 @@ export default function TaskEditor({ task, onClose }) {
           <button className="btn sm ghost" onClick={() => { const d = new Date(); d.setDate(d.getDate() + 7); set({ due: d.toISOString().slice(0, 10) }) }}>En una semana</button>
           <button className="btn sm ghost" onClick={() => set({ due: '' })}>Sin fecha</button>
         </div>
-
-        <p className="dim" style={{ fontSize: 12, margin: 0 }}>
-          Los documentos de la tarea van en su espacio de trabajo, con su propia carpeta en el disco.
-          El tiempo se cuenta solo mientras estés ahí trabajando.
-        </p>
       </div>
     </Modal>
   )

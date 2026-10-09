@@ -369,6 +369,25 @@ function aparato() {
 }
 
 /**
+ * El `db.json` se busca de nuevo cada vez, sin la caché de rutas.
+ *
+ * Con la caché, la tablet se quedaba para toda la sesión con la ficha del
+ * fichero de la primera vez: su fecha no cambiaba nunca —así que nunca se
+ * enteraba de que el ordenador lo había reescrito— y, si Google Drive para
+ * escritorio lo había sustituido por uno nuevo con otro id, seguía bajándose
+ * el viejo. Por eso lo apuntado en el ordenador no aparecía en la tablet hasta
+ * cerrarla del todo. La carpeta `.prolife` sí se cachea: esa no cambia.
+ */
+async function dbFresco() {
+  olvidarRuta('.prolife/db.json')
+  const carpeta = await resolver('.prolife')
+  if (!carpeta) return null
+  const f = await hijo(carpeta.id, 'db.json')
+  if (f) cacheIds.set('.prolife/db.json', f)
+  return f
+}
+
+/**
  * Las mismas funciones que expone `api.js` contra el servidor local, para que
  * el resto de la app no distinga con quién está hablando.
  */
@@ -377,10 +396,16 @@ export const drive = {
   listo: async () => !!raizGuardada() && (await haySesion()),
 
   getDb: async () => {
-    const f = await resolver('.prolife/db.json')
+    const f = await dbFresco()
     if (!f) throw new DriveError('No se encuentra .prolife/db.json en esa carpeta de Drive.', 404)
     const db = await descargar(f.id).then((r) => r.json())
     return { ...db, _stamp: Date.parse(f.modifiedTime) || 0, _drive: true }
+  },
+
+  /** Solo la fecha del `db.json`: una llamada pequeña, para mirar a menudo si ha cambiado. */
+  dbStamp: async () => {
+    const f = await dbFresco()
+    return { stamp: f ? Date.parse(f.modifiedTime) || 0 : 0, future: null }
   },
 
   /**

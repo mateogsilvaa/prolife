@@ -35,6 +35,22 @@ npm run dist
 [ACTUALIZAR.md](ACTUALIZAR.md). En resumen: los datos no están dentro de la app, así que
 instalar encima no se lleva nada por delante.
 
+## Hoy: lo que hay que mirar al abrir la app
+
+La primera pantalla no cuenta horas: contesta *qué tengo hoy y qué se me está escapando*.
+
+- **Agenda del día** en orden —clases, exámenes, eventos (también los que se repiten),
+  entreno, voluntariado— con la de mañana debajo. Cada clase lleva tres botones: **✓ fui,
+  ✕ falté, ⊘ cancelada**. Apuntar la asistencia en el momento es un toque, no un viaje a la
+  ficha de la asignatura.
+- **Ojo con esto**: entregas que vencen o que ya vencieron sin marcar, exámenes cercanos,
+  asignaturas sin margen de faltas, clases pasadas sin marcar (si se acumulan, el cálculo de
+  faltas deja de ser fiable), tareas atrasadas, una lesión abierta, una molestia que se repite
+  y va a peor, un salto de carga de entreno, días sin entrenar y jornadas de voluntariado sin
+  foto. Cada aviso lleva a donde se arregla; si no hay nada, lo dice.
+- **Por hacer**: tareas y entregas evaluables de los próximos días, todo junto.
+- **Entreno**: si no está apuntado, los tipos a un toque.
+
 ## Dónde vive todo
 
 Por defecto en `Documentos/ProLife`, cambiable en **Ajustes → Directorio de trabajo**.
@@ -85,7 +101,13 @@ sirve el propio ordenador, así que la tablet puede abrirla y **ver exactamente 
 archivos y la misma base de datos**. No es una copia que haya que sincronizar —es el mismo
 `db.json`, contestado por el mismo ordenador—, así que no hay nada que se pueda desincronizar.
 
-Se activa en **Ajustes → Abrir en la tablet o el móvil**. A partir de ahí:
+> **Ojo:** la pantalla para emparejar la tablet con el ordenador (el enlace con la clave, el
+> QR de Tailscale) **ya no está en Ajustes**. El camino bueno es el APK o la versión web, que
+> hablan con Drive directamente y no necesitan el ordenador encendido (ver más abajo). Lo de
+> esta sección sigue funcionando si ya lo tenías montado —la configuración vive en
+> `~/.prolife/config.json` y no se ha tocado—, pero ya no se activa desde la app.
+
+Cuando estaba activado:
 
 - El servidor deja de escuchar solo en `127.0.0.1` y **exige una clave** a todo lo que no venga
   del propio ordenador. La clave se genera sola, vive en `~/.prolife/config.json` (no viaja con
@@ -116,8 +138,7 @@ hacer en la tablet. Los apuntes y los PDFs se leen y se escriben en la misma car
 Drive que ya sincronizas; los cambios de la base no se suben como fichero entero sino como
 registros sueltos a un buzón que el ordenador recoge, para que nunca haya dos aparatos
 escribiendo el mismo `db.json` y para que el trabajo de uno no borre el del otro. Fuera
-quedan solo las cosas que **son** del ordenador: el directorio de trabajo, el ayudante y
-VS Code.
+queda solo lo que **es** del ordenador: el directorio de trabajo.
 
 **Paso a paso para actualizar el ordenador e instalar el APK:**
 [INSTALAR-TABLET.md](INSTALAR-TABLET.md).
@@ -145,70 +166,8 @@ desde ahí, y te lo dice arriba en vez de aceptarlo y perderlo.
 > mientras tanto sigue donde estaba. Se pueden aplicar dos veces sin duplicar nada, así que un
 > corte a mitad de envío tampoco rompe nada.
 
-Los archivos no se guardan solos en la tablet —un cuatrimestre de PDFs son cientos de megas—,
-pero cada archivo abierto tiene un botón para guardarlo, y entonces sí se abre sin el ordenador.
-En Ajustes se ve cuánto ocupan y se pueden vaciar.
-
-En pantalla vertical la disposición se adapta sola: los paneles se apilan en filas y el árbol pasa
-a ser un cajón que se retira al elegir. Las pestañas abiertas viajan entre aparatos; la geometría
-de los paneles no, para que colocarlos en la tablet no te descoloque el portátil.
-
-## Espacio de trabajo
-
-Cada asignatura, proyecto y tarea tiene su **espacio**: el árbol real de su carpeta y hasta
-**tres paneles** que pueden contener cosas distintas, en columnas o en filas. Es opcional:
-medir el tiempo ya no obliga a trabajar aquí dentro.
-
-**Qué cabe en un panel**
-
-- **Archivos.** PDFs con el visor nativo de Chromium (zoom, búsqueda, páginas). Markdown,
-  texto y código en CodeMirror con resaltado por lenguaje, `Ctrl+S` y autoguardado. Markdown
-  en modo editor, vista previa o ambos. Imágenes, vídeo y audio.
-- **Navegador.** Barra de direcciones, atrás/adelante, búsqueda si no escribes una URL, y
-  accesos directos a tu campus y tus enlaces. Sesión propia y persistente.
-- **VS Code.** El de verdad, empotrado — ver abajo.
-
-**Aprovechar la pantalla** (pensado para portátiles de 14–16")
-
-- Separadores **arrastrables** entre paneles; doble clic para igualarlos.
-- Ocultar el árbol de archivos (`Ctrl+E`) y el menú lateral (`Ctrl+B`).
-- **Modo concentración** (`Ctrl+Shift+Z`): desaparece todo menos el trabajo. `Esc` para salir.
-- **Maximizar** un panel con doble clic en su barra de pestañas.
-- Word, Excel y PowerPoint se abren directamente con su programa al pulsarlos en el árbol
-  (igual que los `.zip`): convertirlos aquí destrozaría el formato.
-- **Ordenar sin salir a Windows.** Toca una carpeta y queda elegida: lo que crees o subas va
-  ahí, y arriba del árbol se lee siempre en qué carpeta caerá. Cada carpeta tiene además su
-  botón de *carpeta nueva aquí dentro* y de *subir aquí*, así que anidar carpetas es un clic.
-- **Arrastrar para mover.** Un archivo o una carpeta se llevan a otra carpeta arrastrándolos
-  por el árbol, y las pestañas que lo tuvieran abierto siguen apuntando bien. Si ya hay algo
-  con ese nombre, lo numera en vez de pisarlo, y una carpeta no puede acabar dentro de sí
-  misma. Soltar archivos del escritorio encima de una carpeta los sube **a esa**.
-- El filtro del árbol busca por nombre.
-- Disposición, tamaños y pestañas se recuerdan por espacio, y viajan al otro ordenador
-  dentro del `db.json`: abres la asignatura en la universidad y te encuentras los mismos
-  paneles que dejaste en casa.
-
-## VS Code dentro de la app
-
-El panel de VS Code no es una imitación ni una copia descargada aparte: arranca
-`code serve-web`, el servidor web **oficial de Microsoft que ya viene con tu instalación de
-VS Code**. Eso significa tus extensiones, tu marketplace, tus ajustes y tus atajos, abierto
-directamente en la carpeta de la asignatura o el proyecto.
-
-Requisitos y condiciones, sin letra pequeña:
-
-- Necesitas VS Code instalado. La app usa el comando `code` del sistema.
-- Microsoft exige aceptar los [términos de licencia del servidor](https://aka.ms/vscode-server-license)
-  y su [declaración de privacidad](https://privacy.microsoft.com/en-US/privacystatement).
-  **La app no los acepta por ti**: hasta que lo confirmes en Ajustes, el panel no arranca.
-- Escucha solo en `127.0.0.1`, con un testigo aleatorio distinto en cada arranque, y la
-  telemetría desactivada.
-- La primera vez descarga sus componentes de servidor (una sola vez, requiere internet).
-- Se puede parar y retirar el consentimiento cuando quieras desde Ajustes.
 
 ## Medición del tiempo
-
-Hay dos formas y conviven.
 
 **Sesión de trabajo.** Pulsas **«Trabajar en…»** en la barra de arriba (o el ▶ de una
 asignatura), eliges en qué, y cuenta hasta que la pares. Da igual la pantalla en la que
@@ -217,12 +176,7 @@ un cronómetro, no una vigilancia. Sobrevive a cerrar la app y se retoma al volv
 llevas mucho sin tocar el ordenador te lo dice, y por seguridad la corta sola a los 30
 minutos de inactividad (ajustable; 0 = nunca).
 
-**Detección automática.** Si no hay ninguna sesión en marcha, se cae en el método de
-siempre: el tiempo va al espacio de trabajo que tengas abierto y solo corre si la ventana
-tiene el foco *y* el sistema registra actividad de teclado o ratón. Los tramos de menos de
-un minuto se descartan.
-
-En ambos casos, `Ctrl+J` abre la revisión del día: editar duración, reasignar de
+`Ctrl+J` abre la revisión del día: editar duración, reasignar de
 asignatura, partir, borrar o añadir un tramo a mano.
 
 Y si se te olvidó darle a «Trabajar en…» antes de ponerte, en la propia ficha de la
@@ -235,62 +189,6 @@ Cada asignatura tiene unas **horas objetivo por semana** (si no las pones, se ca
 créditos). El **porcentaje de trabajo semanal** mezcla las horas dedicadas con las entregas
 que vencían esa semana: 100% es la semana hecha. Sale en el panel de inicio, en cada
 asignatura y desglosado en Estadísticas.
-
-## Ayudante local
-
-`Ctrl+I` abre un ayudante que habla con [Ollama](https://ollama.com) corriendo en tu propio
-ordenador. Nada de lo que le digas sale de la máquina.
-
-Conoce tus asignaturas, tu horario, tus faltas, tus horas, tus proyectos, tus entrenos, tu
-voluntariado **y tus archivos**, así que se le puede preguntar de verdad:
-
-- *«¿cuántas faltas más me puedo permitir?»* → «llevas 1 de 8, quedan 21 clases y exigen el
-  70%: puedes faltar a 7 más».
-- *«¿cómo llevo la semana?»*, *«¿qué tengo para los próximos 7 días?»*
-- *«¿de qué va el tema 3?»* → lo busca por el nombre, lo abre y te contesta. **Lee PDF y
-  Word (.docx)**, no solo apuntes en texto. Un PDF escaneado no: eso son imágenes.
-- *«¿dónde tengo la memoria de prácticas?»* → busca en todo el directorio; no hace falta que
-  sepas en qué carpeta la dejaste.
-- *«resume este documento»*, *«¿qué hay aquí?»* → «esto» y «aquí» son el archivo y la carpeta
-  que tengas delante en Archivos, no hace falta explicárselo.
-- *«crea una carpeta Tema 3 y mete ahí el PDF»* → la crea y lo mueve.
-- *«guárdame el resumen en Cálculo»* → escribe el archivo.
-- *«el 12 de octubre es festivo»*, *«del 21 al 7 son vacaciones de Navidad»* → lo marca, y
-  esas clases dejan de contarte como faltas.
-- *«créame un proyecto que se llame Nautilos»*, *«pon la asistencia de Desarrollo web al
-  80%»*, *«apunta series, 75 minutos, RPE 8»*, *«bórralo»*.
-
-Puede consultar (asignaturas, proyectos, semana, agenda, horario, atletismo, voluntariado,
-carpetas, contenido de documentos, búsqueda por nombre) y puede escribir: tareas, exámenes,
-eventos, proyectos, asignaturas, tiempo, entrenos, asistencia, festivos, los objetivos de
-Ajustes, carpetas, notas, mover archivos, y borrar lo que se haya equivocado.
-
-**Lo que no sabe, lo pregunta.** Un modelo pequeño prefiere rellenar un hueco antes que
-admitir que le falta un dato: si le dices *«añádeme una tarea para el viernes»* se inventa
-que la tarea se llama «Tarea para el viernes» y la cuelga de la primera asignatura que ve.
-Así que la comprobación no está en el modelo, que puede saltársela, sino en la propia
-herramienta:
-
-- Un título que, quitándole las fechas y el relleno, se queda en «tarea» o «cosa» no es un
-  título: no se crea nada y se te pregunta cómo quieres llamarla.
-- Falta el ámbito (uni, trabajo o personal) → se pregunta.
-- Una asignatura o un proyecto que no aparecen por ninguna parte en lo que tú has escrito
-  se descartan: los ha sacado de la lista del contexto, no de ti.
-
-La pregunta la hace la herramienta y se te enseña tal cual, sin pasar por el modelo. Y no
-todo necesita herramienta: una opinión, una duda de temario o ayuda a redactar se contestan
-directamente.
-
-Todo lo que crea, cambia o borra aparece en el chat con un botón de **deshacer** —también
-los borrados, que se restauran enteros, y los archivos movidos, que vuelven a su carpeta—, y
-en Ajustes se le puede quitar el permiso de escribir. Lo único sin deshacer es crear una
-carpeta o escribir una nota: borrar cosas de tu disco «por si acaso» no es cosa suya.
-
-Necesita Ollama instalado y un modelo descargado:
-
-```bash
-ollama pull llama3.1:8b
-```
 
 ## Calendario
 
@@ -318,6 +216,10 @@ horaria: las clases del horario, los exámenes, los eventos y las entregas caen 
   entra en el cálculo de la asistencia. Se marca desde el propio calendario, en el día que
   estés mirando —y el botón te dice cuántas clases te quita antes de pulsarlo—, o en Ajustes
   para rangos enteros como Navidad o Semana Santa. En el mes se ven rayados y con su nombre.
+- **Clase cancelada.** Si el profesor no viene o avisa de que no hay clase, se marca como
+  cancelada —desde Hoy, desde el día en el calendario o en la asistencia de la asignatura, y
+  también por adelantado—. Es como un festivo de una sola clase: no cuenta ni como ida ni
+  como falta, sale del total y desaparece también de Google Calendar.
 - **Exámenes y entregas evaluables** por asignatura, con hora, aula, peso sobre la nota y la
   nota sacada. De ahí sale la nota provisional y cuánto llevas ya jugado.
 - **Faltas.** Pones la asistencia mínima exigida (general o por asignatura) y la app calcula
@@ -335,8 +237,8 @@ Por debajo de 640 px la columna lateral desaparece y manda una **barra de abajo*
 sitios —Hoy, Tareas, Agenda, Uni y *Más*—, que es donde llega el pulgar. Cinco y no diez:
 cabe el nombre, el dedo acierta, y lo que no cabe está a un toque. En el mes del calendario
 los títulos no caben, así que las cosas se quedan en rayas del color de cada una: dicen
-«aquí hay algo» sin mentir sobre qué. El ayudante ocupa la pantalla entera en vez de un
-cajón de 320 px, y las franjas del sistema —la barra de gestos del iPhone— se respetan.
+«aquí hay algo» sin mentir sobre qué. Las franjas del sistema —la barra de gestos del
+iPhone— se respetan.
 
 ## Google Calendar
 
@@ -359,8 +261,13 @@ que tú marques, para poder verlos dentro del calendario de prolife en gris.
   de esa repetición: el día que marcas festivo, la clase desaparece también del móvil.
 - **Eliges qué se lleva**: clases, exámenes, eventos y, si quieres, las tareas con fecha y
   los entrenos. Lo que desmarcas se retira de Google en la siguiente pasada.
-- Se sincroniza solo al abrir la app y un rato después de dejar de tocar cosas, más el botón
-  de *Sincronizar ahora*. El rato importa: cambiar un horario son diez ediciones seguidas y
+- Se sincroniza solo al abrir la app, un minuto después de dejar de tocar cosas y cuando
+  entra algo de la tablet —también con la ventana minimizada, porque lo programa el servidor—,
+  más el botón de *Sincronizar ahora*.
+- **Si Google retira el permiso, se dice.** Hoy y Ajustes avisan en rojo de que está
+  desconectado y desde cuándo, o del último fallo. Un fallo de red ya no desconecta: solo un
+  `invalid_grant` de Google (permiso caducado o revocado). Si caduca cada semana, la pantalla
+  de consentimiento del proyecto sigue en «Prueba»: publícala. El rato importa: cambiar un horario son diez ediciones seguidas y
   no tiene sentido mandar diez tandas para acabar en el mismo sitio.
 
 Hace falta un cliente de OAuth propio, igual que para Drive en la tablet: en
@@ -388,40 +295,98 @@ como todo lo demás—, no dentro del `db.json`.
   la jornada, así que corregirla no duplica nada.
 - Desde la ficha se pone una salida o un turno **en el calendario**, ya con su categoría.
 - Las jornadas aparecen en el calendario junto a las clases y los entrenos.
+- Si colaboras con **una sola entidad**, «Voluntariado» entra directo en ella, sin lista
+  intermedia. Las jornadas se ven por meses, con el día bien grande y las fotos en tira.
+
+## Tareas y entregas evaluables
+
+Las prácticas, entregas y presentaciones que apuntas en una asignatura (o en el calendario)
+**salen solas en Tareas y en Hoy**, mezcladas con las tareas por fecha, y se tachan igual:
+marcar una como entregada la marca en la asignatura, porque es el mismo registro. Los
+exámenes, que no se entregan, salen aparte en «Exámenes que vienen».
+
+## Estadísticas
+
+Seis pestañas: **la semana** (la de siempre), **Universidad** (horas, asistencia real, faltas
+y margen, nota provisional y entregas, asignatura a asignatura), **Atletismo**, **Tiempo y
+hábitos** (mes a mes por áreas, qué día y a qué hora rindes más, mejor día, racha más larga),
+**Tareas** (a tiempo o tarde, ritmo, creadas frente a cerradas) y **Voluntariado**.
+
+## Informe completo
+
+**Ajustes → Informe completo** genera un documento con absolutamente todo: cada asignatura
+con su horario, su asistencia clase a clase, sus notas y entregas; todos los eventos y
+festivos; todas las tareas; el tiempo mes a mes y día a día; cada entreno con sus molestias;
+las lesiones; cada jornada de voluntariado con sus fotos; los ajustes; y en un apéndice, cada
+tramo de tiempo. Es un único HTML sin nada de fuera: se guarda en `Informes/` dentro de tu
+carpeta (así viaja por Drive), se abre en cualquier navegador y desde ahí se imprime a PDF.
+En la tablet se guarda en la misma carpeta de Drive; también hay un botón para descargarlo.
+
+## Salud: el reloj Garmin
+
+**Ajustes → Garmin → Conectar Garmin** abre la página oficial de Garmin Connect en una ventana
+de la app y entras allí, como en cualquier navegador. **prolife no ve ni guarda tu
+contraseña**: solo la sesión, en una partición propia de este ordenador, igual que un
+navegador que recuerda que entraste. A partir de ahí se pone al día sola al abrir la app y
+cada dos horas (el reloj tiene que haber sincronizado antes con la app de Garmin del móvil).
+La primera vez trae los últimos dos meses.
+
+Qué se trae, por día: **sueño** (total, fases, hora de acostarse y de levantarse, puntuación
+si el reloj la da), **pasos** y su objetivo, **pulso en reposo**, estrés medio, **Body
+Battery**, calorías y minutos de intensidad. Y las **actividades** del reloj.
+
+Dónde se ve:
+- **Salud**: medias de 7 y 30 días, la última noche por fases, sueño por noche, pasos por día,
+  la evolución del pulso en reposo, qué día de la semana duermes y te mueves más, y si dormir
+  menos de 7 h te sube el RPE o te trae más molestias.
+- **Hoy**: «Tu cuerpo» (la noche, los pasos, el pulso) y dos avisos: noche de menos de 6 h y
+  pulso en reposo 6 o más por encima de tu base.
+- **Atletismo**: al apuntar un entreno, si el reloj grabó algo ese día sale arriba con un botón
+  **Usar** que pone la duración y los datos (distancia, ritmo, pulso) en las notas. Desde Salud,
+  cada actividad se apunta como entreno con un toque, con el tipo ya propuesto.
+- El **informe completo** lleva la salud día a día.
+
+Por qué así y no con usuario y contraseña: Garmin no tiene API para uso personal, y desde
+marzo de 2026 bloquea los inicios de sesión que no vienen de un navegador real, así que las
+librerías que lo hacían ya no sirven. La app de escritorio *es* un navegador real, y por eso
+la conexión vive en el ordenador. Los datos viajan en el `db.json` como todo lo demás, así que
+la tablet y la web también los ven. Si Garmin cambia su web interna, esto puede romperse: la
+app lo dice en Ajustes y en Salud en vez de quedarse callada.
 
 ## Atletismo
 
 Registro por sesión: si fuiste o no, tipo de entreno, duración, **RPE 1–10**, **CMJ pre y
-post** y notas.
+post**, molestias y notas. Cuatro pestañas:
 
-De ahí salen: adherencia semanal, **carga = RPE × minutos**, comparación con tu media de las
-últimas semanas (avisa de saltos de más del 30%), evolución del CMJ previo y la caída
-post-entreno como indicador de fatiga neuromuscular.
+- **Semana**: adherencia, **carga = RPE × minutos** comparada con tu media de las últimas
+  semanas (avisa de saltos de más del 30%), CMJ y últimos entrenos.
+- **Calendario**: el mes entero con lo que hiciste cada día —tipo, minutos, RPE y molestias—.
+  Tocar un día lo enseña al lado con todo lo apuntado; doble toque para editarlo.
+- **Estadísticas**: cuántos entrenos de cada tipo (sesiones, horas, duración y RPE medios,
+  último), **qué días de la semana vas más** —y qué haces cada día—, mes a mes, semanas
+  seguidas cumpliendo el objetivo, mejor racha, mejor semana, sesión más larga y más dura.
+- **Molestias y lesiones**: cada entreno puede llevar molestias con **zona, lado, dolor del 1
+  al 10, qué es** (molestia, dolor o lesión), **cuándo** (antes, durante, después, al día
+  siguiente), si tuviste que parar y cómo es. De ahí sale qué zona se repite, con qué
+  intensidad y **si va a mejor o a peor**. Una molestia marcada como *lesión* abre una lesión
+  que se sigue —días que lleva, cómo ha ido doliendo— hasta que le das el **alta**.
 
 ## Atajos
 
 | Tecla | Acción |
 |---|---|
 | `Ctrl+B` | Ocultar o mostrar el menú lateral |
-| `Ctrl+E` | Ocultar o mostrar el árbol de archivos *(dentro de un espacio de trabajo)* |
-| `Ctrl+\` | Dividir en otro panel *(dentro de un espacio de trabajo)* |
 | `Ctrl+Shift+Z` | Modo concentración |
-| `Ctrl+I` | Ayudante |
 | `Ctrl+K` | Enlaces y portales |
 | `Ctrl+J` | Revisar y corregir el tiempo |
-| `Ctrl+S` | Guardar el archivo abierto |
 | `N` | Nueva tarea |
 | `Esc` | Cerrar ventana o salir de concentración |
 
 ## Cómo está montado
 
 Electron envuelve dos piezas: la interfaz en React (Vite) y un servidor Express local que
-es el único que toca el disco, lanza VS Code y abre enlaces. El proceso principal expone
+es el único que toca el disco y abre enlaces. El proceso principal expone
 además el tiempo de inactividad del sistema, que es lo que hace fiable la medición.
-
-El ayudante no rompe esa regla: el servidor solo hace de pasarela hacia Ollama —y solo
-acepta direcciones locales—, mientras que las herramientas que el modelo pide se ejecutan
-en la interfaz, que sigue siendo la única dueña del `db.json`.
 
 El logo se cambia en **Ajustes → Perfil**. Se guarda como `.prolife/logo.png` dentro de tu
 directorio, así que viaja con la nube a los dos ordenadores; sin él sale el nombre escrito.

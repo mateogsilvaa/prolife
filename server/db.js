@@ -74,6 +74,19 @@ export const EMPTY_DB = {
   events: [],
   training: [],
   /**
+   * Lesiones: zona, desde cuándo y el alta. Las molestias sueltas no van aquí,
+   * van dentro de cada entreno (`training[].pains`); una lesión es lo que se
+   * sigue durante semanas hasta que se cierra.
+   */
+  injuries: [],
+  /**
+   * Lo que llega del reloj Garmin: un registro por día (pasos, sueño, pulso en
+   * reposo, estrés, Body Battery), indexado por fecha, y las actividades.
+   * Lo escribe la app de escritorio, que es la que puede entrar en Garmin.
+   */
+  wellness: {},
+  garminActivities: [],
+  /**
    * Voluntariado: las entidades con las que colaboras y, aparte, cada jornada
    * que has hecho. Van separados porque lo que hay que justificar son las
    * jornadas —fecha, horas y fotos de ese día—, no la entidad.
@@ -96,6 +109,12 @@ export const EMPTY_DB = {
  *          guardarse aquí para que viaje entre ordenadores. No toca datos previos.
  * v4 → v5: aparece el voluntariado —entidades y jornadas— y su categoría de
  *          calendario. Tampoco toca nada de lo anterior: solo añade.
+ *
+ * Sin cambio de número: las lesiones (`injuries`), las molestias de cada
+ * entreno, la clase cancelada y la marca de «entregada» en los evaluables.
+ * Todo es añadido, y una versión anterior que abra la base los conserva tal
+ * cual —la migración copia lo que no conoce—, así que no hace falta obligar
+ * a actualizar los dos ordenadores a la vez.
  */
 
 /** Versión que trae el fichero tal cual está en disco. */
@@ -120,7 +139,7 @@ function migrate(raw) {
     db.categories.push({ id: 'cat-volunteer', name: 'Voluntariado', color: '#7a5c9e', area: 'volunteer' })
   }
 
-  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
+  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'injuries', 'garminActivities', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
     if (!Array.isArray(db[key])) db[key] = []
   }
 
@@ -162,6 +181,7 @@ function migrate(raw) {
   }))
 
   if (!db.workspaces || typeof db.workspaces !== 'object' || Array.isArray(db.workspaces)) db.workspaces = {}
+  if (!db.wellness || typeof db.wellness !== 'object' || Array.isArray(db.wellness)) db.wellness = {}
 
   // Nunca hacia abajo: si el fichero es de una versión más nueva, se respeta su
   // número. Rebajarlo haría que la próxima app moderna reaplicase migraciones
@@ -256,13 +276,15 @@ export function drainOps(baseDir) {
   try {
     nombres = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort()
   } catch {
-    return { applied: 0, skipped: [], files: 0 }
+    return { applied: 0, skipped: [], files: 0, ops: [] }
   }
-  if (!nombres.length) return { applied: 0, skipped: [], files: 0 }
+  if (!nombres.length) return { applied: 0, skipped: [], files: 0, ops: [] }
 
   const db = loadDb(baseDir)
   const skipped = []
   const hechos = []
+  /** Las que han entrado, para poder volver a aplicarlas (ver el PUT de app.js). */
+  const entradas = []
   let applied = 0
 
   for (const nombre of nombres) {
@@ -287,12 +309,12 @@ export function drainOps(baseDir) {
     for (const op of ops) {
       const error = applyOp(db, op)
       if (error) skipped.push({ file: nombre, que: describeOp(op), error })
-      else applied++
+      else { applied++; entradas.push(op) }
     }
     hechos.push(file)
   }
 
-  if (!hechos.length) return { applied: 0, skipped, files: 0 }
+  if (!hechos.length) return { applied: 0, skipped, files: 0, ops: [] }
 
   // Guardar ANTES de borrar: si algo falla al escribir, las operaciones siguen
   // en el buzón y se vuelven a intentar. Al revés se perderían.
@@ -304,7 +326,7 @@ export function drainOps(baseDir) {
       /* si no se puede borrar, la próxima vez se aplica otra vez: son idempotentes */
     }
   }
-  return { applied, skipped, files: hechos.length }
+  return { applied, skipped, files: hechos.length, ops: entradas }
 }
 
 /** Lo que no se ha podido aplicar no se tira: se aparta para poder mirarlo. */

@@ -109,7 +109,9 @@ async function pedirTestigos(cuerpo) {
   })
   const datos = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new GcalError(datos.error_description || datos.error || `Google ha contestado ${res.status}`, 400)
+    const e = new GcalError(datos.error_description || datos.error || `Google ha contestado ${res.status}`, 400)
+    e.codigo = datos.error || ''
+    throw e
   }
   return datos
 }
@@ -162,9 +164,18 @@ async function token() {
   renovando ||= pedirTestigos({ refresh_token: refresco, grant_type: 'refresh_token' })
     .then((datos) => { guardarAcceso(datos); return acceso.token })
     .catch((e) => {
-      // El refresco ya no vale: revocado, o la contraseña ha cambiado.
-      writeConfig({ gcalRefresh: '' })
-      throw new GcalError('La conexión con Google Calendar ha caducado. Vuelve a conectarla. ' + e.message, 401)
+      /**
+       * Solo `invalid_grant` significa que el permiso ya no vale (revocado,
+       * caducado, contraseña cambiada). Antes se borraba con CUALQUIER fallo, y
+       * un ordenador que despierta sin wifi —o un Google que tarda— dejaba la
+       * cuenta desconectada para siempre, sin decir nada. Un fallo de red se
+       * reintenta en la próxima pasada; el permiso se queda donde estaba.
+       */
+      if (e.codigo === 'invalid_grant') {
+        writeConfig({ gcalRefresh: '' })
+        throw new GcalError('Google ha retirado el permiso de prolife (caducado o revocado). Vuelve a conectar Google Calendar en Ajustes. ' + e.message, 401)
+      }
+      throw new GcalError('No se ha podido hablar con Google ahora mismo; se reintenta solo. ' + e.message, 503)
     })
     .finally(() => { renovando = null })
   return renovando

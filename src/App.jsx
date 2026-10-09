@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar.jsx'
 import StatusBar from './components/StatusBar.jsx'
 import TimeReview from './components/TimeReview.jsx'
-import Assistant from './components/Assistant.jsx'
 import Icon from './components/Icon.jsx'
 import BottomNav from './components/BottomNav.jsx'
 import Modal from './components/Modal.jsx'
@@ -26,9 +25,8 @@ import Volunteering from './views/Volunteering.jsx'
 import VolunteerDetail from './views/VolunteerDetail.jsx'
 import Calendar from './views/Calendar.jsx'
 import Stats from './views/Stats.jsx'
-import Files from './views/Files.jsx'
 import Settings from './views/Settings.jsx'
-import Space from './views/Space.jsx'
+import Health from './views/Health.jsx'
 
 function useRoute() {
   const read = () => {
@@ -98,7 +96,7 @@ export default function App() {
 }
 
 function Shell() {
-  const { toasts, remote, reload, dismissRemote, future, offline, back, unsaved, retryNow, queued, sendQueue } = useStore()
+  const { db, toasts, remote, reload, dismissRemote, future, offline, back, unsaved, retryNow, queued, sendQueue } = useStore()
   const ui = useUI()
   const route = useRoute()
   const [palette, setPalette] = useState(false)
@@ -109,8 +107,7 @@ function Shell() {
     const onKey = (e) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.closest?.('.cm-editor')
       const mod = e.metaKey || e.ctrlKey
-      if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); ui.toggleDock() }
-      else if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); ui.toggleSidebar() }
+      if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); ui.toggleSidebar() }
       else if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setPalette(true) }
       else if (mod && e.key.toLowerCase() === 'j') { e.preventDefault(); setReview(true) }
       else if (mod && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); ui.toggleZen() }
@@ -122,26 +119,26 @@ function Shell() {
   }, [ui])
 
   const p = route.parts
-  const isSpace = p[0] === 'espacio'
-  // vistas que ocupan todo el alto y gestionan su propio desplazamiento
-  const flush = isSpace || p[0] === 'archivos'
   let view
   if (p.length === 0) view = <Dashboard />
-  else if (isSpace) view = <Space kind={p[1]} id={p[2]} />
   else if (p[0] === 'uni') view = p[1] ? <SubjectDetail id={p[1]} /> : <Uni />
   else if (p[0] === 'trabajo') view = p[1] ? <ProjectDetail id={p[1]} /> : <Work />
   else if (p[0] === 'tareas') view = <Tasks />
   else if (p[0] === 'atletismo') view = <Training />
-  else if (p[0] === 'voluntariado') view = p[1] ? <VolunteerDetail id={p[1]} /> : <Volunteering />
+  else if (p[0] === 'voluntariado') {
+    // Con una sola entidad, la lista es un paso de más: se entra directo.
+    const unica = (db.volunteering || []).length === 1 ? db.volunteering[0] : null
+    view = p[1] ? <VolunteerDetail id={p[1]} /> : unica ? <VolunteerDetail id={unica.id} /> : <Volunteering />
+  }
   else if (p[0] === 'calendario') view = <Calendar />
   else if (p[0] === 'estadisticas') view = <Stats />
-  else if (p[0] === 'archivos') view = <Files path={p.slice(1).join('/')} />
   else if (p[0] === 'ajustes') view = <Settings />
+  else if (p[0] === 'salud') view = <Health />
   else view = <Dashboard />
 
   return (
     <div className={`shell${ui.sidebar ? '' : ' no-sidebar'}${ui.zen ? ' zen' : ''}`}>
-      {ui.sidebar && <Sidebar route={route} onAI={ui.toggleDock} dockOpen={ui.dock} />}
+      {ui.sidebar && <Sidebar route={route} />}
       {/* Solo se ve en pantallas de móvil; el CSS decide cuál de las dos manda. */}
       {!ui.zen && <BottomNav route={route} />}
 
@@ -154,14 +151,6 @@ function Shell() {
           )}
           <StatusBar onReview={() => setReview(true)} />
           <div className="spacer" />
-          {/* El ayudante es Ollama, que corre en el ordenador: desde la tablet
-              no hay a quién preguntar. Se quita el botón en vez de dejarlo dar
-              un error al pulsarlo. */}
-          {!enDrive && (
-            <button className={`btn sm ${ui.dock ? 'primary' : 'ghost'}`} onClick={ui.toggleDock} title="Ayudante (Ctrl+I)">
-              <Icon name="sparkle" size={14} /> Ayudante
-            </button>
-          )}
           <button className="btn sm primary" onClick={() => setAdding(newTask())}>
             <Icon name="plus" size={13} /> Tarea
           </button>
@@ -226,7 +215,7 @@ function Shell() {
             <button className="btn sm ghost icon" onClick={dismissRemote}><Icon name="x" size={12} /></button>
           </div>
         )}
-        <div className={`view${flush ? ' flush' : ''}`}>
+        <div className="view">
           <div className="view-narrow">{view}</div>
         </div>
       </div>
@@ -237,11 +226,9 @@ function Shell() {
         </button>
       )}
 
-      <Assistant open={ui.dock} onClose={() => ui.setDock(false)} width={ui.dockWidth} setWidth={ui.setDockWidth} />
-
       {palette && (
         <Modal title="Accesos rápidos" onClose={() => setPalette(false)}>
-          <Launcher onOpenDock={() => { setPalette(false); ui.setDock(true) }} />
+          <Launcher />
         </Modal>
       )}
       {adding && <TaskEditor task={adding} onClose={() => setAdding(null)} />}

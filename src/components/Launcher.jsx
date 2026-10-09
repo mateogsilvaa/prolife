@@ -1,6 +1,6 @@
 import React from 'react'
 import Icon from './Icon.jsx'
-import { api, enDrive } from '../lib/api.js'
+import { api } from '../lib/api.js'
 import { useStore, PALETTE } from '../lib/store.jsx'
 
 export const initials = (n) =>
@@ -8,8 +8,8 @@ export const initials = (n) =>
 
 export const tileColor = (i = 0) => PALETTE[(i + 1) % PALETTE.length]
 
-/** Portales y enlaces propios. El ayudante vive en el panel lateral, no aquí. */
-export default function Launcher({ compact, onOpenDock }) {
+/** Portales y enlaces propios. */
+export default function Launcher({ compact }) {
   const { db, toast } = useStore()
   const s = db.settings
 
@@ -30,18 +30,6 @@ export default function Launcher({ compact, onOpenDock }) {
 
   return (
     <div className="stack" style={{ gap: compact ? 8 : 14 }}>
-      {onOpenDock && !enDrive && (
-        <>
-          {!compact && <div className="eyebrow">Ayudante</div>}
-          <button className="link-tile" onClick={onOpenDock}>
-            <span className="glyph" style={{ background: 'var(--ink)' }}><Icon name="sparkle" size={11} /></span>
-            <span>Abrir el ayudante</span>
-            <span className="spacer" />
-            <span className="kbd">Ctrl I</span>
-          </button>
-        </>
-      )}
-
       {(s.portalUrl || (s.links || []).length > 0) && (
         <>
           {!compact && <div className="eyebrow" style={{ marginTop: 4 }}>Portales y enlaces</div>}

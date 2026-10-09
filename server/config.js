@@ -11,7 +11,10 @@ export const ROOT = path.resolve(__dirname, '..')
  * La configuración vive en el home, no junto al código: en la app empaquetada
  * ROOT apunta dentro del asar, que es de solo lectura.
  */
-const CONFIG_FILE = path.join(os.homedir(), '.prolife', 'config.json')
+// `PROLIFE_CONFIG` la lleva a otro fichero: sirve para probar sin tocar la de verdad.
+const CONFIG_FILE = process.env.PROLIFE_CONFIG
+  ? path.resolve(process.env.PROLIFE_CONFIG)
+  : path.join(os.homedir(), '.prolife', 'config.json')
 const LEGACY_CONFIG = path.join(ROOT, 'prolife.config.json')
 
 const DEFAULTS = {

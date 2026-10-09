@@ -41,7 +41,6 @@ export default function ProjectDetail({ id }) {
           <h2>{p.name}</h2>
         </div>
         <div className="row">
-          <a className="btn primary" href={`#/espacio/trabajo/${p.id}`}><Icon name="layers" size={13} /> Abrir espacio de trabajo</a>
           <LogTime area="work" refId={p.id} label={p.name} />
           <button className="btn" onClick={() => api.openInCode(p.folder).then(() => toast('Abriendo VS Code…')).catch((e) => toast(e.message, 'err'))}>
             <Icon name="code" size={13} /> VS Code

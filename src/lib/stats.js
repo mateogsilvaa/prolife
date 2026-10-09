@@ -22,7 +22,8 @@ export function weekSummary(db, monday) {
   const tasksDone = db.tasks.filter(
     (t) => t.doneAt && iso(new Date(t.doneAt)) >= start && iso(new Date(t.doneAt)) <= end
   ).length
-  const attended = db.attendance.filter((a) => a.date >= start && a.date <= end)
+  // Una clase cancelada no es una clase: no cuenta ni como ida ni como falta.
+  const attended = db.attendance.filter((a) => a.date >= start && a.date <= end && a.status !== 'cancelled')
 
   const trainings = (db.training || []).filter((t) => t.done && t.date >= start && t.date <= end)
   const trainingLoad = trainings.reduce((a, t) => a + (Number(t.rpe) || 0) * (Number(t.minutes) || 0), 0)
@@ -187,21 +188,28 @@ export function attendanceBudget(db, subjectId) {
   const rows = db.attendance.filter((a) => a.subjectId === subjectId)
   const statusAt = (o) => rows.find((a) => a.date === o.date && a.slot === o.slotIndex)?.status || null
 
-  const past = all.filter((o) => o.date <= today())
-  const upcoming = all.filter((o) => o.date > today())
+  /**
+   * Una clase cancelada desaparece del cálculo igual que un festivo, pero de
+   * una sola asignatura y un solo día: el profesor no vino, o avisó de que no
+   * había. No puedes faltar a ella, así que no entra en ningún lado.
+   */
+  const cancelled = all.filter((o) => statusAt(o) === 'cancelled').length
+  const real = all.filter((o) => statusAt(o) !== 'cancelled')
+  const past = real.filter((o) => o.date <= today())
+  const upcoming = real.filter((o) => o.date > today())
   // Las justificadas no cuentan ni a favor ni en contra: salen del denominador.
   const excused = past.filter((o) => statusAt(o) === 'excused').length
   const attended = past.filter((o) => ['present', 'late'].includes(statusAt(o))).length
   const absences = past.filter((o) => statusAt(o) === 'absent').length
   const unmarked = past.filter((o) => !statusAt(o)).length
 
-  const totalCounted = all.length - excused
+  const totalCounted = real.length - excused
   // Redondeo prudente: si exigen el 70%, hay que asistir a la parte entera hacia arriba.
   const mustAttend = Math.ceil(totalCounted * minRate)
   const maxAbsences = Math.max(0, totalCounted - mustAttend)
 
   return {
-    subject, minRate, total: all.length, totalCounted,
+    subject, minRate, total: real.length, totalCounted, cancelled,
     past: past.length, upcoming: upcoming.length, unmarked,
     attended, absences, excused,
     maxAbsences,
@@ -283,7 +291,7 @@ export function weekProgress(db, monday = startOfWeek(new Date())) {
 /** Estado de una asignatura: asistencia, horas, tareas abiertas, exámenes. */
 export function subjectStats(db, subjectId) {
   const rows = db.attendance.filter((a) => a.subjectId === subjectId)
-  const counted = rows.filter((a) => a.status !== 'excused')
+  const counted = rows.filter((a) => a.status !== 'excused' && a.status !== 'cancelled')
   const attended = counted.filter((a) => a.status === 'present' || a.status === 'late').length
   const seconds = db.sessions.filter((s) => s.refId === subjectId).reduce((a, s) => a + s.seconds, 0)
   const open = db.tasks.filter((t) => t.refId === subjectId && t.status !== 'done')
@@ -340,3 +348,28 @@ export function streak(db) {
   }
   return n
 }
+
+/* ------------------------------------------------------------ evaluables */
+
+/**
+ * Prácticas, entregas y presentaciones: las cosas evaluables que hay que
+ * ENTREGAR. Un examen no se entrega —se va y se hace—, así que no cuenta aquí.
+ */
+export const isDeliverable = (e) => !!e && e.kind !== 'examen'
+
+/**
+ * Lo evaluable que queda por entregar, como si fueran tareas. Es lo que hace
+ * que una práctica apuntada en la asignatura salga también en Tareas y en Hoy,
+ * en vez de tener que acordarse de apuntarla dos veces.
+ */
+export function pendingDeliverables(db) {
+  return (db.exams || [])
+    .filter((e) => isDeliverable(e) && !e.delivered && e.date)
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''))
+    .map((e) => ({ ...e, subject: db.subjects.find((s) => s.id === e.subjectId) || null }))
+}
+
+/** Tareas y entregas evaluables vencidas: lo que enciende el número rojo del menú. */
+export const overdueCount = (db) =>
+  db.tasks.filter((t) => t.status !== 'done' && t.due && t.due <= today()).length +
+  pendingDeliverables(db).filter((e) => e.date <= today()).length

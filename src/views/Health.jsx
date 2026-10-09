@@ -5,7 +5,7 @@ import { useStore, uid } from '../lib/store.jsx'
 import { DAYS, DAYS_LONG, fmtDate, parseIso, today } from '../lib/date.js'
 import {
   healthStats, hrs, clockOf, lastDays, hasHealth, activityLabel, activityLine, km, pace,
-  guessTrainingType, activityNote,
+  guessTrainingType, activityNote, readiness, trainingsWithRest, rpeBySleep,
 } from '../lib/health.js'
 import { useGarmin, GarminConnect } from '../components/Garmin.jsx'
 
@@ -25,6 +25,9 @@ export default function Health() {
   const { db } = useStore()
   const g = useGarmin()
   const st = useMemo(() => healthStats(db), [db])
+  const prep = useMemo(() => readiness(db), [db])
+  const conDescanso = useMemo(() => trainingsWithRest(db, 14), [db])
+  const porSueno = useMemo(() => rpeBySleep(db), [db])
   const [training, setTraining] = useState(null)
 
   if (!hasHealth(db)) {
@@ -87,7 +90,55 @@ export default function Health() {
         </div>
       )}
 
-      <div className="grid-4" style={{ marginBottom: 20 }}>
+      <div className="split even" style={{ marginBottom: 12 }}>
+        <div className="card">
+          <div className="card-head"><h3>Cómo llegas hoy</h3><span className="dim" style={{ fontSize: 11.5 }}>sueño, pulso, Body Battery y carga</span></div>
+          {prep ? (
+            <div className="readiness">
+              <Anillo valor={prep.score} color={prep.color} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 18, fontWeight: 600, color: prep.color }}>{prep.verdict}</div>
+                {prep.motivo && <div className="dim" style={{ fontSize: 12 }}>Lo que más tira hacia abajo: {prep.motivo}</div>}
+                <div className="stack" style={{ gap: 4, marginTop: 8 }}>
+                  {prep.partes.map((p) => (
+                    <div key={p.k} className="row" style={{ gap: 8, fontSize: 12 }}>
+                      <span style={{ width: 110 }}>{p.k}</span>
+                      <div className="meter" style={{ flex: 1 }}><i style={{ width: `${p.v}%`, background: p.v >= 75 ? 'var(--green)' : p.v >= 55 ? 'var(--amber)' : 'var(--accent)' }} /></div>
+                      <span className="dim mono" style={{ width: 150, textAlign: 'right', fontSize: 11 }}>{p.txt}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Hace falta el sueño o el pulso de hoy.</p>}
+        </div>
+
+        <div className="card">
+          <div className="card-head"><h3>Cuánto duermes y cómo entrenas</h3><span className="dim" style={{ fontSize: 11.5 }}>según la noche anterior</span></div>
+          <div className="table-wrap">
+            <table className="tabla">
+              <thead><tr><th>Noche anterior</th><th className="r">Entrenos</th><th className="r">RPE medio</th><th className="r">Con molestias</th></tr></thead>
+              <tbody>
+                {porSueno.map((x) => (
+                  <tr key={x.k}>
+                    <td>{x.k}</td>
+                    <td className="r mono">{x.n || '—'}</td>
+                    <td className="r mono">{x.rpe != null ? x.rpe.toFixed(1) : '—'}</td>
+                    <td className="r mono" style={{ color: x.dolor > 0.3 ? 'var(--accent)' : '' }}>{x.dolor != null ? `${Math.round(x.dolor * 100)}%` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {st.trainingVsSleep && (
+            <p className="dim" style={{ fontSize: 12, margin: '8px 0 0' }}>
+              Tras menos de 7 h: RPE {st.trainingVsSleep.rpeCorta.toFixed(1)} frente a {st.trainingVsSleep.rpeNormal.toFixed(1)} cuando duermes más.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid-4" style={{ marginBottom: 12 }}>
         <div className="stat">
           <div className="eyebrow">Sueño · media 7 días</div>
           <div className="value num" style={{ fontSize: 32 }}>{hrs(st.sleep7)}</div>
@@ -116,7 +167,8 @@ export default function Health() {
         </div>
       </div>
 
-      <div className="split even" style={{ marginBottom: 20 }}>
+      <div className="hoy-grid" style={{ marginBottom: 12 }}>
+        <div className="stack">
         <div className="card">
           <div className="card-head">
             <h3>La última noche</h3>
@@ -143,43 +195,9 @@ export default function Health() {
           ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Sin sueño registrado. ¿Dormiste con el reloj?</p>}
         </div>
 
-        <div className="card">
-          <div className="card-head"><h3>Sueño y entreno</h3></div>
-          {st.trainingVsSleep ? (
-            <>
-              <p style={{ fontSize: 13, marginTop: 0, lineHeight: 1.6 }}>
-                Después de dormir <b>menos de 7 h</b> tu RPE medio es <b>{st.trainingVsSleep.rpeCorta.toFixed(1)}</b>, frente
-                a <b>{st.trainingVsSleep.rpeNormal.toFixed(1)}</b> cuando duermes más. Con molestias:{' '}
-                <b>{Math.round(st.trainingVsSleep.dolorCorta * 100)}%</b> de los entrenos tras noche corta,{' '}
-                <b>{Math.round(st.trainingVsSleep.dolorNormal * 100)}%</b> tras noche normal.
-              </p>
-              <p className="dim" style={{ fontSize: 11.5, margin: 0 }}>
-                {st.trainingVsSleep.corta} entrenos tras noche corta y {st.trainingVsSleep.normal} tras noche normal.
-              </p>
-            </>
-          ) : (
-            <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>
-              Cuando haya al menos tres entrenos tras una noche corta y tres tras una normal, aquí verás
-              si dormir poco te hace entrenar peor o te trae más molestias.
-            </p>
-          )}
-          <hr className="hr" style={{ margin: '14px 0' }} />
-          <div className="eyebrow" style={{ marginBottom: 6 }}>Qué día duermes y te mueves más</div>
-          <div className="table-wrap">
-            <table className="tabla">
-              <thead><tr><th /> {DAYS.map((d) => <th key={d} className="r">{d}</th>)}</tr></thead>
-              <tbody>
-                <tr><td className="dim">Sueño</td>{st.wdSueno.map((v, i) => <td key={i} className="r mono">{v ? (v / 3600).toFixed(1) : '—'}</td>)}</tr>
-                <tr><td className="dim">Pasos</td>{st.wdPasos.map((v, i) => <td key={i} className="r mono">{v ? `${(v / 1000).toFixed(1)}k` : '—'}</td>)}</tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card">
         <div className="card-head"><h3>Sueño por noche</h3><span className="dim mono" style={{ fontSize: 11 }}>últimos 30 días</span></div>
-        <div className="bars" style={{ height: 150 }}>
+        <div className="bars" style={{ height: 110 }}>
           {noches.map((x) => {
             const s = x.w?.sleep
             return (
@@ -193,11 +211,43 @@ export default function Health() {
         </div>
         <div className="axis">{noches.map((x, i) => <span key={x.date}>{i % 5 === 4 ? parseIso(x.date).getDate() : ''}</span>)}</div>
       </div>
-
-      <div className="split even" style={{ marginBottom: 20 }}>
+        </div>
+        <div className="stack">
+        <div className="card">
+          <div className="card-head"><h3>Tus entrenos y cómo llegabas</h3></div>
+          <div className="table-wrap scroll-box" style={{ maxHeight: 250 }}>
+            <table className="tabla">
+              <thead><tr><th>Día</th><th>Entreno</th><th className="r">RPE</th><th className="r">Sueño</th><th className="r">FC rep.</th><th className="r">BB</th></tr></thead>
+              <tbody>
+                {conDescanso.map(({ t, w }) => (
+                  <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => setTraining(t)}>
+                    <td className="dim">{fmtDate(t.date)}</td>
+                    <td>{t.type}{(t.pains || []).length ? <span style={{ color: 'var(--accent)' }}> ⚠</span> : ''}</td>
+                    <td className="r mono">{t.rpe}</td>
+                    <td className="r mono" style={{ color: w?.sleep?.seconds && w.sleep.seconds < 6.5 * 3600 ? 'var(--accent)' : '' }}>{w?.sleep?.seconds ? hrs(w.sleep.seconds) : '—'}</td>
+                    <td className="r mono">{w?.restingHr ?? '—'}</td>
+                    <td className="r mono">{w?.bbHigh ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <hr className="hr" style={{ margin: '10px 0' }} />
+          <div className="table-wrap">
+            <table className="tabla">
+              <thead><tr><th /> {DAYS.map((d) => <th key={d} className="r">{d}</th>)}</tr></thead>
+              <tbody>
+                <tr><td className="dim">Sueño</td>{st.wdSueno.map((v, i) => <td key={i} className="r mono">{v ? (v / 3600).toFixed(1) : '—'}</td>)}</tr>
+                <tr><td className="dim">Pasos</td>{st.wdPasos.map((v, i) => <td key={i} className="r mono">{v ? `${(v / 1000).toFixed(1)}k` : '—'}</td>)}</tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </div>
+        <div className="stack hoy-col-3">
         <div className="card">
           <div className="card-head"><h3>Pasos por día</h3><span className="dim mono" style={{ fontSize: 11 }}>30 días</span></div>
-          <div className="bars" style={{ height: 120 }}>
+          <div className="bars" style={{ height: 90 }}>
             {noches.map((x) => (
               <div className="col" key={x.date} title={`${fmtDate(x.date, { absolute: true })}: ${x.w?.steps?.toLocaleString('es') ?? '—'} pasos`}>
                 <div className="seg-bar" style={{
@@ -222,10 +272,12 @@ export default function Health() {
             </>
           ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Hacen falta unos cuantos días de datos.</p>}
         </div>
+        </div>
       </div>
 
-      <div className="card">
-        <div className="card-head"><h3>Actividades del reloj</h3><span className="badge">{actividades.length}</span></div>
+      <details className="card">
+        <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Actividades del reloj ({actividades.length})</summary>
+        <div style={{ marginTop: 10 }}>
         {actividades.length ? (
           <div className="list">
             {actividades.slice(0, 30).map((a) => {
@@ -250,6 +302,7 @@ export default function Health() {
           </div>
         ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Sin actividades todavía.</p>}
       </div>
+      </details>
 
       {training && <TrainingForm entry={training} onClose={() => setTraining(null)} />}
     </>
@@ -272,12 +325,25 @@ function Linea({ valores }) {
   const y = (v) => 100 - ((v - min) / (max - min || 1)) * 100
   return (
     <>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: 110 }}>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: 80 }}>
         <polyline points={valores.map((v, i) => `${x(i)},${y(v)}`).join(' ')} fill="none" stroke="var(--accent)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
       </svg>
       <div className="row dim mono" style={{ fontSize: 11 }}>
         <span>mín {Math.min(...valores)}</span><div className="spacer" /><span>máx {Math.max(...valores)}</span>
       </div>
     </>
+  )
+}
+
+function Anillo({ valor, color }) {
+  const r = 32
+  const c = 2 * Math.PI * r
+  return (
+    <svg className="ring" viewBox="0 0 80 80">
+      <circle cx="40" cy="40" r={r} fill="none" stroke="var(--line)" strokeWidth="8" />
+      <circle cx="40" cy="40" r={r} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
+        strokeDasharray={`${(valor / 100) * c} ${c}`} transform="rotate(-90 40 40)" />
+      <text x="40" y="46" textAnchor="middle" fontSize="20" fontWeight="600" fill="var(--ink)">{valor}</text>
+    </svg>
   )
 }

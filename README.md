@@ -37,6 +37,9 @@ instalar encima no se lleva nada por delante.
 
 ## Hoy: lo que hay que mirar al abrir la app
 
+En el ordenador las pantallas aprovechan el ancho —Hoy va en tres columnas, Ajustes en dos—
+y las listas largas se desplazan dentro de su tarjeta, para ver casi todo sin hacer scroll.
+
 La primera pantalla no cuenta horas: contesta *qué tengo hoy y qué se me está escapando*.
 
 - **Agenda del día** en orden —clases, exámenes, eventos (también los que se repiten),
@@ -336,7 +339,10 @@ si el reloj la da), **pasos** y su objetivo, **pulso en reposo**, estrés medio,
 Battery**, calorías y minutos de intensidad. Y las **actividades** del reloj.
 
 Dónde se ve:
-- **Salud**: medias de 7 y 30 días, la última noche por fases, sueño por noche, pasos por día,
+- **Salud**: arriba, **cómo llegas hoy** (0–100, juntando la noche frente a tu media, el pulso
+  frente a tu base, la Body Battery y la carga de la semana) y **cuánto duermes frente a cómo
+  entrenas** (RPE y molestias según la noche anterior); debajo, tus entrenos con cómo
+  llegabas a cada uno, medias de 7 y 30 días, la última noche por fases, sueño por noche, pasos por día,
   la evolución del pulso en reposo, qué día de la semana duermes y te mueves más, y si dormir
   menos de 7 h te sube el RPE o te trae más molestias.
 - **Hoy**: «Tu cuerpo» (la noche, los pasos, el pulso) y dos avisos: noche de menos de 6 h y
@@ -356,20 +362,39 @@ app lo dice en Ajustes y en Salud en vez de quedarse callada.
 ## Atletismo
 
 Registro por sesión: si fuiste o no, tipo de entreno, duración, **RPE 1–10**, **CMJ pre y
-post**, molestias y notas. Cuatro pestañas:
+post**, molestias y notas; y, según el tipo, **los pesos del gimnasio** o **los tiempos de
+las series**. Arriba del formulario sale con qué llegabas a ese entreno: la noche anterior,
+el pulso en reposo y la Body Battery del reloj. Seis pestañas:
 
-- **Semana**: adherencia, **carga = RPE × minutos** comparada con tu media de las últimas
-  semanas (avisa de saltos de más del 30%), CMJ y últimos entrenos.
-- **Calendario**: el mes entero con lo que hiciste cada día —tipo, minutos, RPE y molestias—.
-  Tocar un día lo enseña al lado con todo lo apuntado; doble toque para editarlo.
-- **Estadísticas**: cuántos entrenos de cada tipo (sesiones, horas, duración y RPE medios,
-  último), **qué días de la semana vas más** —y qué haces cada día—, mes a mes, semanas
-  seguidas cumpliendo el objetivo, mejor racha, mejor semana, sesión más larga y más dura.
-- **Molestias y lesiones**: cada entreno puede llevar molestias con **zona, lado, dolor del 1
-  al 10, qué es** (molestia, dolor o lesión), **cuándo** (antes, durante, después, al día
-  siguiente), si tuviste que parar y cómo es. De ahí sale qué zona se repite, con qué
-  intensidad y **si va a mejor o a peor**. Una molestia marcada como *lesión* abre una lesión
-  que se sigue —días que lleva, cómo ha ido doliendo— hasta que le das el **alta**.
+- **Semana**: adherencia, carga (RPE × minutos) frente a tu media, CMJ y últimos entrenos.
+- **Calendario**: el mes entero con lo que hiciste cada día.
+- **Gimnasio**:
+  - **Importar PDF** de tu plan: lee la tabla (Orden · Ejercicio · Series · Repet. ·
+    Indicación · Tempo · Técnica · Material · Vídeo), con los bloques, las celdas de varias
+    líneas y el enlace al vídeo de cada ejercicio. Cada PDF es un día; los de un mismo plan
+    se juntan en una rutina. Antes de guardar se revisa y se corrige lo que haga falta.
+  - Al apuntar una sesión de gimnasio eliges rutina y día, y por cada ejercicio apuntas kg y
+    repeticiones, las series de **calentamiento** aparte (W), si **te lo saltaste** y una
+    nota. Al lado sale lo que hiciste la última vez, los pesos vienen propuestos, y una
+    **★** marca cada serie que es récord.
+  - **Marcas personales** por ejercicio (máximo y 1RM estimado), su evolución, volumen del
+    mes y lo que más te saltas.
+  - Exportar en **CSV de Hevy** (sus mismas columnas, con superseries por bloque) y en
+    formato **Strong**, que es el que Hevy acepta al importar.
+- **Series**: metros, tiempo y descanso de cada repetición. **Marcas por distancia** (mejor
+  tiempo, ritmo, media) y cómo bajan sesión a sesión.
+- **Estadísticas**: marcas de gimnasio y de pista, qué tipo haces más, qué días vas, mes a
+  mes, rachas y récords.
+- **Molestias y lesiones**: zona, lado, dolor, tipo y cuándo; tendencia por zona y lesiones
+  con seguimiento hasta el alta.
+
+## Trabajo
+
+Una pantalla con todo a la vista:
+- **Diario**: dos líneas de qué hiciste cada día, con su proyecto si quieres. Se busca.
+- **Metas**: qué quieres conseguir, partido en pasos, con fecha y porcentaje.
+- **Ideas y notas**: lo que se te ocurre; una idea pasa a ser tarea con un toque.
+- **Proyectos**, en pequeño, con la última entrada del diario de cada uno.
 
 ## Atajos
 

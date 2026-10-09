@@ -16,7 +16,7 @@ import {
   attendanceBudget, classOccurrences, termWindow, isDeliverable,
 } from '../lib/stats.js'
 import { activeInjuries, injuryAge, whereLabel, painSummary, loadOf, typeColor } from '../lib/training.js'
-import { healthStats, hasHealth, hrs, clockOf, activitiesOn, activityLine } from '../lib/health.js'
+import { healthStats, hasHealth, hrs, clockOf, activitiesOn, activityLine, readiness } from '../lib/health.js'
 import { FasesBar } from './Health.jsx'
 
 /**
@@ -90,7 +90,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="split wide-left">
+      <div className="hoy-grid">
         <div className="stack">
           <div className="card">
             <div className="card-head">
@@ -105,7 +105,10 @@ export default function Dashboard() {
               </>
             )}
           </div>
+          <Cuerpo />
+        </div>
 
+        <div className="stack">
           {(tareasHoy.length > 0 || entregas.length > 0 || tareasPronto.length > 0) && (
             <div className="card">
               <div className="card-head">
@@ -124,14 +127,16 @@ export default function Dashboard() {
           )}
 
           <Seguir />
+          <Semana />
         </div>
 
-        <div className="stack">
+        <div className="stack hoy-col-3">
           <div className="card">
             <div className="card-head">
               <h3>Ojo con esto</h3>
               <span className="badge">{avisos.filter((a) => a.tone !== 'ok').length}</span>
             </div>
+            <div className="scroll-box" style={{ maxHeight: 'calc(100vh - 420px)' }}>
             {avisos.map((a, i) => (
               <div key={i} className={`alerta ${a.tone}`}>
                 <span className="ico"><Icon name={a.icon} size={13} /></span>
@@ -139,11 +144,9 @@ export default function Dashboard() {
                 {a.href && <a className="btn sm ghost" href={a.href}><Icon name="chevronR" size={12} /></a>}
               </div>
             ))}
+            </div>
           </div>
-
-          <Cuerpo />
           <EntrenoHoy onOpen={setTraining} />
-          <Semana />
         </div>
       </div>
 
@@ -382,11 +385,21 @@ function Cuerpo() {
   const { db } = useStore()
   if (!hasHealth(db)) return null
   const h = healthStats(db)
+  const prep = readiness(db)
   const s = h.ultimoSueno
   const pasosPct = h.stepsHoy != null && h.stepGoal ? Math.min(100, (h.stepsHoy / h.stepGoal) * 100) : null
   return (
     <div className="card">
       <div className="card-head"><h3>Tu cuerpo</h3><a className="btn sm ghost" href="#/salud"><Icon name="chevronR" size={12} /></a></div>
+      {prep && (
+        <div className="row" style={{ gap: 8, marginBottom: 10 }}>
+          <span className="num" style={{ fontSize: 24, color: prep.color }}>{prep.score}</span>
+          <div style={{ lineHeight: 1.25 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: prep.color }}>{prep.verdict}</div>
+            {prep.motivo && <div className="dim" style={{ fontSize: 11 }}>{prep.motivo}</div>}
+          </div>
+        </div>
+      )}
       {s ? (
         <div style={{ marginBottom: 12 }}>
           <div className="row" style={{ gap: 8, alignItems: 'baseline', marginBottom: 6 }}>

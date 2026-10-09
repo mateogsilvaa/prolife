@@ -76,7 +76,7 @@ export default function Volunteering() {
       </div>
 
       {entidades.length > 0 && (
-        <div className="grid-3" style={{ marginBottom: 22 }}>
+        <div className="grid-3" style={{ marginBottom: 12 }}>
           <div className="stat">
             <div className="eyebrow">Horas acumuladas</div>
             <div className="value num">{(total.minutos / 60).toFixed(1)}<span>h</span></div>

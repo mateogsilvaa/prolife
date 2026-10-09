@@ -175,3 +175,72 @@ export function guessTrainingType(a, types = []) {
 
 /** Lo que una actividad aporta a las notas de un entreno. */
 export const activityNote = (a) => `⌚ ${activityLine(a)}${a.maxHr ? ` (máx ${Math.round(a.maxHr)})` : ''}${a.elevation ? ` · +${Math.round(a.elevation)} m` : ''}`
+
+/* ------------------------------------------------------------- preparación */
+
+const recorta = (x) => Math.max(0, Math.min(100, x))
+
+/**
+ * Cómo llegas hoy a entrenar, de 0 a 100, con lo que haya: la noche frente a
+ * tu media, el pulso en reposo frente a tu base, la Body Battery y la carga de
+ * la última semana frente a las anteriores. No es una ciencia exacta; es una
+ * forma de juntar en un número lo que mirarías de todos modos.
+ */
+export function readiness(db, date = today()) {
+  const h = healthStats(db)
+  const w = wellnessOn(db, date)
+  const partes = []
+  if (w?.sleep?.seconds && h.sleep30) {
+    const r = w.sleep.seconds / h.sleep30
+    partes.push({ k: 'Sueño', v: recorta(40 + (r - 0.75) * 240), txt: `${hrs(w.sleep.seconds)} (media ${hrs(h.sleep30)})` })
+  }
+  if (w?.restingHr && h.restBase) {
+    const d = w.restingHr - h.restBase
+    partes.push({ k: 'Pulso en reposo', v: recorta(100 - Math.max(0, d) * 10), txt: `${w.restingHr} ppm (${d >= 0 ? '+' : ''}${Math.round(d)})` })
+  }
+  if (w?.bbHigh != null) partes.push({ k: 'Body Battery', v: recorta(w.bbHigh), txt: `${w.bbHigh}` })
+
+  // Carga: últimos 7 días frente a la media semanal de los 28 anteriores.
+  const carga = (desde, hasta) => (db.training || []).filter((t) => t.done && t.date >= desde && t.date <= hasta)
+    .reduce((a, t) => a + (Number(t.rpe) || 0) * (Number(t.minutes) || 0), 0)
+  const fin = parseIso(date)
+  const aguda = carga(iso(addDays(fin, -6)), date)
+  const cronica = carga(iso(addDays(fin, -34)), iso(addDays(fin, -7))) / 4
+  if (cronica > 0) {
+    const r = aguda / cronica
+    partes.push({ k: 'Carga 7 días', v: r <= 1.3 ? 100 : recorta(100 - (r - 1.3) * 200), txt: `${Math.round(r * 100)}% de lo habitual` })
+  }
+  if (!partes.length) return null
+  const score = Math.round(partes.reduce((a, p) => a + p.v, 0) / partes.length)
+  const peor = [...partes].sort((a, b) => a.v - b.v)[0]
+  return {
+    score, partes,
+    verdict: score >= 75 ? 'Listo para apretar' : score >= 55 ? 'Día normal' : 'Mejor algo suave',
+    color: score >= 75 ? 'var(--green)' : score >= 55 ? 'var(--amber)' : 'var(--accent)',
+    motivo: peor.v < 60 ? `${peor.k}: ${peor.txt}` : null,
+  }
+}
+
+/** Cada entreno con cómo llegabas a él: la noche anterior, el pulso y la Body Battery. */
+export function trainingsWithRest(db, n = 12) {
+  return [...(db.training || [])].filter((t) => t.done).sort((a, b) => b.date.localeCompare(a.date)).slice(0, n)
+    .map((t) => ({ t, w: wellnessOn(db, t.date) }))
+}
+
+/** RPE medio y molestias según cuánto dormiste la noche anterior, por tramos. */
+export function rpeBySleep(db) {
+  const tramos = [
+    { k: '< 6 h', min: 0, max: 6 }, { k: '6–7 h', min: 6, max: 7 }, { k: '7–8 h', min: 7, max: 8 }, { k: '≥ 8 h', min: 8, max: 99 },
+  ].map((x) => ({ ...x, rpe: [], dolor: 0, n: 0 }))
+  for (const t of db.training || []) {
+    if (!t.done) continue
+    const s = wellnessOn(db, t.date)?.sleep?.seconds
+    if (!s) continue
+    const hh = s / 3600
+    const tr = tramos.find((x) => hh >= x.min && hh < x.max)
+    tr.n++
+    tr.rpe.push(Number(t.rpe) || 0)
+    if ((t.pains || []).length) tr.dolor++
+  }
+  return tramos.map((x) => ({ k: x.k, n: x.n, rpe: x.rpe.length ? x.rpe.reduce((a, b) => a + b, 0) / x.rpe.length : null, dolor: x.n ? x.dolor / x.n : null }))
+}

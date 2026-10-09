@@ -67,7 +67,7 @@ export default function SubjectDetail({ id }) {
         </div>
       </div>
 
-      <div className="grid-4" style={{ marginBottom: 22 }}>
+      <div className="grid-4" style={{ marginBottom: 12 }}>
         <div className="stat">
           <div className="eyebrow">Trabajo de la semana</div>
           <div className="value num" style={{ color: st.week.pct >= 100 ? 'var(--green)' : '' }}>{st.week.pct}<span>%</span></div>
@@ -112,7 +112,7 @@ export default function SubjectDetail({ id }) {
       </div>
 
       {b.doomed && b.totalCounted > 0 && (
-        <div className="notice err" style={{ marginBottom: 18 }}>
+        <div className="notice err" style={{ marginBottom: 12 }}>
           <Icon name="x" size={13} />
           <span>
             Con {b.absences} faltas ya no llegas al {Math.round(b.minRate * 100)}% aunque vayas a las {b.upcoming} clases
@@ -121,7 +121,7 @@ export default function SubjectDetail({ id }) {
         </div>
       )}
       {!b.reliable && (s.schedule || []).length > 0 && (
-        <div className="notice" style={{ marginBottom: 18 }}>
+        <div className="notice" style={{ marginBottom: 12 }}>
           <Icon name="clock" size={13} />
           <span>
             Alguna clase del horario no tiene fecha de fin, así que el total de clases del curso es

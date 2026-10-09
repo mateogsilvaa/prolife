@@ -96,14 +96,14 @@ function Semana() {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 20, borderLeft: '3px solid var(--accent)' }}>
+      <div className="card" style={{ marginBottom: 12, borderLeft: '3px solid var(--accent)' }}>
         <div className="eyebrow" style={{ marginBottom: 8 }}>El resumen en una frase</div>
-        <p className="display" style={{ fontSize: 21, margin: 0, maxWidth: '62ch', lineHeight: 1.35 }}>
+        <p className="display" style={{ fontSize: 17, margin: 0, maxWidth: '90ch', lineHeight: 1.35 }}>
           {narrative(cur, prev, avg, refRows, db)}
         </p>
       </div>
 
-      <div className="grid-3" style={{ marginBottom: 20 }}>
+      <div className="grid-3" style={{ marginBottom: 12 }}>
         <div className="stat">
           <div className="eyebrow">Total de la semana</div>
           <div className="value num">{(cur.total / 3600).toFixed(1)}<span>h</span></div>
@@ -127,7 +127,7 @@ function Semana() {
         </div>
       </div>
 
-      <div className="split wide-left" style={{ marginBottom: 20 }}>
+      <div className="split wide-left" style={{ marginBottom: 12 }}>
         <div className="card">
           <div className="card-head">
             <h3>Historial semanal</h3>
@@ -137,7 +137,7 @@ function Semana() {
               ))}
             </div>
           </div>
-          <div className="bars" style={{ height: 160 }}>
+          <div className="bars" style={{ height: 110 }}>
             {history.map((w, i) => (
               <div className="col" key={w.start} title={`${weekLabel(w.start)} · ${dur(w.total)}`}>
                 {Object.entries(AREAS).map(([k, v]) => {
@@ -164,7 +164,7 @@ function Semana() {
 
         <div className="card">
           <div className="card-head"><h3>Día a día</h3></div>
-          <div className="bars" style={{ height: 130 }}>
+          <div className="bars" style={{ height: 80 }}>
             {cur.byDay.map((v, i) => (
               <div className="col" key={i} title={dur(v)}>
                 <div className="seg-bar" style={{ height: `${(v / maxDay) * 100}%`, background: v ? 'var(--ink)' : 'var(--line)' }} />
@@ -172,7 +172,7 @@ function Semana() {
             ))}
           </div>
           <div className="axis">{DAYS.map((d) => <span key={d}>{d[0]}</span>)}</div>
-          <hr className="hr" style={{ margin: '16px 0' }} />
+          <hr className="hr" style={{ margin: '10px 0' }} />
           <div className="stack" style={{ gap: 9 }}>
             <Row label="Tareas completadas" value={cur.tasksDone} prev={prev.tasksDone} />
             <Row label="Clases registradas" value={cur.classes} prev={prev.classes} />
@@ -183,6 +183,7 @@ function Semana() {
         </div>
       </div>
 
+      <div className="split even">
       <WeeklyWork monday={cur.start} />
 
       <div className="card">
@@ -208,6 +209,7 @@ function Semana() {
           <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Ninguna sesión registrada esta semana.</p>
         )}
       </div>
+      </div>
     </>
   )
 }
@@ -219,7 +221,7 @@ function WeeklyWork({ monday }) {
   if (!wp.rows.length) return null
 
   return (
-    <div className="card" style={{ marginBottom: 20 }}>
+    <div className="card">
       <div className="card-head">
         <h3>Trabajo semanal</h3>
         <span className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{wp.pct}% hecho</span>

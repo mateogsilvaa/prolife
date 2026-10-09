@@ -17,5 +17,16 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:4321',
     },
   },
-  build: { outDir: 'dist' },
+  build: {
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        // El worker de pdf.js (lector de rutinas) viene como `.mjs`, y no todos
+        // los servidores —el de la app, el del APK— lo sirven como JavaScript.
+        // Con `.js` el navegador lo acepta en todas partes.
+        assetFileNames: (info) =>
+          /\.mjs$/.test(info.name || '') ? 'assets/[name]-[hash].js' : 'assets/[name]-[hash][extname]',
+      },
+    },
+  },
 })

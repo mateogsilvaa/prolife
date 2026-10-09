@@ -9,7 +9,9 @@ import {
   RPE_COLOR, loadOf, typeColor, ZONES, SIDES, PAIN_KINDS, PAIN_WHEN, PAIN_COLOR, newPain,
   kindLabel, whereLabel, allPains, activeInjuries, injuryDays, injuryAge, longDate, painSummary, trainingStats,
 } from '../lib/training.js'
-import { activitiesOn, activityLine, activityNote } from '../lib/health.js'
+import { activitiesOn, activityLine, activityNote, wellnessOn, healthStats, hrs } from '../lib/health.js'
+import { GymLog, TrackLog, GymTab, TrackTab } from '../components/Gym.jsx'
+import { isGymType, isTrackType, gymVolume, repsSummary, gymPRs, trackPRs, fmtTime, paceOf } from '../lib/gym.js'
 
 const blank = (date, types) => ({
   id: uid('tr'), date: date || today(), done: true, type: types?.[0] || 'Rodaje',
@@ -19,6 +21,8 @@ const blank = (date, types) => ({
 const TABS = [
   ['semana', 'Semana'],
   ['calendario', 'Calendario'],
+  ['gimnasio', 'Gimnasio'],
+  ['series', 'Series'],
   ['estadisticas', 'Estadísticas'],
   ['molestias', 'Molestias y lesiones'],
 ]
@@ -93,6 +97,8 @@ export default function Training() {
 
       {tab === 'semana' && <WeekTab byDate={byDate} onOpen={setForm} openDate={open} />}
       {tab === 'calendario' && <CalendarTab byDate={byDate} openDate={open} />}
+      {tab === 'gimnasio' && <GymTab onOpenTraining={setForm} />}
+      {tab === 'series' && <TrackTab onOpenTraining={setForm} />}
       {tab === 'estadisticas' && <TrainingStatsPanel />}
       {tab === 'molestias' && <PainTab onOpenTraining={(id) => setForm(db.training.find((t) => t.id === id))} />}
 
@@ -150,7 +156,7 @@ function WeekTab({ byDate, onOpen, openDate }) {
 
   return (
     <>
-      <div className="grid-3" style={{ marginBottom: 20 }}>
+      <div className="grid-3" style={{ marginBottom: 12 }}>
         <div className="stat">
           <div className="eyebrow">Adherencia</div>
           <div className="value num">{weekTrainings.length}<span>/ {goal}</span></div>
@@ -180,7 +186,7 @@ function WeekTab({ byDate, onOpen, openDate }) {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-head">
           <h3>Esta semana</h3>
           <span className="dim" style={{ fontSize: 12 }}>Toca un día para registrar o editar</span>
@@ -214,7 +220,7 @@ function WeekTab({ byDate, onOpen, openDate }) {
         </div>
       </div>
 
-      <div className="split even" style={{ marginBottom: 20 }}>
+      <div className="hoy-grid">
         <div className="card">
           <div className="card-head"><h3>Carga por semana</h3><span className="dim mono" style={{ fontSize: 11 }}>últimas 8</span></div>
           <div className="bars" style={{ height: 130 }}>
@@ -274,17 +280,17 @@ function WeekTab({ byDate, onOpen, openDate }) {
             </p>
           )}
         </div>
-      </div>
 
-      <div className="card">
+      <div className="card hoy-col-3">
         <div className="card-head"><h3>Últimos entrenos</h3></div>
         {db.training.length ? (
-          <div className="list">
+          <div className="list scroll-box" style={{ maxHeight: 300 }}>
             {[...db.training].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10).map((t) => (
               <TrainingRow key={t.id} t={t} onClick={() => onOpen(t)} />
             ))}
           </div>
         ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Nada registrado todavía.</p>}
+      </div>
       </div>
     </>
   )
@@ -436,6 +442,15 @@ export function TrainingDetail({ t }) {
       ) : (
         <span className="dim">Descanso / no fui</span>
       )}
+      {t.gym && (
+        <div style={{ fontSize: 12.5 }}>
+          {(t.gym.exercises || []).filter((e) => !e.skipped).map((e) => (
+            <div key={e.key + e.name}><b>{e.name}</b> <span className="mono dim">{(e.sets || []).filter((s) => !s.warmup && s.reps).map((s) => `${s.kg || 0}×${s.reps}`).join(' · ')}</span></div>
+          ))}
+          <div className="dim" style={{ fontSize: 11.5 }}>Volumen {Math.round(gymVolume(t.gym)).toLocaleString('es')} kg{(t.gym.exercises || []).some((e) => e.skipped) ? ` · saltados: ${t.gym.exercises.filter((e) => e.skipped).map((e) => e.name).join(', ')}` : ''}</div>
+        </div>
+      )}
+      {(t.reps || []).length > 0 && <div className="mono" style={{ fontSize: 12 }}>{repsSummary(t.reps)}</div>}
       {t.notes && <p style={{ margin: 0, fontSize: 13, whiteSpace: 'pre-wrap' }}>{t.notes}</p>}
       {(t.pains || []).map((p, i) => (
         <div key={i} className="notice" style={{ borderColor: PAIN_COLOR(p.level) }}>
@@ -501,6 +516,8 @@ export function TrainingStatsPanel() {
           </div>
         </div>
       </div>
+
+      <MarcasPersonales />
 
       <div className="split even">
         <div className="card">
@@ -910,7 +927,9 @@ export function TrainingForm({ entry, onClose }) {
 
   return (
     <Modal
+      wide={!!t.gym || isGymType(t.type)}
       title={longDate(t.date)}
+      subtitle={contexto(db, t.date)}
       onClose={onClose}
       foot={
         painEdit ? null : (
@@ -997,6 +1016,9 @@ export function TrainingForm({ entry, onClose }) {
               </span>
             </>
           )}
+
+          {t.done && (isGymType(t.type) || t.gym) && <GymLog t={t} set={set} />}
+          {t.done && (isTrackType(t.type) || (t.reps || []).length > 0) && <TrackLog t={t} set={set} />}
 
           {/* Lo que grabó el reloj ese día: un toque y pasa la duración y los datos a las notas. */}
           {activitiesOn(db, t.date).map((a) => {
@@ -1115,6 +1137,71 @@ function PainEditor({ pain, onCancel, onSave }) {
         <button className="btn primary" disabled={!p.zone} onClick={() => onSave(p)}>
           {p.zone ? 'Añadir al entreno' : 'Elige dónde'}
         </button>
+      </div>
+    </div>
+  )
+}
+
+/** «Anoche: 6 h 40 · FC reposo 52 (+4) · Body Battery 64»: con qué llegabas a ese entreno. */
+function contexto(db, date) {
+  const w = wellnessOn(db, date)
+  if (!w) return undefined
+  const base = healthStats(db).restBase
+  const partes = []
+  if (w.sleep?.seconds) partes.push(`Anoche ${hrs(w.sleep.seconds)}`)
+  if (w.restingHr) partes.push(`FC reposo ${w.restingHr}${base ? ` (${w.restingHr - Math.round(base) >= 0 ? '+' : ''}${w.restingHr - Math.round(base)})` : ''}`)
+  if (w.bbHigh != null) partes.push(`Body Battery ${w.bbHigh}`)
+  return partes.join(' · ') || undefined
+}
+
+/** Las marcas de gimnasio y de pista, juntas: lo primero que uno quiere ver. */
+function MarcasPersonales() {
+  const { db } = useStore()
+  const gym = useMemo(() => gymPRs(db).sort((a, b) => b.best1rmDate.localeCompare(a.best1rmDate)).slice(0, 8), [db])
+  const pista = useMemo(() => trackPRs(db), [db])
+  if (!gym.length && !pista.length) return null
+  return (
+    <div className="split even">
+      <div className="card">
+        <div className="card-head"><h3>Marcas de gimnasio</h3><span className="dim" style={{ fontSize: 11.5 }}>las más recientes primero</span></div>
+        {gym.length ? (
+          <div className="table-wrap">
+            <table className="tabla">
+              <thead><tr><th>Ejercicio</th><th className="r">Máximo</th><th className="r">1RM est.</th><th className="r">Desde</th></tr></thead>
+              <tbody>
+                {gym.map((p) => (
+                  <tr key={p.key}>
+                    <td>{p.name}</td>
+                    <td className="r mono">{p.maxKg} kg×{p.maxKgReps}</td>
+                    <td className="r mono">{Math.round(p.best1rm)} kg</td>
+                    <td className="r dim">{fmtDate(p.best1rmDate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Apunta pesos en tus sesiones de gimnasio.</p>}
+      </div>
+      <div className="card">
+        <div className="card-head"><h3>Marcas en pista</h3><span className="dim" style={{ fontSize: 11.5 }}>mejor tiempo por distancia en series</span></div>
+        {pista.length ? (
+          <div className="table-wrap">
+            <table className="tabla">
+              <thead><tr><th>Distancia</th><th className="r">Mejor</th><th className="r">Ritmo</th><th className="r">Media</th><th className="r">Cuándo</th></tr></thead>
+              <tbody>
+                {pista.map((p) => (
+                  <tr key={p.dist}>
+                    <td><b>{p.dist} m</b></td>
+                    <td className="r mono">{fmtTime(p.best)}</td>
+                    <td className="r mono dim">{paceOf(p.dist, p.best)}</td>
+                    <td className="r mono">{fmtTime(p.avg)}</td>
+                    <td className="r dim">{fmtDate(p.bestDate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Apunta los tiempos de tus series.</p>}
       </div>
     </div>
   )

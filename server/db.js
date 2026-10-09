@@ -87,6 +87,17 @@ export const EMPTY_DB = {
   wellness: {},
   garminActivities: [],
   /**
+   * Rutinas de gimnasio (importadas de un PDF o escritas a mano): días y
+   * ejercicios con sus series objetivo. Lo que se hizo de verdad en cada
+   * sesión va dentro del entreno (`training[].gym`), igual que los tiempos de
+   * las series (`training[].reps`).
+   */
+  routines: [],
+  /** Trabajo: el diario de cada día, las metas y las ideas y notas sueltas. */
+  workLog: [],
+  workGoals: [],
+  workNotes: [],
+  /**
    * Voluntariado: las entidades con las que colaboras y, aparte, cada jornada
    * que has hecho. Van separados porque lo que hay que justificar son las
    * jornadas —fecha, horas y fotos de ese día—, no la entidad.
@@ -139,7 +150,7 @@ function migrate(raw) {
     db.categories.push({ id: 'cat-volunteer', name: 'Voluntariado', color: '#7a5c9e', area: 'volunteer' })
   }
 
-  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'injuries', 'garminActivities', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
+  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'injuries', 'garminActivities', 'routines', 'workLog', 'workGoals', 'workNotes', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
     if (!Array.isArray(db[key])) db[key] = []
   }
 

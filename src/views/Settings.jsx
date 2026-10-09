@@ -79,7 +79,7 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="stack" style={{ gap: 16, maxWidth: 780 }}>
+      <div className="ajustes-cols">
         <div className="card">
           <div className="card-head"><h3>Perfil</h3></div>
           <div className="grid-3">

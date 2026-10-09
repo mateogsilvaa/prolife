@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import { useStore, uid, slug, PALETTE } from '../lib/store.jsx'
+import WorkHub from '../components/WorkHub.jsx'
 import { api } from '../lib/api.js'
 import { dur, startOfWeek, addDays, iso } from '../lib/date.js'
 
@@ -18,63 +19,7 @@ export const projectStats = (db, id) => {
 }
 
 export default function Work() {
-  const { db } = useStore()
-  const [form, setForm] = useState(null)
-
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <div className="eyebrow">Trabajo{db.settings.orgName ? ` · ${db.settings.orgName}` : ''}</div>
-          <h2>Proyectos</h2>
-          <p>Los proyectos que llevas en paralelo, cada uno con su carpeta y su tiempo aproximado.</p>
-        </div>
-        <button className="btn primary" onClick={() => setForm(emptyProject(db.projects.length, db.settings.orgName))}>
-          <Icon name="plus" size={13} /> Proyecto
-        </button>
-      </div>
-
-      {db.projects.length === 0 ? (
-        <div className="empty">
-          <div className="display">Sin proyectos todavía</div>
-          <p style={{ maxWidth: '44ch', margin: '0 auto 16px' }}>
-            Añade cada línea de trabajo que lleves en paralelo. Se creará su carpeta dentro de
-            <span className="mono"> Trabajo/</span> y el tiempo se irá acumulando solo.
-          </p>
-          <button className="btn primary" onClick={() => setForm(emptyProject(0, db.settings.orgName))}><Icon name="plus" size={13} /> Crear el primero</button>
-        </div>
-      ) : (
-        <div className="sub-grid">
-          {db.projects.map((p) => {
-            const st = projectStats(db, p.id)
-            return (
-              <a key={p.id} className="sub-card" href={`#/trabajo/${p.id}`} style={{ '--c': p.color, display: 'block', textDecoration: 'none' }}>
-                <h4>{p.name}</h4>
-                <div className="dim mono" style={{ fontSize: 11 }}>{p.org || '—'}</div>
-                <div className="row" style={{ gap: 18, marginTop: 14 }}>
-                  <div>
-                    <div className="num" style={{ fontSize: 22 }}>{(st.week / 3600).toFixed(1)}h</div>
-                    <div className="eyebrow">esta semana</div>
-                  </div>
-                  <div>
-                    <div className="num" style={{ fontSize: 22 }}>{(st.month / 3600).toFixed(1)}h</div>
-                    <div className="eyebrow">este mes</div>
-                  </div>
-                  <div>
-                    <div className="num" style={{ fontSize: 22 }}>{(st.total / 3600).toFixed(0)}h</div>
-                    <div className="eyebrow">acumulado</div>
-                  </div>
-                </div>
-                {st.open.length > 0 && <span className="badge hot" style={{ marginTop: 12, display: 'inline-block' }}>{st.open.length} pendientes</span>}
-              </a>
-            )
-          })}
-        </div>
-      )}
-
-      {form && <ProjectForm project={form} onClose={() => setForm(null)} />}
-    </>
-  )
+  return <WorkHub />
 }
 
 export function ProjectForm({ project, onClose }) {

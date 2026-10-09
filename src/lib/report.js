@@ -6,6 +6,7 @@ import { uniStats, timeStats, taskStats, volunteerSummary, gradeOf } from './ins
 import { trainingStats, painSummary, loadOf, allPains, whereLabel, kindLabel, injuryDays, PAIN_WHEN } from './training.js'
 import { kindLabel as examKind } from '../components/ExamEditor.jsx'
 import { healthStats, hasHealth, hrs, clockOf, activityLine } from './health.js'
+import { gymPRs, trackPRs, fmtTime, paceOf, gymVolume, repsSummary } from './gym.js'
 
 /**
  * El informe completo: todo lo que hay en la base, legible por una persona.
@@ -279,6 +280,50 @@ export function buildReport(db) {
       ${table(['Fecha', 'Hora', 'Nombre', 'Resumen', 'Efecto aeróbico'], [...(db.garminActivities || [])].sort((a, b) => b.date.localeCompare(a.date)).map((a) => [
         fecha(a.date), esc(a.start), esc(a.name), esc(activityLine(a)), a.aerobicTE ?? '',
       ]), { small: true, empty: 'Ninguna.' })}
+    `)
+  }
+
+  /* --------------------------------------------- gimnasio, series y trabajo */
+  const prsGym = gymPRs(db)
+  const prsPista = trackPRs(db)
+  if (prsGym.length || prsPista.length || (db.routines || []).length) {
+    let gymHtml = `
+      <h3>Marcas de gimnasio</h3>
+      ${table(['Ejercicio', 'Máximo', '1RM estimado', 'Fecha', 'Sesiones', 'Última'], prsGym.map((p) => [
+        esc(p.name), `${p.maxKg} kg × ${p.maxKgReps}`, `${Math.round(p.best1rm)} kg`, fecha(p.best1rmDate), p.sessions, fecha(p.last),
+      ]), { empty: 'Sin sesiones con pesos.' })}
+      <h3>Marcas en pista</h3>
+      ${table(['Distancia', 'Mejor', 'Ritmo', 'Media', 'Repeticiones', 'Fecha'], prsPista.map((p) => [
+        `${p.dist} m`, fmtTime(p.best), paceOf(p.dist, p.best) || '', fmtTime(p.avg), p.count, fecha(p.bestDate),
+      ]), { empty: 'Sin tiempos apuntados.' })}
+      <h3>Sesiones de gimnasio</h3>
+      ${table(['Fecha', 'Ejercicios', 'Volumen'], [...db.training].filter((t) => t.gym).sort((a, b) => b.date.localeCompare(a.date)).map((t) => [
+        fecha(t.date),
+        (t.gym.exercises || []).map((e) => e.skipped ? `<s>${esc(e.name)}</s>` : `<b>${esc(e.name)}</b> ${(e.sets || []).filter((x) => x.reps).map((x) => `${x.warmup ? 'W ' : ''}${esc(x.kg || 0)}×${esc(x.reps)}`).join(' · ')}`).join('<br>'),
+        `${Math.round(gymVolume(t.gym))} kg`,
+      ]), { small: true, empty: 'Ninguna.' })}
+      <h3>Sesiones de series</h3>
+      ${table(['Fecha', 'Tipo', 'Series'], [...db.training].filter((t) => (t.reps || []).length).sort((a, b) => b.date.localeCompare(a.date)).map((t) => [
+        fecha(t.date), esc(t.type), esc(repsSummary(t.reps)),
+      ]), { small: true, empty: 'Ninguna.' })}`
+    for (const r of db.routines || []) {
+      gymHtml += `<article class="ficha"><h3>Rutina: ${esc(r.name)}</h3>${r.from ? `<p>${fecha(r.from)} → ${fecha(r.to)}</p>` : ''}${r.days.map((d) => `<h4>${esc(d.name)}</h4>${table(['Bloque', 'Ejercicio', 'Series × reps', 'Indicación', 'Tempo', 'Técnica'], d.exercises.map((e) => [esc(e.block), esc(e.name), `${e.sets}×${esc(e.reps)}`, esc(e.load), esc(e.tempo), esc(e.notes)]), { small: true })}`).join('')}</article>`
+    }
+    sec('gimnasio', 'Gimnasio y series', gymHtml)
+  }
+
+  if ((db.workLog || []).length || (db.workGoals || []).length || (db.workNotes || []).length) {
+    sec('trabajo-diario', 'Trabajo: diario, metas e ideas', `
+      <h3>Metas</h3>
+      ${table(['Meta', 'Estado', 'Para', 'Pasos'], (db.workGoals || []).map((m) => [
+        esc(m.title), esc(m.status), fecha(m.due), m.milestones.map((h) => `${h.done ? '✓' : '○'} ${esc(h.text)}`).join('<br>'),
+      ]), { empty: 'Ninguna.' })}
+      <h3>Diario</h3>
+      ${table(['Fecha', 'Proyecto', 'Qué hice'], [...(db.workLog || [])].sort((a, b) => b.date.localeCompare(a.date)).map((e) => [
+        fecha(e.date), esc(db.projects.find((p) => p.id === e.projectId)?.name || ''), esc(e.text).replace(/\n/g, '<br>'),
+      ]), { empty: 'Vacío.' })}
+      <h3>Ideas y notas</h3>
+      ${table(['Tipo', 'Título', 'Texto', 'Estado'], (db.workNotes || []).map((n) => [esc(n.kind), esc(n.title), esc(n.body).replace(/\n/g, '<br>'), n.done ? 'hecha' : '']), { empty: 'Ninguna.' })}
     `)
   }
 

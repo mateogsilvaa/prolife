@@ -49,7 +49,7 @@ export default function ProjectDetail({ id }) {
         </div>
       </div>
 
-      <div className="grid-3" style={{ marginBottom: 22 }}>
+      <div className="grid-3" style={{ marginBottom: 12 }}>
         <div className="stat">
           <div className="eyebrow">Esta semana</div>
           <div className="value num">{(st.week / 3600).toFixed(1)}<span>h</span></div>

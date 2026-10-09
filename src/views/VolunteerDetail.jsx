@@ -112,7 +112,7 @@ export default function VolunteerDetail({ id }) {
         </div>
       </div>
 
-      <div className="grid-3" style={{ marginBottom: 22 }}>
+      <div className="grid-3" style={{ marginBottom: 12 }}>
         <div className="stat">
           <div className="eyebrow">Horas acreditadas</div>
           <div className="value num">{(st.minutos / 60).toFixed(1)}<span>h</span></div>
@@ -135,7 +135,7 @@ export default function VolunteerDetail({ id }) {
       </div>
 
       {st.sinFoto > 0 && (
-        <div className="notice" style={{ marginBottom: 18 }}>
+        <div className="notice" style={{ marginBottom: 12 }}>
           <Icon name="image" size={13} />
           <span>
             Hay {st.sinFoto} {st.sinFoto === 1 ? 'jornada' : 'jornadas'} sin ninguna foto. Si alguna vez
@@ -145,7 +145,7 @@ export default function VolunteerDetail({ id }) {
       )}
 
       {porAno.length > 1 && (
-        <div className="card" style={{ marginBottom: 18 }}>
+        <div className="card" style={{ marginBottom: 12 }}>
           <div className="card-head"><h3>Por año</h3></div>
           <div className="list">
             {porAno.map(([ano, min]) => (
@@ -172,7 +172,8 @@ export default function VolunteerDetail({ id }) {
             Todavía no has apuntado ninguna. Cada una guarda el día, las horas y las fotos.
           </p>
         ) : (
-          porMes.map(([mes, lista]) => {
+          <div className="scroll-box" style={{ maxHeight: 'calc(100vh - 330px)' }}>
+          {porMes.map(([mes, lista]) => {
             const [y, m] = mes.split('-').map(Number)
             const minutos = lista.reduce((a, d) => a + (Number(d.minutes) || 0), 0)
             return (
@@ -222,7 +223,8 @@ export default function VolunteerDetail({ id }) {
                 })}
               </div>
             )
-          })
+          })}
+          </div>
         )}
       </div>
 

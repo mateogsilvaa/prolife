@@ -53,7 +53,7 @@ export default function Uni() {
       </div>
 
       {hoy.length > 0 && (
-        <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card" style={{ marginBottom: 12 }}>
           <div className="card-head"><h3>Hoy tienes</h3></div>
           <div className="row wrap" style={{ gap: 6 }}>
             {hoy.map(({ subject, slot }, i) => (

@@ -7,6 +7,7 @@ import { canStore, usage, clearAll } from '../lib/offline.js'
 import { classesBetween } from '../lib/stats.js'
 import { today } from '../lib/date.js'
 import { buildReport, reportName } from '../lib/report.js'
+import { GarminSettings } from '../components/Garmin.jsx'
 
 /**
  * Los archivos que se han guardado en ESTE aparato para poder abrirlos sin el
@@ -173,6 +174,8 @@ export default function Settings() {
         {!enDrive && <GoogleCalendar />}
 
         <Categories />
+
+        <GarminSettings />
 
         <div className="card">
           <div className="card-head"><h3>Atletismo</h3></div>

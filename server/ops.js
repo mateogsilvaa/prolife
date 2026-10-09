@@ -412,6 +412,8 @@ const NOMBRES = {
   sessions: ['Tiempo', 'el tramo de tiempo'],
   training: ['Entreno', 'el entreno'],
   injuries: ['Lesión', 'la lesión'],
+  wellness: ['Salud', 'el día de Garmin'],
+  garminActivities: ['Garmin', 'la actividad de Garmin'],
   attendance: ['Asistencia', 'la asistencia'],
   categories: ['Categoría', 'la categoría'],
   volunteering: ['Voluntariado', 'la entidad'],

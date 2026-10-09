@@ -322,6 +322,37 @@ tramo de tiempo. Es un único HTML sin nada de fuera: se guarda en `Informes/` d
 carpeta (así viaja por Drive), se abre en cualquier navegador y desde ahí se imprime a PDF.
 En la tablet se guarda en la misma carpeta de Drive; también hay un botón para descargarlo.
 
+## Salud: el reloj Garmin
+
+**Ajustes → Garmin → Conectar Garmin** abre la página oficial de Garmin Connect en una ventana
+de la app y entras allí, como en cualquier navegador. **prolife no ve ni guarda tu
+contraseña**: solo la sesión, en una partición propia de este ordenador, igual que un
+navegador que recuerda que entraste. A partir de ahí se pone al día sola al abrir la app y
+cada dos horas (el reloj tiene que haber sincronizado antes con la app de Garmin del móvil).
+La primera vez trae los últimos dos meses.
+
+Qué se trae, por día: **sueño** (total, fases, hora de acostarse y de levantarse, puntuación
+si el reloj la da), **pasos** y su objetivo, **pulso en reposo**, estrés medio, **Body
+Battery**, calorías y minutos de intensidad. Y las **actividades** del reloj.
+
+Dónde se ve:
+- **Salud**: medias de 7 y 30 días, la última noche por fases, sueño por noche, pasos por día,
+  la evolución del pulso en reposo, qué día de la semana duermes y te mueves más, y si dormir
+  menos de 7 h te sube el RPE o te trae más molestias.
+- **Hoy**: «Tu cuerpo» (la noche, los pasos, el pulso) y dos avisos: noche de menos de 6 h y
+  pulso en reposo 6 o más por encima de tu base.
+- **Atletismo**: al apuntar un entreno, si el reloj grabó algo ese día sale arriba con un botón
+  **Usar** que pone la duración y los datos (distancia, ritmo, pulso) en las notas. Desde Salud,
+  cada actividad se apunta como entreno con un toque, con el tipo ya propuesto.
+- El **informe completo** lleva la salud día a día.
+
+Por qué así y no con usuario y contraseña: Garmin no tiene API para uso personal, y desde
+marzo de 2026 bloquea los inicios de sesión que no vienen de un navegador real, así que las
+librerías que lo hacían ya no sirven. La app de escritorio *es* un navegador real, y por eso
+la conexión vive en el ordenador. Los datos viajan en el `db.json` como todo lo demás, así que
+la tablet y la web también los ven. Si Garmin cambia su web interna, esto puede romperse: la
+app lo dice en Ajustes y en Salud en vez de quedarse callada.
+
 ## Atletismo
 
 Registro por sesión: si fuiste o no, tipo de entreno, duración, **RPE 1–10**, **CMJ pre y

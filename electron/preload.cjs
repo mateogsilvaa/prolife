@@ -8,4 +8,11 @@ contextBridge.exposeInMainWorld('prolife', {
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   onFocus: (fn) => ipcRenderer.on('win:focus', fn),
   onBlur: (fn) => ipcRenderer.on('win:blur', fn),
+  /** Garmin Connect: se entra en la página oficial de Garmin, en una ventana de la app. */
+  garmin: {
+    estado: () => ipcRenderer.invoke('garmin:estado'),
+    entrar: () => ipcRenderer.invoke('garmin:entrar'),
+    sincronizar: () => ipcRenderer.invoke('garmin:sincronizar'),
+    salir: () => ipcRenderer.invoke('garmin:salir'),
+  },
 })

@@ -26,6 +26,7 @@ import VolunteerDetail from './views/VolunteerDetail.jsx'
 import Calendar from './views/Calendar.jsx'
 import Stats from './views/Stats.jsx'
 import Settings from './views/Settings.jsx'
+import Health from './views/Health.jsx'
 
 function useRoute() {
   const read = () => {
@@ -132,6 +133,7 @@ function Shell() {
   else if (p[0] === 'calendario') view = <Calendar />
   else if (p[0] === 'estadisticas') view = <Stats />
   else if (p[0] === 'ajustes') view = <Settings />
+  else if (p[0] === 'salud') view = <Health />
   else view = <Dashboard />
 
   return (

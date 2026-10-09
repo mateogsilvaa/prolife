@@ -17,6 +17,7 @@ const NAV = [
     { to: '#/uni', icon: 'grad', label: 'Universidad', count: 'subjects' },
     { to: '#/trabajo', icon: 'briefcase', label: 'Trabajo' },
     { to: '#/atletismo', icon: 'dumbbell', label: 'Atletismo', count: 'training' },
+    { to: '#/salud', icon: 'activity', label: 'Salud' },
     { to: '#/voluntariado', icon: 'heart', label: 'Voluntariado' },
   ]},
   { g: 'Registro', items: [

@@ -16,6 +16,8 @@ import {
   attendanceBudget, classOccurrences, termWindow, isDeliverable,
 } from '../lib/stats.js'
 import { activeInjuries, injuryAge, whereLabel, painSummary, loadOf, typeColor } from '../lib/training.js'
+import { healthStats, hasHealth, hrs, clockOf, activitiesOn, activityLine } from '../lib/health.js'
+import { FasesBar } from './Health.jsx'
 
 /**
  * Hoy: lo único que hay que mirar al abrir la app.
@@ -139,6 +141,7 @@ export default function Dashboard() {
             ))}
           </div>
 
+          <Cuerpo />
           <EntrenoHoy onOpen={setTraining} />
           <Semana />
         </div>
@@ -330,6 +333,17 @@ function alerts(db) {
   const sinFoto = (db.volunteerDays || []).filter((d) => !d.photos?.length && daysUntil(d.date) >= -30).length
   if (sinFoto) out.push({ tone: 'warn', icon: 'image', text: <>{sinFoto} {sinFoto === 1 ? 'jornada' : 'jornadas'} de voluntariado sin foto este mes</>, href: '#/voluntariado', w: 6 })
 
+  // Lo que dice el reloj: noche corta y pulso en reposo por encima de lo normal.
+  if (hasHealth(db)) {
+    const h = healthStats(db)
+    if (h.anoche?.seconds && h.anoche.seconds < 6 * 3600) {
+      out.push({ tone: 'warn', icon: 'moon', text: <>Anoche dormiste <b>{hrs(h.anoche.seconds)}</b>: hoy mejor no apretar en el entreno</>, href: '#/salud', w: 2 })
+    }
+    if (h.restHoy && h.restBase && h.restHoy - h.restBase >= 6) {
+      out.push({ tone: 'warn', icon: 'heart', text: <>Pulso en reposo <b>{h.restHoy}</b>, {Math.round(h.restHoy - h.restBase)} por encima de tu base: cansancio o algo que se incuba</>, href: '#/salud', w: 2 })
+    }
+  }
+
   if (!out.length) out.push({ tone: 'ok', icon: 'check', text: 'Todo en orden: nada urgente, ninguna asignatura al límite.', w: 9 })
   return out.sort((a, b) => a.w - b.w)
 }
@@ -362,6 +376,51 @@ function useGcalAviso() {
 }
 
 /* --------------------------------------------------------------- entreno */
+
+/** Lo que dice el reloj de hoy: la noche, los pasos y el pulso en reposo. */
+function Cuerpo() {
+  const { db } = useStore()
+  if (!hasHealth(db)) return null
+  const h = healthStats(db)
+  const s = h.ultimoSueno
+  const pasosPct = h.stepsHoy != null && h.stepGoal ? Math.min(100, (h.stepsHoy / h.stepGoal) * 100) : null
+  return (
+    <div className="card">
+      <div className="card-head"><h3>Tu cuerpo</h3><a className="btn sm ghost" href="#/salud"><Icon name="chevronR" size={12} /></a></div>
+      {s ? (
+        <div style={{ marginBottom: 12 }}>
+          <div className="row" style={{ gap: 8, alignItems: 'baseline', marginBottom: 6 }}>
+            <span className="num" style={{ fontSize: 24 }}>{hrs(s.seconds)}</span>
+            <span className="dim" style={{ fontSize: 12 }}>{h.anoche ? 'anoche' : 'último sueño'} · {clockOf(s.start)}–{clockOf(s.end)}{s.score != null ? ` · ${s.score}/100` : ''}</span>
+          </div>
+          <FasesBar s={s} height={8} />
+        </div>
+      ) : null}
+      <div className="row" style={{ gap: 18 }}>
+        <div>
+          <div className="num" style={{ fontSize: 20 }}>{h.stepsHoy != null ? h.stepsHoy.toLocaleString('es') : '—'}</div>
+          <div className="eyebrow">pasos hoy</div>
+        </div>
+        <div>
+          <div className="num" style={{ fontSize: 20 }}>{h.restHoy ?? '—'}</div>
+          <div className="eyebrow">ppm reposo</div>
+        </div>
+        {h.bbHoy?.high != null && (
+          <div>
+            <div className="num" style={{ fontSize: 20 }}>{h.bbHoy.high}</div>
+            <div className="eyebrow">body battery</div>
+          </div>
+        )}
+      </div>
+      {pasosPct !== null && (
+        <div className="meter" style={{ marginTop: 10 }}><i style={{ width: `${pasosPct}%`, background: pasosPct >= 100 ? 'var(--green)' : 'var(--ink)' }} /></div>
+      )}
+      {activitiesOn(db, today()).map((a) => (
+        <div key={a.id} className="dim" style={{ fontSize: 11.5, marginTop: 8 }}>⌚ {activityLine(a)}</div>
+      ))}
+    </div>
+  )
+}
 
 function EntrenoHoy({ onOpen }) {
   const { db } = useStore()

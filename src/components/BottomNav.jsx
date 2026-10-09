@@ -28,6 +28,7 @@ const FIJOS = [
 const RESTO = [
   { to: '#/trabajo', icon: 'briefcase', label: 'Trabajo' },
   { to: '#/atletismo', icon: 'dumbbell', label: 'Atletismo' },
+  { to: '#/salud', icon: 'activity', label: 'Salud' },
   { to: '#/voluntariado', icon: 'heart', label: 'Voluntariado' },
   { to: '#/estadisticas', icon: 'chart', label: 'Estadísticas' },
   { to: '#/ajustes', icon: 'settings', label: 'Ajustes' },

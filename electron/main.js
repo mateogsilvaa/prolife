@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer } from '../server/app.js'
 import { readConfig } from '../server/config.js'
+import * as garmin from './garmin.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEV_URL = 'http://localhost:5199'
@@ -161,6 +162,12 @@ app.whenReady().then(async () => {
   )
 
   await createWindow()
+
+  // Garmin se pone al día solo: un rato después de abrir y luego cada dos
+  // horas. Es una página que se carga sin enseñarla y dos o tres peticiones.
+  const garminSolo = () => { if (readConfig().garminConectado) garmin.sincronizar(serverPort).catch(() => {}) }
+  setTimeout(garminSolo, 20_000)
+  setInterval(garminSolo, 2 * 3600_000)
 })
 
 app.on('window-all-closed', () => app.quit())
@@ -179,5 +186,14 @@ ipcMain.handle('activity:state', () => ({
   state: powerMonitor.getSystemIdleState(60),
 }))
 
+ipcMain.handle('garmin:estado', () => garmin.estado())
+ipcMain.handle('garmin:entrar', async () => {
+  const r = await garmin.entrar(win)
+  // Nada más entrar se trae todo lo de los últimos dos meses.
+  if (r.ok) garmin.sincronizar(serverPort).catch(() => {})
+  return r
+})
+ipcMain.handle('garmin:sincronizar', () => garmin.sincronizar(serverPort))
+ipcMain.handle('garmin:salir', () => garmin.salir())
 ipcMain.handle('app:info', () => ({ electron: true, port: serverPort, version: app.getVersion() }))
 ipcMain.handle('shell:openExternal', (_e, url) => (/^https?:\/\//i.test(url) ? shell.openExternal(url) : null))

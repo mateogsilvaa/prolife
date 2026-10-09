@@ -9,6 +9,7 @@ import {
   RPE_COLOR, loadOf, typeColor, ZONES, SIDES, PAIN_KINDS, PAIN_WHEN, PAIN_COLOR, newPain,
   kindLabel, whereLabel, allPains, activeInjuries, injuryDays, injuryAge, longDate, painSummary, trainingStats,
 } from '../lib/training.js'
+import { activitiesOn, activityLine, activityNote } from '../lib/health.js'
 
 const blank = (date, types) => ({
   id: uid('tr'), date: date || today(), done: true, type: types?.[0] || 'Rodaje',
@@ -371,6 +372,11 @@ function CalendarTab({ byDate, openDate }) {
                     </div>
                   )}
                   {t && !t.done && <div className="dim cal-extra" style={{ fontSize: 10 }}>descanso</div>}
+                  {!t?.done && activitiesOn(db, c.date).length > 0 && (
+                    <div className="dim cal-extra" style={{ fontSize: 10 }} title="Grabado en el reloj, sin apuntar como entreno">
+                      ⌚ {activitiesOn(db, c.date).map((a) => a.name || a.type).join(', ')}
+                    </div>
+                  )}
                   {(t?.pains || []).length > 0 && (
                     <div className="cal-extra" style={{ fontSize: 10, color: 'var(--accent)' }}>⚠ {(t.pains || []).map((p) => p.zone).join(', ')}</div>
                   )}
@@ -991,6 +997,24 @@ export function TrainingForm({ entry, onClose }) {
               </span>
             </>
           )}
+
+          {/* Lo que grabó el reloj ese día: un toque y pasa la duración y los datos a las notas. */}
+          {activitiesOn(db, t.date).map((a) => {
+            const nota = activityNote(a)
+            const usada = (t.notes || '').includes(nota)
+            return (
+              <div key={a.id} className="notice" style={{ alignItems: 'center' }}>
+                <Icon name="activity" size={13} />
+                <span style={{ fontSize: 12.5, flex: 1 }}>Garmin: {a.name ? `${a.name} · ` : ''}{activityLine(a)}</span>
+                <button className="btn sm" disabled={usada} onClick={() => set({
+                  done: true,
+                  minutes: Math.round((a.seconds || 0) / 60) || t.minutes,
+                  notes: [t.notes, nota].filter(Boolean).join(String.fromCharCode(10)),
+                  garminId: a.id,
+                })}>{usada ? 'Usado' : 'Usar'}</button>
+              </div>
+            )
+          })}
 
           <div className="field">
             <label>Molestias {(t.pains || []).length > 0 && `(${t.pains.length})`}</label>

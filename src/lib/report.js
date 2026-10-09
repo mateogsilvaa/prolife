@@ -5,6 +5,7 @@ import { repeatLabel } from './recurrence.js'
 import { uniStats, timeStats, taskStats, volunteerSummary, gradeOf } from './insights.js'
 import { trainingStats, painSummary, loadOf, allPains, whereLabel, kindLabel, injuryDays, PAIN_WHEN } from './training.js'
 import { kindLabel as examKind } from '../components/ExamEditor.jsx'
+import { healthStats, hasHealth, hrs, clockOf, activityLine } from './health.js'
 
 /**
  * El informe completo: todo lo que hay en la base, legible por una persona.
@@ -254,6 +255,32 @@ export function buildReport(db) {
         esc(x.cmjPre), esc(x.cmjPost), (x.pains || []).map((p) => `${esc(whereLabel(p))} ${p.level}/10`).join('<br>'), esc(x.notes),
       ]), { small: true, empty: 'Ningún entreno.' })}
   `)
+
+  /* ------------------------------------------------------------ salud */
+  if (hasHealth(db)) {
+    const hs = healthStats(db)
+    const dias = Object.values(db.wellness || {}).sort((a, b) => b.date.localeCompare(a.date))
+    sec('salud', 'Salud (Garmin)', `
+      ${cards([
+        ['Sueño medio (7 días)', hrs(hs.sleep7), `30 días: ${hrs(hs.sleep30)}`],
+        ['Pasos medios (7 días)', hs.steps7 != null ? Math.round(hs.steps7).toLocaleString('es') : '—', `30 días: ${hs.steps30 != null ? Math.round(hs.steps30).toLocaleString('es') : '—'}`],
+        ['Pulso en reposo', hs.restHoy ?? '—', hs.restBase ? `base ${Math.round(hs.restBase)}` : ''],
+        ['Horario de sueño', `${hs.bedtime || '—'} → ${hs.wake || '—'}`, 'media de 30 días'],
+      ])}
+      <h3>Día a día</h3>
+      ${table(['Fecha', 'Sueño', 'Profundo', 'Ligero', 'REM', 'Despierto', 'Horario', 'Puntuación', 'Pasos', 'FC reposo', 'Estrés', 'Body Battery', 'kcal'], dias.map((w) => [
+        fecha(w.date), w.sleep ? hrs(w.sleep.seconds) : '', w.sleep?.deep != null ? hrs(w.sleep.deep) : '', w.sleep?.light != null ? hrs(w.sleep.light) : '',
+        w.sleep?.rem != null ? hrs(w.sleep.rem) : '', w.sleep?.awake != null ? hrs(w.sleep.awake) : '',
+        w.sleep?.start ? `${clockOf(w.sleep.start)}–${clockOf(w.sleep.end)}` : '', w.sleep?.score ?? '',
+        w.steps != null ? w.steps.toLocaleString('es') : '', w.restingHr ?? '', w.stress ?? '',
+        w.bbHigh != null ? `${w.bbLow ?? '—'}–${w.bbHigh}` : '', w.kcal ?? '',
+      ]), { small: true })}
+      <h3>Actividades del reloj</h3>
+      ${table(['Fecha', 'Hora', 'Nombre', 'Resumen', 'Efecto aeróbico'], [...(db.garminActivities || [])].sort((a, b) => b.date.localeCompare(a.date)).map((a) => [
+        fecha(a.date), esc(a.start), esc(a.name), esc(activityLine(a)), a.aerobicTE ?? '',
+      ]), { small: true, empty: 'Ninguna.' })}
+    `)
+  }
 
   /* ----------------------------------------------------- voluntariado */
   let vol = cards([

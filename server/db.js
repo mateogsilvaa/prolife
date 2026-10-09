@@ -80,6 +80,13 @@ export const EMPTY_DB = {
    */
   injuries: [],
   /**
+   * Lo que llega del reloj Garmin: un registro por día (pasos, sueño, pulso en
+   * reposo, estrés, Body Battery), indexado por fecha, y las actividades.
+   * Lo escribe la app de escritorio, que es la que puede entrar en Garmin.
+   */
+  wellness: {},
+  garminActivities: [],
+  /**
    * Voluntariado: las entidades con las que colaboras y, aparte, cada jornada
    * que has hecho. Van separados porque lo que hay que justificar son las
    * jornadas —fecha, horas y fotos de ese día—, no la entidad.
@@ -132,7 +139,7 @@ function migrate(raw) {
     db.categories.push({ id: 'cat-volunteer', name: 'Voluntariado', color: '#7a5c9e', area: 'volunteer' })
   }
 
-  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'injuries', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
+  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'injuries', 'garminActivities', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
     if (!Array.isArray(db[key])) db[key] = []
   }
 
@@ -174,6 +181,7 @@ function migrate(raw) {
   }))
 
   if (!db.workspaces || typeof db.workspaces !== 'object' || Array.isArray(db.workspaces)) db.workspaces = {}
+  if (!db.wellness || typeof db.wellness !== 'object' || Array.isArray(db.wellness)) db.wellness = {}
 
   // Nunca hacia abajo: si el fichero es de una versión más nueva, se respeta su
   // número. Rebajarlo haría que la próxima app moderna reaplicase migraciones

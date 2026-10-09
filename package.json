@@ -1,7 +1,7 @@
 {
   "name": "prolife",
   "private": true,
-  "version": "2.1.1",
+  "version": "2.2.0",
   "type": "module",
   "main": "electron/main.js",
   "description": "Gestor personal: universidad, RFEA, atletismo y vida. App de escritorio local.",

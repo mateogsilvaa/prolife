@@ -162,7 +162,7 @@ export default function Health() {
           <div className="eyebrow">Estrés · Body Battery</div>
           <div className="value num">{st.stress7 != null ? Math.round(st.stress7) : '—'}<span>estrés</span></div>
           <div className="delta dim">
-            {st.bbHoy?.high != null ? `Body Battery hoy: ${st.bbHoy.low ?? '—'} → ${st.bbHoy.high}` : 'media de 7 días (0–100)'}
+            {st.bbHoy?.high != null ? `Body Battery hoy: ${st.bbHoy.high} → ${st.bbHoy.low ?? '—'}` : 'media de 7 días (0–100)'}
           </div>
         </div>
       </div>

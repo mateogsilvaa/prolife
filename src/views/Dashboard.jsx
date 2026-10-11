@@ -90,53 +90,50 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="hoy-grid">
-        <div className="stack">
-          <div className="card">
-            <div className="card-head">
-              <h3>Agenda de hoy</h3>
-              <a className="btn sm ghost" href="#/calendario">Calendario <Icon name="chevronR" size={12} /></a>
-            </div>
+      {/* Fila 1: lo del día, las tres a la misma altura. */}
+      <div className="fila fila-3 fila-alta" style={{ '--resto': '545px' }}>
+        <div className="card">
+          <div className="card-head">
+            <h3>Agenda de hoy</h3>
+            <a className="btn sm ghost" href="#/calendario">Calendario <Icon name="chevronR" size={12} /></a>
+          </div>
+          <div className="fill">
             <Agenda items={agendaHoy} date={hoy} onOpen={openItem} empty="Nada en la agenda. Día libre." />
             {agendaManana.length > 0 && (
               <>
-                <div className="eyebrow" style={{ margin: '16px 0 4px' }}>Mañana · {DAYS_LONG[(now.getDay()) % 7].toLowerCase()}</div>
+                <div className="eyebrow" style={{ margin: '14px 0 4px' }}>Mañana · {DAYS_LONG[(now.getDay()) % 7].toLowerCase()}</div>
                 <Agenda items={agendaManana} date={manana} onOpen={openItem} compact />
               </>
             )}
           </div>
-          <Cuerpo />
         </div>
 
-        <div className="stack">
-          {(tareasHoy.length > 0 || entregas.length > 0 || tareasPronto.length > 0) && (
-            <div className="card">
-              <div className="card-head">
-                <h3>Por hacer</h3>
-                <a className="btn sm ghost" href="#/tareas">Todas <Icon name="chevronR" size={12} /></a>
-              </div>
-              {entregas.length > 0 && <DeliverableList items={entregas} />}
-              {tareasHoy.length > 0 && <TaskList tasks={tareasHoy} />}
-              {tareasPronto.length > 0 && (
-                <>
-                  <div className="eyebrow" style={{ margin: '12px 0 2px' }}>Esta semana</div>
-                  <TaskList tasks={tareasPronto} />
-                </>
-              )}
-            </div>
-          )}
-
-          <Seguir />
-          <Semana />
+        <div className="card">
+          <div className="card-head">
+            <h3>Por hacer</h3>
+            <a className="btn sm ghost" href="#/tareas">Todas <Icon name="chevronR" size={12} /></a>
+          </div>
+          <div className="fill">
+            {entregas.length > 0 && <DeliverableList items={entregas} />}
+            {tareasHoy.length > 0 && <TaskList tasks={tareasHoy} />}
+            {tareasPronto.length > 0 && (
+              <>
+                <div className="eyebrow" style={{ margin: '12px 0 2px' }}>Esta semana</div>
+                <TaskList tasks={tareasPronto} />
+              </>
+            )}
+            {!entregas.length && !tareasHoy.length && !tareasPronto.length && (
+              <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Nada que venza esta semana.</p>
+            )}
+          </div>
         </div>
 
-        <div className="stack hoy-col-3">
-          <div className="card">
-            <div className="card-head">
-              <h3>Ojo con esto</h3>
-              <span className="badge">{avisos.filter((a) => a.tone !== 'ok').length}</span>
-            </div>
-            <div className="scroll-box" style={{ maxHeight: 'calc(100vh - 420px)' }}>
+        <div className="card">
+          <div className="card-head">
+            <h3>Ojo con esto</h3>
+            <span className="badge">{avisos.filter((a) => a.tone !== 'ok').length}</span>
+          </div>
+          <div className="fill">
             {avisos.map((a, i) => (
               <div key={i} className={`alerta ${a.tone}`}>
                 <span className="ico"><Icon name={a.icon} size={13} /></span>
@@ -144,10 +141,16 @@ export default function Dashboard() {
                 {a.href && <a className="btn sm ghost" href={a.href}><Icon name="chevronR" size={12} /></a>}
               </div>
             ))}
-            </div>
           </div>
-          <EntrenoHoy onOpen={setTraining} />
         </div>
+      </div>
+
+      {/* Fila 2: el cuerpo y la semana, cuatro cajas iguales. */}
+      <div className="fila fila-auto">
+        <Cuerpo />
+        <EntrenoHoy onOpen={setTraining} />
+        <Semana />
+        <Seguir />
       </div>
 
       {adding && <TaskEditor task={adding} onClose={() => setAdding(null)} />}
@@ -418,10 +421,10 @@ function Cuerpo() {
           <div className="num" style={{ fontSize: 20 }}>{h.restHoy ?? '—'}</div>
           <div className="eyebrow">ppm reposo</div>
         </div>
-        {h.bbHoy?.high != null && (
+        {h.bbHoy?.wake != null && (
           <div>
-            <div className="num" style={{ fontSize: 20 }}>{h.bbHoy.high}</div>
-            <div className="eyebrow">body battery</div>
+            <div className="num" style={{ fontSize: 20 }}>{h.bbHoy.wake}</div>
+            <div className="eyebrow">B. Battery al despertar</div>
           </div>
         )}
       </div>
@@ -553,8 +556,7 @@ function Seguir() {
   return (
     <div className="card">
       <div className="card-head">
-        <h3>Seguir con lo de siempre</h3>
-        <span className="dim" style={{ fontSize: 11.5 }}>empieza a contar con un toque</span>
+        <h3>Seguir trabajando</h3>
       </div>
       <div className="stack" style={{ gap: 5 }}>
         {items.map((r) => (

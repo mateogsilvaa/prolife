@@ -49,12 +49,9 @@ export default function WorkHub() {
           <div className="eyebrow">Trabajo{db.settings.orgName ? ` · ${db.settings.orgName}` : ''}</div>
           <h2>Trabajo</h2>
         </div>
-        <button className="btn" onClick={() => setProyecto(emptyProject(db.projects.length, db.settings.orgName))}>
-          <Icon name="plus" size={13} /> Proyecto
-        </button>
       </div>
 
-      <div className="grid-4" style={{ marginBottom: 12 }}>
+      <div className="fila fila-4">
         <div className="stat">
           <div className="eyebrow">Diario esta semana</div>
           <div className="row" style={{ gap: 4, marginTop: 6 }}>
@@ -84,16 +81,12 @@ export default function WorkHub() {
         </div>
       </div>
 
-      <div className="hoy-grid">
+      <div className="fila fila-3 fila-alta" style={{ '--resto': '420px' }}>
         <Diario />
-        <div className="stack">
-          <Metas />
-          <Proyectos onEdit={setProyecto} />
-        </div>
-        <div className="stack hoy-col-3">
-          <Notas />
-        </div>
+        <Metas />
+        <Notas />
       </div>
+      <Proyectos onEdit={setProyecto} />
 
       {proyecto && <ProjectForm project={proyecto} onClose={() => setProyecto(null)} />}
     </>
@@ -152,7 +145,7 @@ function Diario() {
         <button className="btn sm primary" disabled={!texto.trim()} onClick={guardar}>Apuntar <span className="kbd">Ctrl ↵</span></button>
       </div>
 
-      <div className="scroll-box" style={{ maxHeight: '52vh', marginTop: 10 }}>
+      <div className="scroll-box" style={{ maxHeight: '52vh', marginTop: 12 }}>
         {porDia.length ? porDia.map(([d, entradas]) => (
           <div key={d} className="log-day">
             <div>
@@ -225,7 +218,7 @@ function Metas() {
         </div>
       </div>
       {metas.length ? (
-        <div className="stack scroll-box" style={{ gap: 10, maxHeight: 300 }}>
+        <div className="stack scroll-box" style={{ gap: 12, maxHeight: 300 }}>
           {metas.map((m) => {
             const total = m.milestones.length
             const hechos = m.milestones.filter((h) => h.done).length
@@ -372,7 +365,7 @@ function Notas() {
         value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) guardar() }} />
       <button className="btn sm" style={{ marginTop: 6 }} disabled={!texto.trim()} onClick={guardar}><Icon name="plus" size={11} /> Guardar</button>
 
-      <div className="stack scroll-box" style={{ gap: 8, marginTop: 10, maxHeight: '50vh' }}>
+      <div className="stack scroll-box" style={{ gap: 8, marginTop: 12, maxHeight: '50vh' }}>
         {notas.map((n) => (
           <div key={n.id} className={`note-card ${n.kind}`} style={{ opacity: n.done ? 0.5 : 1 }}>
             <div className="row" style={{ gap: 6 }}>
@@ -416,21 +409,22 @@ function Notas() {
 function Proyectos({ onEdit }) {
   const { db } = useStore()
   return (
-    <div className="card">
-      <div className="card-head"><h3>Proyectos</h3><button className="btn sm" onClick={() => onEdit(emptyProject(db.projects.length, db.settings.orgName))}><Icon name="plus" size={12} /></button></div>
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-head"><h3>Proyectos</h3><button className="btn sm" onClick={() => onEdit(emptyProject(db.projects.length, db.settings.orgName))}><Icon name="plus" size={12} /> Proyecto</button></div>
       {db.projects.length ? (
-        <div className="list">
+        <div className="fila fila-auto" style={{ margin: 0 }}>
           {db.projects.map((p) => {
             const st = projectStats(db, p.id)
             const ultima = [...(db.workLog || [])].filter((e) => e.projectId === p.id).sort((a, b) => b.date.localeCompare(a.date))[0]
             return (
-              <a key={p.id} className="list-row click" href={`#/trabajo/${p.id}`} style={{ textDecoration: 'none' }}>
-                <span className="dot" style={{ background: p.color }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13 }}>{p.name}</div>
-                  <div className="dim" style={{ fontSize: 11 }}>{ultima ? `diario: ${fmtDate(ultima.date)}` : p.org || '—'}{st.open.length ? ` · ${st.open.length} pendientes` : ''}</div>
+              <a key={p.id} className="note-card" href={`#/trabajo/${p.id}`} style={{ textDecoration: 'none', borderLeft: `3px solid ${p.color}` }}>
+                <strong style={{ fontSize: 13 }}>{p.name}</strong>
+                <span className="dim" style={{ fontSize: 11.5 }}>{p.org || '—'}</span>
+                <div className="row" style={{ gap: 12, fontSize: 11.5 }}>
+                  <span className="mono">{dur(st.week)} esta semana</span>
+                  {st.open.length > 0 && <span className="badge hot">{st.open.length} pendientes</span>}
                 </div>
-                <span className="mono dim" style={{ fontSize: 11 }}>{dur(st.week)}</span>
+                <span className="dim" style={{ fontSize: 11 }}>{ultima ? `último apunte: ${fmtDate(ultima.date)}` : 'sin apuntes en el diario'}</span>
               </a>
             )
           })}

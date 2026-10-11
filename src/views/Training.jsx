@@ -9,7 +9,7 @@ import {
   RPE_COLOR, loadOf, typeColor, ZONES, SIDES, PAIN_KINDS, PAIN_WHEN, PAIN_COLOR, newPain,
   kindLabel, whereLabel, allPains, activeInjuries, injuryDays, injuryAge, longDate, painSummary, trainingStats,
 } from '../lib/training.js'
-import { activitiesOn, activityLine, activityNote, wellnessOn, healthStats, hrs } from '../lib/health.js'
+import { activitiesOn, activityLine, activityNote, wellnessOn, healthStats, hrs, bbDe } from '../lib/health.js'
 import { GymLog, TrackLog, GymTab, TrackTab } from '../components/Gym.jsx'
 import { isGymType, isTrackType, gymVolume, repsSummary, gymPRs, trackPRs, fmtTime, paceOf } from '../lib/gym.js'
 
@@ -220,7 +220,7 @@ function WeekTab({ byDate, onOpen, openDate }) {
         </div>
       </div>
 
-      <div className="hoy-grid">
+      <div className="fila fila-3">
         <div className="card">
           <div className="card-head"><h3>Carga por semana</h3><span className="dim mono" style={{ fontSize: 11 }}>últimas 8</span></div>
           <div className="bars" style={{ height: 130 }}>
@@ -281,7 +281,7 @@ function WeekTab({ byDate, onOpen, openDate }) {
           )}
         </div>
 
-      <div className="card hoy-col-3">
+      <div className="card">
         <div className="card-head"><h3>Últimos entrenos</h3></div>
         {db.training.length ? (
           <div className="list scroll-box" style={{ maxHeight: 300 }}>
@@ -1150,7 +1150,8 @@ function contexto(db, date) {
   const partes = []
   if (w.sleep?.seconds) partes.push(`Anoche ${hrs(w.sleep.seconds)}`)
   if (w.restingHr) partes.push(`FC reposo ${w.restingHr}${base ? ` (${w.restingHr - Math.round(base) >= 0 ? '+' : ''}${w.restingHr - Math.round(base)})` : ''}`)
-  if (w.bbHigh != null) partes.push(`Body Battery ${w.bbHigh}`)
+  const bb = bbDe(w)
+  if (bb?.wake != null) partes.push(`Body Battery al despertar ${bb.wake}`)
   return partes.join(' · ') || undefined
 }
 

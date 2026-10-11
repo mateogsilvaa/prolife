@@ -274,7 +274,7 @@ export function buildReport(db) {
         w.sleep?.rem != null ? hrs(w.sleep.rem) : '', w.sleep?.awake != null ? hrs(w.sleep.awake) : '',
         w.sleep?.start ? `${clockOf(w.sleep.start)}–${clockOf(w.sleep.end)}` : '', w.sleep?.score ?? '',
         w.steps != null ? w.steps.toLocaleString('es') : '', w.restingHr ?? '', w.stress ?? '',
-        w.bbHigh != null ? `${w.bbLow ?? '—'}–${w.bbHigh}` : '', w.kcal ?? '',
+        w.bbWake != null || w.bbHigh != null ? `${w.bbWake ?? w.bbHigh} al despertar (${w.bbLow ?? '—'}–${w.bbHigh ?? '—'})` : '', w.kcal ?? '',
       ]), { small: true })}
       <h3>Actividades del reloj</h3>
       ${table(['Fecha', 'Hora', 'Nombre', 'Resumen', 'Efecto aeróbico'], [...(db.garminActivities || [])].sort((a, b) => b.date.localeCompare(a.date)).map((a) => [

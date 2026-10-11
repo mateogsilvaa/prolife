@@ -391,9 +391,9 @@ export function GymTab({ onOpenTraining }) {
         <div className="stat"><div className="eyebrow">Lo que más te saltas</div><div className="value num" style={{ fontSize: 18 }}>{masSaltados[0]?.[0] || '—'}</div><div className="delta dim">{masSaltados[0] ? `${masSaltados[0][1]} veces en las últimas 20` : 'nada'}</div></div>
       </div>
 
-      <div className="split wide-left">
+      <div className="fila fila-3 fila-alta" style={{ '--resto': '360px' }}>
         <div className="card">
-          <div className="card-head"><h3>Marcas personales</h3><span className="dim" style={{ fontSize: 11.5 }}>1RM estimado con Epley · sin calentamientos</span></div>
+          <div className="card-head"><h3>Marcas personales</h3><span className="dim" style={{ fontSize: 11.5 }}>1RM estimado</span></div>
           {prs.length ? (
             <div className="table-wrap scroll-box">
               <table className="tabla">
@@ -415,11 +415,10 @@ export function GymTab({ onOpenTraining }) {
           ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Cuando apuntes sesiones con pesos, aquí saldrán tus marcas y cómo progresan.</p>}
         </div>
 
-        <div className="stack">
           <div className="card">
             <div className="card-head"><h3>Rutinas</h3></div>
             {(db.routines || []).length ? (
-              <div className="list">
+              <div className="list fill">
                 {db.routines.map((r) => (
                   <div key={r.id} className="list-row click" onClick={() => setEditar(r)}>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -439,7 +438,7 @@ export function GymTab({ onOpenTraining }) {
           <div className="card">
             <div className="card-head"><h3>Últimas sesiones</h3></div>
             {sesiones.length ? (
-              <div className="list scroll-box" style={{ maxHeight: 240 }}>
+              <div className="list scroll-box">
                 {sesiones.slice(0, 15).map((t) => {
                   const r = (db.routines || []).find((x) => x.id === t.gym.routineId)
                   const d = r?.days.find((x) => x.id === t.gym.dayId)
@@ -456,7 +455,6 @@ export function GymTab({ onOpenTraining }) {
               </div>
             ) : <p className="dim" style={{ margin: 0, fontSize: 12.5 }}>Nada todavía.</p>}
           </div>
-        </div>
       </div>
 
       {editar && <RoutineEditor routine={editar} onClose={() => setEditar(null)} />}

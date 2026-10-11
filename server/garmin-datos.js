@@ -37,6 +37,8 @@ export function resumirDia(fecha, resumen, sueno) {
     stress: num(r.averageStressLevel) >= 0 ? num(r.averageStressLevel) : null,
     maxStress: num(r.maxStressLevel) >= 0 ? num(r.maxStressLevel) : null,
     bbHigh: num(r.bodyBatteryHighestValue),
+    bbWake: num(r.bodyBatteryAtWakeTime),
+    bbNow: num(r.bodyBatteryMostRecentValue),
     bbLow: num(r.bodyBatteryLowestValue),
     bbCharged: num(r.bodyBatteryChargedValue),
     bbDrained: num(r.bodyBatteryDrainedValue),

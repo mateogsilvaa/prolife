@@ -43,11 +43,20 @@ const DIAS_INICIALES = 60
  * usuario de este ordenador puede leerlas.
  */
 const archivoSesion = () => path.join(app.getPath('userData'), 'garmin-sesion.bin')
+
+/**
+ * Las cookies de Cloudflare (el «verifica que eres humano») NO se guardan:
+ * van atadas a ese navegador en ese momento y caducan en minutos. Guardarlas y
+ * volver a ponerlas con una caducidad inventada hacía que Cloudflare las diera
+ * por falsas y dejara la verificación dando vueltas sin dejar entrar.
+ */
+const DE_CLOUDFLARE = /^(__cf_bm|cf_clearance|_cfuvid|__cflb|cf_chl.*|__cfruid|__cfwaitingroom)$/i
+const esDeGarmin = (c) => /garmin/i.test(c.domain || '') && !DE_CLOUDFLARE.test(c.name || '')
 let restaurada = null
 
 export async function guardarSesion() {
   try {
-    const cookies = (await sesion().cookies.get({})).filter((c) => /garmin/i.test(c.domain || ''))
+    const cookies = (await sesion().cookies.get({})).filter(esDeGarmin)
     if (!cookies.length) return
     const json = JSON.stringify(cookies)
     const datos = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(json) : Buffer.from(json, 'utf8')
@@ -71,7 +80,7 @@ export function restaurarSesion() {
     }
     const s = sesion()
     const dentroDe30 = Date.now() / 1000 + 30 * 86400
-    for (const c of cookies) {
+    for (const c of cookies.filter(esDeGarmin)) {
       try {
         const host = String(c.domain || '').replace(/^\./, '')
         await s.cookies.set({
@@ -128,7 +137,7 @@ const enLaApp = (url) => /^https:\/\/connect\.garmin\.com\/(app|modern)\//.test(
 export function entrar(padre) {
   return new Promise((resolve) => {
     const w = new BrowserWindow({
-      width: 520, height: 780, parent: padre || undefined, title: 'Entrar en Garmin Connect',
+      width: 560, height: 820, parent: padre || undefined, title: 'Entrar en Garmin Connect',
       autoHideMenuBar: true, backgroundColor: '#ffffff',
       webPreferences: { session: sesion(), contextIsolation: true, nodeIntegration: false },
     })
@@ -149,16 +158,25 @@ export function entrar(padre) {
       clearInterval(mirar)
       resolve({ ok: listo })
     })
-    // Con la sesión guardada puesta, si sigue valiendo, entra directo sin pedir nada.
-    restaurarSesion().finally(() => w.loadURL(APP).catch(() => {}))
+    // Entrar es empezar de cero: sin cookies viejas de nada —ni de Garmin ni
+    // de Cloudflare— que puedan atascar la verificación. Exactamente como la
+    // primera vez.
+    limpiar().finally(() => w.loadURL(APP).catch(() => {}))
   })
 }
 
 /** Olvida la sesión de Garmin de este ordenador. Los datos ya traídos se quedan. */
-export async function salir() {
-  await sesion().clearStorageData()
+/** Borra todo lo de Garmin de este ordenador: cookies, caché y la sesión guardada. */
+async function limpiar() {
+  const s = sesion()
+  await s.clearStorageData().catch(() => {})
+  await s.clearCache().catch(() => {})
   try { fs.rmSync(archivoSesion(), { force: true }) } catch { /* no estaba */ }
-  restaurada = null
+  restaurada = Promise.resolve(false)
+}
+
+export async function salir() {
+  await limpiar()
   writeConfig({ garminConectado: false })
 }
 
@@ -214,7 +232,13 @@ async function hacerSincronizacion(puerto) {
       csrf = await leerCsrf(w.webContents)
       if (!csrf) await espera(750)
     }
-    if (!csrf) return fallo('La sesión de Garmin ha caducado: vuelve a entrar desde Ajustes.', true)
+    if (!csrf) {
+      const titulo = (w.webContents.getTitle() || '').toLowerCase()
+      const verificacion = /momento|moment|verific|humano|human|attention/.test(titulo) || /challenge|cdn-cgi/.test(w.webContents.getURL())
+      return fallo(verificacion
+        ? 'Garmin pide verificar que eres humano: pulsa «Conectar Garmin» en Ajustes y entra otra vez.'
+        : 'La sesión de Garmin ha caducado: vuelve a entrar desde Ajustes.', true)
+    }
 
     const datos = await w.webContents.executeJavaScript(SCRIPT(fechas))
     if (datos?.sinSesion) return fallo('La sesión de Garmin ha caducado: vuelve a entrar desde Ajustes.', true)

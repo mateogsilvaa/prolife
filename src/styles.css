@@ -1220,21 +1220,21 @@ a { color: inherit; text-decoration: none; }
    recorta el aire vertical, que es lo que obligaba a hacer scroll para ver
    lo segundo de cada pantalla. En el móvil manda lo de arriba. */
 @media (min-width: 900px) {
-  .view { padding: 18px 26px 36px; }
+  .view { padding: 26px 34px 40px; }
   .view-narrow { max-width: 1440px; }
-  .page-head { margin-bottom: 14px; align-items: center; }
-  .page-head h2 { font-size: 30px; }
-  .page-head p { margin-top: 2px; font-size: 13px; }
-  .card { padding: 14px 16px; }
-  .card-head { margin-bottom: 10px; }
-  .stat { padding: 11px 14px; }
-  .stat .value { font-size: 30px; }
-  .stat .delta { margin-top: 5px; }
-  .stack { gap: 12px; }
-  .grid-3, .grid-4 { gap: 10px; }
-  .split { gap: 12px; }
-  .tabs { margin-bottom: 14px; }
-  .list-row { padding-top: 6px; padding-bottom: 6px; }
+  .page-head { margin-bottom: 18px; align-items: flex-end; }
+  .page-head h2 { font-size: 34px; }
+  .page-head p { margin-top: 4px; font-size: 13.5px; }
+  .card { padding: 16px 18px; }
+  .card-head { margin-bottom: 12px; min-height: 26px; }
+  .stat { padding: 14px 16px; }
+  .stat .value { font-size: 32px; }
+  .stat .delta { margin-top: 6px; }
+  .stack { gap: 16px; }
+  .grid-3, .grid-4 { gap: 16px; }
+  .split { gap: 16px; }
+  .tabs { margin-bottom: 16px; }
+  .list-row { padding-top: 8px; padding-bottom: 8px; }
 }
 
 /* Hoy en tres columnas cuando cabe: agenda · lo que hay que hacer · el resto. */
@@ -1287,3 +1287,50 @@ a { color: inherit; text-decoration: none; }
   .readiness .mono { width: auto !important; }
 }
 @media (max-width: 640px) { .table-wrap.scroll-box { overflow-x: auto; } .view .tabs { max-width: 100%; } }
+
+
+/* ======================================================== filas alineadas ==
+   La regla de toda la app: las cajas van en filas, y las de una misma fila
+   empiezan y acaban a la misma altura, con el mismo hueco entre todas. Nada
+   de columnas de cajas apiladas que acaban cada una donde le da la gana: lo
+   que no cabe se desplaza dentro de su caja. */
+:root { --hueco: 16px; }
+.split, .hoy-grid { align-items: stretch; }
+.split > .card, .hoy-grid > .card { display: flex; flex-direction: column; }
+.grid-3, .grid-4 { align-items: stretch; }
+
+.fila { display: grid; gap: var(--hueco); align-items: stretch; margin-bottom: var(--hueco); }
+.fila:last-child { margin-bottom: 0; }
+.fila-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fila-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fila-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.fila-21 { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.fila-12 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+.fila-auto { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.fila > * { min-width: 0; }
+.fila > .card { display: flex; flex-direction: column; min-height: 0; }
+.fila > .card > .fill { flex: 1; min-height: 0; }
+
+/* Una fila «alta» tiene la altura que deja la pantalla: las listas largas se
+   desplazan dentro y la página no crece. */
+@media (min-width: 861px) {
+  .fila-alta { height: clamp(320px, calc(100vh - var(--resto, 330px)), 640px); }
+  .fila-alta > .card { overflow: hidden; }
+  .fila-alta > .card > .fill,
+  .fila-alta > .card > .scroll-box { flex: 1; min-height: 0; max-height: none !important; overflow-y: auto; margin-right: -8px; padding-right: 8px; }
+}
+@media (max-width: 1100px) and (min-width: 861px) {
+  .fila-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fila-3.fila-alta { height: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fila-3.fila-alta > .card { max-height: 460px; }
+}
+@media (max-width: 860px) {
+  .fila-2, .fila-3, .fila-4, .fila-21, .fila-12 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Ajustes: una sola columna centrada. Son tarjetas de alturas muy distintas y
+   en dos columnas quedaban a destiempo. */
+.ajustes-cols { display: flex !important; flex-direction: column; gap: var(--hueco); max-width: 880px; margin: 0 auto; columns: auto !important; }
+.ajustes-cols > * { margin-bottom: 0 !important; }
+.tabla td.dim:first-child, .tabla .r { white-space: nowrap; }
+@media (min-width: 641px) { .train-day { aspect-ratio: auto; min-height: 0; height: 74px; padding: 6px 4px; gap: 2px; } }

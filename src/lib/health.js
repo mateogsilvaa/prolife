@@ -91,7 +91,8 @@ export function healthStats(db) {
     stepsHoy: hoy?.steps ?? null, stepGoal: hoy?.stepGoal ?? [...d7].reverse().find((x) => x.w?.stepGoal)?.w?.stepGoal ?? null,
     rest7: media(reposo(d7)), restBase: baseRep, restHoy: repHoy,
     stress7: media(estres(d7)),
-    bbHoy: hoy ? { high: hoy.bbHigh, low: hoy.bbLow } : null,
+    bbHoy: hoy ? bbDe(hoy) : null,
+    stressHoy: hoy?.stress ?? null,
     bedtime: acostarse.length ? deMinutosDesdeTarde(media(acostarse)) : null,
     wake: levantarse.length ? deMinutosDesdeTarde(media(levantarse)) : null,
     shortNights: sueno(d30).filter((s) => s < 6.5 * 3600).length,
@@ -198,7 +199,8 @@ export function readiness(db, date = today()) {
     const d = w.restingHr - h.restBase
     partes.push({ k: 'Pulso en reposo', v: recorta(100 - Math.max(0, d) * 10), txt: `${w.restingHr} ppm (${d >= 0 ? '+' : ''}${Math.round(d)})` })
   }
-  if (w?.bbHigh != null) partes.push({ k: 'Body Battery', v: recorta(w.bbHigh), txt: `${w.bbHigh}` })
+  const bb = w ? bbDe(w) : null
+  if (bb?.wake != null) partes.push({ k: 'Body Battery', v: recorta(bb.wake), txt: `${bb.wake} al despertar` })
 
   // Carga: últimos 7 días frente a la media semanal de los 28 anteriores.
   const carga = (desde, hasta) => (db.training || []).filter((t) => t.done && t.date >= desde && t.date <= hasta)
@@ -243,4 +245,16 @@ export function rpeBySleep(db) {
     if ((t.pains || []).length) tr.dolor++
   }
   return tramos.map((x) => ({ k: x.k, n: x.n, rpe: x.rpe.length ? x.rpe.reduce((a, b) => a + b, 0) / x.rpe.length : null, dolor: x.n ? x.dolor / x.n : null }))
+}
+
+/**
+ * La Body Battery de un día. Lo que dice cómo has recargado es el valor al
+ * despertar; si Garmin no lo da (datos antiguos), el máximo del día, que suele
+ * ser justo ese. «Ahora» es la última lectura.
+ */
+export function bbDe(w) {
+  if (!w) return null
+  const wake = w.bbWake ?? w.bbHigh ?? null
+  if (wake == null && w.bbNow == null) return null
+  return { wake, now: w.bbNow ?? null, high: w.bbHigh ?? null, low: w.bbLow ?? null, charged: w.bbCharged ?? null, drained: w.bbDrained ?? null }
 }

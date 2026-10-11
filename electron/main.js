@@ -165,9 +165,21 @@ app.whenReady().then(async () => {
 
   // Garmin se pone al día solo: un rato después de abrir y luego cada dos
   // horas. Es una página que se carga sin enseñarla y dos o tres peticiones.
-  const garminSolo = () => { if (readConfig().garminConectado) garmin.sincronizar(serverPort).catch(() => {}) }
+  const garminSolo = () => {
+    if (readConfig().garminConectado || garmin.haySesionGuardada()) garmin.sincronizar(serverPort).catch(() => {})
+  }
+  garmin.restaurarSesion().catch(() => {})
   setTimeout(garminSolo, 20_000)
   setInterval(garminSolo, 2 * 3600_000)
+})
+
+// Antes de cerrar, la sesión de Garmin al disco: si no, se pierde con el programa.
+let garminGuardado = false
+app.on('before-quit', (e) => {
+  if (garminGuardado) return
+  e.preventDefault()
+  garminGuardado = true
+  garmin.guardarSesion().finally(() => app.quit())
 })
 
 app.on('window-all-closed', () => app.quit())

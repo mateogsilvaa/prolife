@@ -1,7 +1,7 @@
 {
   "name": "prolife",
   "private": true,
-  "version": "2.4.0",
+  "version": "2.4.1",
   "type": "module",
   "main": "electron/main.js",
   "description": "Gestor personal: universidad, RFEA, atletismo y vida. App de escritorio local.",
@@ -45,7 +45,7 @@
     "@capacitor/cli": "^8.5.1",
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^8.2.2",
-    "electron": "^33.0.0",
+    "electron": "44.4.5",
     "electron-builder": "^25.1.8",
     "vite": "^5.4.0"
   },

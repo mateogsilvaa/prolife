@@ -352,6 +352,12 @@ Dónde se ve:
   cada actividad se apunta como entreno con un toque, con el tipo ya propuesto.
 - El **informe completo** lleva la salud día a día.
 
+**Si se queda en «Verificación de seguridad en curso»** (Cloudflare): desde octubre de 2026
+Garmin no deja pasar esa verificación a navegadores antiguos, y la app iba con Electron 33
+(Chromium 130). Desde la 2.4.1 va con Electron 44 (Chromium 152), que la pasa sin más. Además,
+«Conectar Garmin» empieza siempre de cero y las cookies de Cloudflare no se guardan nunca: van
+atadas a ese momento y, guardadas, atascaban la verificación.
+
 Por qué así y no con usuario y contraseña: Garmin no tiene API para uso personal, y desde
 marzo de 2026 bloquea los inicios de sesión que no vienen de un navegador real, así que las
 librerías que lo hacían ya no sirven. La app de escritorio *es* un navegador real, y por eso

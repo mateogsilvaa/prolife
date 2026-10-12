@@ -418,6 +418,8 @@ const NOMBRES = {
   workLog: ['Diario', 'la entrada del diario'],
   workGoals: ['Meta', 'la meta'],
   workNotes: ['Nota', 'la nota'],
+  competitions: ['Competición', 'la competición'],
+  pushSubs: ['Avisos', 'el aparato'],
   attendance: ['Asistencia', 'la asistencia'],
   categories: ['Categoría', 'la categoría'],
   volunteering: ['Voluntariado', 'la entidad'],

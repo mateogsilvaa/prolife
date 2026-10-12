@@ -1,3 +1,4 @@
+import { abrirProyectoEnTrabajo } from '../components/WorkHub.jsx'
 import React, { useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import TaskList from '../components/TaskList.jsx'
@@ -41,6 +42,9 @@ export default function ProjectDetail({ id }) {
           <h2>{p.name}</h2>
         </div>
         <div className="row">
+          <button className="btn primary" onClick={() => abrirProyectoEnTrabajo(p.id)}>
+            <Icon name="briefcase" size={13} /> Metas, ideas y diario
+          </button>
           <LogTime area="work" refId={p.id} label={p.name} />
           <button className="btn" onClick={() => api.openInCode(p.folder).then(() => toast('Abriendo VS Code…')).catch((e) => toast(e.message, 'err'))}>
             <Icon name="code" size={13} /> VS Code

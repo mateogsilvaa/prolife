@@ -8,6 +8,7 @@ import { classesBetween } from '../lib/stats.js'
 import { today } from '../lib/date.js'
 import { buildReport, reportName } from '../lib/report.js'
 import { GarminSettings } from '../components/Garmin.jsx'
+import { AvisosSettings } from '../components/Avisos.jsx'
 
 /**
  * Los archivos que se han guardado en ESTE aparato para poder abrirlos sin el
@@ -175,6 +176,7 @@ export default function Settings() {
 
         <Categories />
 
+        <AvisosSettings />
         <GarminSettings />
 
         <div className="card">

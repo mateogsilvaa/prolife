@@ -1,4 +1,4 @@
-import { app, BrowserWindow, powerMonitor, ipcMain, shell, Menu, dialog, session } from 'electron'
+import { app, BrowserWindow, powerMonitor, ipcMain, shell, Menu, dialog, session, Notification } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startServer } from '../server/app.js'
@@ -24,6 +24,9 @@ const CHROME_UA =
  * la ventana y nadie lo recogía: se quedaba vivo, sin ventana y sin decir nada.
  * Ahora le pasa el turno al que ya estaba.
  */
+// Sin esto Windows no enseña bien de quién son las notificaciones.
+if (process.platform === 'win32') app.setAppUserModelId('com.mateo.prolife')
+
 const primeraInstancia = app.requestSingleInstanceLock()
 if (!primeraInstancia) app.quit()
 
@@ -111,7 +114,22 @@ app.whenReady().then(async () => {
 
   let info
   try {
-    info = await startServer()
+    info = await startServer({
+      // Los avisos que decide el servidor salen como notificación de Windows.
+      // Al pulsarla se abre la app en la pantalla del aviso.
+      notificar: (aviso) => {
+        if (!Notification.isSupported()) return
+        const n = new Notification({ title: aviso.title, body: aviso.body || '', icon: path.join(__dirname, 'icon.png') })
+        n.on('click', () => {
+          if (!win) return
+          if (win.isMinimized()) win.restore()
+          win.show()
+          win.focus()
+          if (aviso.url) win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(aviso.url)}`).catch(() => {})
+        })
+        n.show()
+      },
+    })
   } catch (err) {
     // El puerto lo puede tener cogido cualquier otro programa, no solo otro
     // prolife. Callarse y no abrir la ventana no es una opción: hasta ahora el

@@ -8,6 +8,7 @@ import {
   guessTrainingType, activityNote, readiness, trainingsWithRest, rpeBySleep, bbDe,
 } from '../lib/health.js'
 import { useGarmin, GarminConnect } from '../components/Garmin.jsx'
+import { Lecturas, Correlaciones } from '../components/Insights.jsx'
 
 const FASES = [
   ['deep', 'Profundo', '#2f4b6e'],
@@ -103,10 +104,10 @@ export default function Health() {
                 {prep.motivo && <div className="dim" style={{ fontSize: 12 }}>Lo que más tira hacia abajo: {prep.motivo}</div>}
                 <div className="stack" style={{ gap: 4, marginTop: 8 }}>
                   {prep.partes.map((p) => (
-                    <div key={p.k} className="row" style={{ gap: 8, fontSize: 12 }}>
-                      <span style={{ width: 110 }}>{p.k}</span>
-                      <div className="meter" style={{ flex: 1 }}><i style={{ width: `${p.v}%`, background: p.v >= 75 ? 'var(--green)' : p.v >= 55 ? 'var(--amber)' : 'var(--accent)' }} /></div>
-                      <span className="dim mono" style={{ width: 150, textAlign: 'right', fontSize: 11 }}>{p.txt}</span>
+                    <div key={p.k} className="prep-fila">
+                      <span className="k">{p.k}</span>
+                      <div className="meter"><i style={{ width: `${p.v}%`, background: p.v >= 75 ? 'var(--green)' : p.v >= 55 ? 'var(--amber)' : 'var(--accent)' }} /></div>
+                      <span className="dim t">{p.txt}</span>
                     </div>
                   ))}
                 </div>
@@ -119,7 +120,7 @@ export default function Health() {
           <div className="card-head"><h3>Cuánto duermes y cómo entrenas</h3><span className="dim" style={{ fontSize: 11.5 }}>según la noche anterior</span></div>
           <div className="table-wrap fill">
             <table className="tabla">
-              <thead><tr><th>Noche anterior</th><th className="r">Entrenos</th><th className="r">RPE medio</th><th className="r">Con molestias</th></tr></thead>
+              <thead><tr><th>Noche</th><th className="r">Entrenos</th><th className="r">RPE</th><th className="r">Molestias</th></tr></thead>
               <tbody>
                 {porSueno.map((x) => (
                   <tr key={x.k}>
@@ -133,6 +134,12 @@ export default function Health() {
             </table>
           </div>
         </div>
+      </div>
+
+      {/* Lo que dicen tus datos y qué se relaciona con qué: lo más útil, arriba. */}
+      <div className="fila fila-2 fila-alta" style={{ '--resto': '300px' }}>
+        <Lecturas />
+        <Correlaciones limite={4} />
       </div>
 
       {/* Fila 2: las cinco cifras, cada una en su caja y con su nombre. */}

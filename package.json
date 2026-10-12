@@ -1,7 +1,7 @@
 {
   "name": "prolife",
   "private": true,
-  "version": "2.4.1",
+  "version": "2.5.0",
   "type": "module",
   "main": "electron/main.js",
   "description": "Gestor personal: universidad, RFEA, atletismo y vida. App de escritorio local.",
@@ -20,6 +20,7 @@
     "@capacitor/app": "^8.1.1",
     "@capacitor/browser": "^8.0.4",
     "@capacitor/core": "^8.5.1",
+    "@capacitor/local-notifications": "8.3.1",
     "@codemirror/lang-cpp": "^6.0.2",
     "@codemirror/lang-css": "^6.3.0",
     "@codemirror/lang-html": "^6.4.9",
@@ -39,7 +40,8 @@
     "pdfjs-dist": "^4.7.76",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.1",

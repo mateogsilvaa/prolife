@@ -18,6 +18,7 @@ import {
 import { activeInjuries, injuryAge, whereLabel, painSummary, loadOf, typeColor } from '../lib/training.js'
 import { healthStats, hasHealth, hrs, clockOf, activitiesOn, activityLine, readiness } from '../lib/health.js'
 import { FasesBar } from './Health.jsx'
+import { upcoming as proximasCompeticiones } from '../lib/competitions.js'
 
 /**
  * Hoy: lo único que hay que mirar al abrir la app.
@@ -80,7 +81,7 @@ export default function Dashboard() {
           <h2>{hi}{db.profile?.name ? `, ${db.profile.name}` : ''}.</h2>
           <p>Hoy: {resumen}.</p>
         </div>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="row solo-escritorio" style={{ gap: 6 }}>
           <button className="btn" onClick={() => setEvent(blankEvent(db))}>
             <Icon name="calendar" size={13} /> Evento
           </button>
@@ -196,6 +197,13 @@ export function dayAgenda(db, date) {
   }
   const tr = db.training.find((t) => t.date === date && t.done)
   if (tr) out.push({ kind: 'training', label: tr.type, color: AREAS.sport.color, detail: `${tr.minutes} min · RPE ${tr.rpe}`, training: tr })
+  for (const c of db.competitions || []) {
+    if (c.date !== date) continue
+    out.push({
+      kind: 'competition', label: `🏁 ${c.name || 'Competición'}`, color: AREAS.sport.color, start: c.time || '', important: true,
+      detail: [c.place, (c.results || []).map((r) => r.event).join(' · ')].filter(Boolean).join(' · ') || 'Competición', href: '#/atletismo',
+    })
+  }
   for (const vd of db.volunteerDays || []) {
     if (vd.date !== date) continue
     const ent = (db.volunteering || []).find((x) => x.id === vd.volunteerId)
@@ -284,6 +292,9 @@ function alerts(db) {
     else if (d <= 3) out.push({ tone: 'hot', icon: 'clock', text: <><b>{e.title}</b> se entrega {fmtDate(e.date)}{e.weight ? ` · ${e.weight}% de ${e.subject?.name}` : ''}</>, href: '#/tareas', w: 1 })
   }
 
+  for (const c of proximasCompeticiones(db, 10)) {
+    out.push({ tone: c.dias <= 3 ? 'hot' : 'warn', icon: 'activity', text: <>Competición <b>{c.name || ''}</b> {c.dias === 0 ? 'hoy' : c.dias === 1 ? 'mañana' : `en ${c.dias} días`}{c.dias >= 2 && c.dias <= 7 ? ': semana de bajar volumen y dormir bien' : ''}</>, href: '#/atletismo', w: c.dias <= 3 ? 0 : 2 })
+  }
   for (const e of upcomingExams(db, 10).filter((x) => !isDeliverable(x))) {
     const d = daysUntil(e.date)
     out.push({ tone: d <= 3 ? 'hot' : 'warn', icon: 'grad', text: <>Examen de <b>{e.subject?.name || e.title}</b> {d === 0 ? 'hoy' : d === 1 ? 'mañana' : `en ${d} días`}{e.weight ? ` · ${e.weight}%` : ''}</>, href: e.subject ? `#/uni/${e.subject.id}` : '#/calendario', w: d <= 3 ? 1 : 3 })

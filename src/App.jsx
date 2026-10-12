@@ -8,6 +8,8 @@ import Modal from './components/Modal.jsx'
 import Launcher from './components/Launcher.jsx'
 import TaskEditor, { newTask } from './components/TaskEditor.jsx'
 import ConectarDrive from './components/ConectarDrive.jsx'
+import { useAvisosTablet } from './components/Avisos.jsx'
+import { escucharToques } from './lib/avisosCliente.js'
 import { useStore } from './lib/store.jsx'
 import { enDrive } from './lib/api.js'
 import { raizGuardada } from './lib/drive.js'
@@ -99,6 +101,8 @@ function Shell() {
   const { db, toasts, remote, reload, dismissRemote, future, offline, back, unsaved, retryNow, queued, sendQueue } = useStore()
   const ui = useUI()
   const route = useRoute()
+  useAvisosTablet()
+  useEffect(() => { escucharToques().catch(() => {}) }, [])
   const [palette, setPalette] = useState(false)
   const [adding, setAdding] = useState(null)
   const [review, setReview] = useState(false)

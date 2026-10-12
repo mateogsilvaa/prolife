@@ -20,15 +20,20 @@ import { overdueCount } from '../lib/stats.js'
  */
 const FIJOS = [
   { to: '#/', icon: 'home', label: 'Hoy' },
-  { to: '#/tareas', icon: 'check', label: 'Tareas', count: 'tasks' },
   { to: '#/calendario', icon: 'calendar', label: 'Agenda' },
-  { to: '#/uni', icon: 'grad', label: 'Uni' },
+  { to: '#/atletismo', icon: 'dumbbell', label: 'Entreno' },
+  { to: '#/salud', icon: 'activity', label: 'Salud' },
 ]
 
+/**
+ * Desde el móvil lo que se hace es mirar el día, la agenda, apuntar el entreno
+ * al salir de la pista y ver cómo has dormido. Tareas y la uni siguen a un
+ * toque en «Más» (y las tareas vencidas encienden su punto).
+ */
 const RESTO = [
+  { to: '#/tareas', icon: 'check', label: 'Tareas', count: 'tasks' },
+  { to: '#/uni', icon: 'grad', label: 'Universidad' },
   { to: '#/trabajo', icon: 'briefcase', label: 'Trabajo' },
-  { to: '#/atletismo', icon: 'dumbbell', label: 'Atletismo' },
-  { to: '#/salud', icon: 'activity', label: 'Salud' },
   { to: '#/voluntariado', icon: 'heart', label: 'Voluntariado' },
   { to: '#/estadisticas', icon: 'chart', label: 'Estadísticas' },
   { to: '#/ajustes', icon: 'settings', label: 'Ajustes' },
@@ -57,7 +62,7 @@ export default function BottomNav({ route }) {
           </a>
         ))}
         <button className={`tabbar-item${enResto ? ' on' : ''}`} onClick={() => setMas(true)}>
-          <span className="tabbar-icono"><Icon name="layers" size={19} /></span>
+          <span className="tabbar-icono"><Icon name="layers" size={19} />{vencidas > 0 && <span className="tabbar-punto" />}</span>
           <span>Más</span>
         </button>
       </nav>
@@ -70,7 +75,8 @@ export default function BottomNav({ route }) {
                 <span className="glyph" style={{ background: 'var(--surface-2)', color: 'var(--ink-3)' }}>
                   <Icon name={it.icon} size={12} />
                 </span>
-                <span style={{ fontSize: 13.5 }}>{it.label}</span>
+                <span style={{ fontSize: 13.5, flex: 1 }}>{it.label}</span>
+                {it.count === 'tasks' && vencidas > 0 && <span className="badge hot">{vencidas}</span>}
               </a>
             ))}
             <button

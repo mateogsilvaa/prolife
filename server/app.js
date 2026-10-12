@@ -19,6 +19,8 @@ import { extraerTexto, puedeLeer } from './leer.js'
 import { comandoParaAbrir } from './abrir.js'
 import * as gcal from './gcal.js'
 import { sincronizar, AJUSTES_POR_DEFECTO } from './calsync.js'
+import webpush from 'web-push'
+import { avisosProgramados, resumenMatinal, repasoNocturno, ajustesAvisos, isoDe, horaDe } from './avisos.js'
 
 const KIND = {
   '.pdf': 'pdf',
@@ -93,7 +95,7 @@ const loopbackHost = (host) => {
 /** Vite en desarrollo sirve la interfaz desde su propio puerto. */
 const DEV_ORIGINS = new Set(['http://localhost:5199', 'http://127.0.0.1:5199'])
 
-export function createApp() {
+export function createApp(opciones = {}) {
   const app = express()
 
   /**
@@ -518,25 +520,127 @@ export function createApp() {
         throw Object.assign(new Error('Demasiadas operaciones de una vez'), { status: 413 })
       }
 
-      const db = loadDb(cfg.baseDir)
-      const skipped = []
-      let applied = 0
-      for (const op of ops) {
-        const error = applyOp(db, op)
-        if (error) skipped.push({ id: op?.id ?? null, error })
-        else applied++
-      }
-      // Aunque no entre ninguna se guarda igual: `loadDb` migra y poda, y eso
-      // merece quedarse escrito. Si el fichero es de una versión más nueva,
-      // `saveDb` lanza un 409 y no se toca nada, como en el resto de la app.
-      saveDb(cfg.baseDir, db)
-      // Igual que con el buzón: que un guardado de la ventana no se lo lleve por delante.
-      const entradas = ops.filter((op) => !skipped.some((x) => x.id === (op?.id ?? null)))
-      if (entradas.length) {
-        drenadas.push({ stamp: stamp(), ops: entradas })
-        programarGcal()
-      }
+      const { applied, skipped } = aplicarOps(ops)
       res.json({ ok: true, stamp: stamp(), applied, skipped })
+    })
+  )
+
+  /**
+   * Aplica operaciones sobre el `db.json` de ahora mismo y las apunta para que
+   * un guardado de la ventana con una base vieja no se las lleve por delante.
+   * La usan la tablet (por la red), Garmin y los avisos.
+   */
+  function aplicarOps(ops) {
+    const db = loadDb(cfg.baseDir)
+    const skipped = []
+    let applied = 0
+    for (const op of ops) {
+      const error = applyOp(db, op)
+      if (error) skipped.push({ id: op?.id ?? null, error })
+      else applied++
+    }
+    // Aunque no entre ninguna se guarda igual: `loadDb` migra y poda, y eso
+    // merece quedarse escrito. Si el fichero es de una versión más nueva,
+    // `saveDb` lanza un 409 y no se toca nada, como en el resto de la app.
+    saveDb(cfg.baseDir, db)
+    const entradas = ops.filter((op) => !skipped.some((x) => x.id === (op?.id ?? null)))
+    if (entradas.length) {
+      drenadas.push({ stamp: stamp(), ops: entradas })
+      programarGcal()
+    }
+    return { applied, skipped }
+  }
+
+  /* ------------------------------------------------------------- avisos --- */
+
+  /**
+   * Los avisos salen de aquí: cada minuto se mira qué toca (ver `avisos.js`)
+   * y se manda como notificación de Windows y como aviso push a los aparatos
+   * suscritos (el iPhone con la web en la pantalla de inicio).
+   *
+   * Las claves de los avisos push (VAPID) se crean una vez y viven en la
+   * configuración de este ordenador; la pública se deja en la base para que
+   * la web pueda suscribirse.
+   */
+  if (!cfg.vapid?.publicKey) cfg = writeConfig({ vapid: webpush.generateVAPIDKeys() })
+  webpush.setVapidDetails('mailto:avisos@prolife.local', cfg.vapid.publicKey, cfg.vapid.privateKey)
+  try {
+    const db0 = loadDb(cfg.baseDir)
+    if (db0.settings?.push?.vapidPublic !== cfg.vapid.publicKey) {
+      aplicarOps([{ kind: 'cambio', op: 'fijar', ruta: ['settings', 'push', 'vapidPublic'], valor: cfg.vapid.publicKey, id: 'vapid', at: Date.now() }])
+    }
+  } catch { /* sin base todavía: se pondrá en la siguiente vuelta */ }
+
+  async function enviarAviso(aviso, db = loadDb(cfg.baseDir)) {
+    try { opciones.notificar?.(aviso) } catch { /* la notificación de Windows no es imprescindible */ }
+    const caducadas = []
+    let enviados = 0
+    for (const sub of db.pushSubs || []) {
+      try {
+        await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, JSON.stringify(aviso), { TTL: 6 * 3600 })
+        enviados++
+      } catch (e) {
+        // 404/410: ese aparato ya no acepta avisos (desinstalaste la web, por ejemplo).
+        if (e.statusCode === 404 || e.statusCode === 410) caducadas.push(sub.id)
+      }
+    }
+    if (caducadas.length) aplicarOps(caducadas.map((id) => ({ kind: 'cambio', op: 'quitar', ruta: ['pushSubs'], ref: id, id: `push-fuera-${id}`, at: Date.now() })))
+    return enviados
+  }
+
+  const VENTANA_PROGRAMADOS = 2 * 3600_000
+  async function revisarAvisos() {
+    const db = loadDb(cfg.baseDir)
+    const aj = ajustesAvisos(db)
+    if (!aj.activos) return
+    const ahora = Date.now()
+    const hoy = isoDe(new Date())
+    const enviados = { ...(cfg.avisosEnviados || {}) }
+    const toca = avisosProgramados(db, ahora - VENTANA_PROGRAMADOS, ahora)
+
+    // El resumen de la mañana vale durante tres horas (por si abres la app más
+    // tarde); el repaso de la noche, hasta medianoche.
+    const tResumen = horaDe(hoy, aj.resumen)
+    if (ahora >= tResumen && ahora < tResumen + 3 * 3600_000) {
+      const w = db.wellness?.[hoy]
+      const cuerpo = w?.sleep?.seconds
+        ? `Anoche ${Math.floor(w.sleep.seconds / 3600)} h ${String(Math.round((w.sleep.seconds % 3600) / 60)).padStart(2, '0')}${w.bbWake != null ? ` · Body Battery ${w.bbWake}` : ''}${w.sleep.seconds < 6 * 3600 ? ' · hoy mejor no apretar' : ''}`
+        : ''
+      const r = resumenMatinal(db, hoy, { cuerpo })
+      if (r) toca.push({ ...r, key: `resumen:${hoy}`, at: tResumen })
+    }
+    const tNoche = horaDe(hoy, aj.noche)
+    if (ahora >= tNoche) {
+      const r = repasoNocturno(db, hoy)
+      if (r) toca.push({ ...r, key: `noche:${hoy}`, at: tNoche })
+    }
+
+    let nuevos = 0
+    for (const aviso of toca) {
+      if (enviados[aviso.key]) continue
+      enviados[aviso.key] = ahora
+      nuevos++
+      await enviarAviso(aviso, db)
+    }
+    if (nuevos) {
+      // Se olvidan los de hace más de cuatro días.
+      for (const [k, t] of Object.entries(enviados)) if (ahora - t > 4 * 86400_000) delete enviados[k]
+      cfg = writeConfig({ avisosEnviados: enviados })
+    }
+  }
+  const relojAvisos = setInterval(() => { revisarAvisos().catch(() => {}) }, 60_000)
+  relojAvisos.unref?.()
+  setTimeout(() => { revisarAvisos().catch(() => {}) }, 15_000).unref?.()
+
+  app.get('/api/avisos/estado', (_req, res) => {
+    const db = loadDb(cfg.baseDir)
+    res.json({ ok: true, vapidPublic: cfg.vapid.publicKey, aparatos: (db.pushSubs || []).map((x) => ({ id: x.id, device: x.device, createdAt: x.createdAt })), ajustes: ajustesAvisos(db) })
+  })
+  app.post(
+    '/api/avisos/prueba',
+    wrap(async (_req, res) => {
+      const n = await enviarAviso({ title: 'prolife', body: 'Así te llegarán los avisos.', url: '#/ajustes' })
+      res.json({ ok: true, push: n })
     })
   )
 
@@ -1085,8 +1189,8 @@ export function createApp() {
   return { app, cfg }
 }
 
-export function startServer() {
-  const { app, cfg } = createApp()
+export function startServer(opciones = {}) {
+  const { app, cfg } = createApp(opciones)
   // Por defecto solo se ve desde este ordenador. Escuchar en toda la red es una
   // decisión que se toma a mano en Ajustes, y va siempre con clave.
   const host = cfg.remote ? '0.0.0.0' : '127.0.0.1'

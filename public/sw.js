@@ -197,3 +197,42 @@ self.addEventListener('fetch', (e) => {
     })
   )
 })
+
+/* ---------------------------------------------------------------- avisos -- */
+
+/**
+ * Los avisos push. Los manda el ordenador (ver `server/app.js`), y en el iPhone
+ * solo llegan si la web está añadida a la pantalla de inicio: es la condición
+ * que pone Apple. Al tocarlos se abre la app en la pantalla del aviso.
+ */
+self.addEventListener('push', (e) => {
+  let aviso = {}
+  try { aviso = e.data ? e.data.json() : {} } catch { aviso = { title: 'prolife', body: e.data?.text() || '' } }
+  e.waitUntil(
+    self.registration.showNotification(aviso.title || 'prolife', {
+      body: aviso.body || '',
+      icon: `${RAIZ}icon-192.png`,
+      badge: `${RAIZ}icon-192.png`,
+      tag: aviso.key || undefined,
+      data: { url: aviso.url || '#/' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close()
+  const destino = `${RAIZ}${e.notification.data?.url || '#/'}`
+  e.waitUntil(
+    (async () => {
+      const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      for (const w of ventanas) {
+        if ('focus' in w) {
+          await w.focus()
+          try { await w.navigate(destino) } catch { /* algunas no dejan: se queda donde estaba */ }
+          return
+        }
+      }
+      await self.clients.openWindow(destino)
+    })()
+  )
+})

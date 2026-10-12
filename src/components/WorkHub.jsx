@@ -19,12 +19,26 @@ import { today, iso, addDays, startOfWeek, parseIso, fmtDate, daysUntil, DAYS, d
  * Todo en una pantalla, cada bloque con su propio scroll, para no tener que
  * bajar para ver lo segundo.
  */
+const FOCO_KEY = 'prolife.trabajo.foco'
+const leerFoco = () => { try { return localStorage.getItem(FOCO_KEY) || 'todo' } catch { return 'todo' } }
+
+/**
+ * Qué se está mirando: todo, lo general (sin proyecto) o un proyecto. Las
+ * metas, las ideas, las notas y el diario son de un proyecto —o generales— y
+ * se filtran por esto; lo nuevo que apuntas cae en el proyecto que miras.
+ */
+export const encaja = (foco, x) => foco === 'todo' || (foco === 'general' ? !x.projectId : x.projectId === foco)
+export const abrirProyectoEnTrabajo = (id) => { try { localStorage.setItem(FOCO_KEY, id) } catch { /* da igual */ } location.hash = '#/trabajo' }
+
 export default function WorkHub() {
   const { db } = useStore()
   const [proyecto, setProyecto] = useState(null)
-  const log = db.workLog || []
-  const metas = db.workGoals || []
-  const notas = db.workNotes || []
+  const [foco, setFocoRaw] = useState(leerFoco)
+  const setFoco = (f) => { setFocoRaw(f); try { localStorage.setItem(FOCO_KEY, f) } catch { /* da igual */ } }
+  const actual = db.projects.find((p) => p.id === foco)
+  const log = (db.workLog || []).filter((x) => encaja(foco, x))
+  const metas = (db.workGoals || []).filter((x) => encaja(foco, x))
+  const notas = (db.workNotes || []).filter((x) => encaja(foco, x))
 
   const lunes = startOfWeek(new Date())
   const semana = Array.from({ length: 7 }, (_, i) => iso(addDays(lunes, i)))
@@ -40,15 +54,29 @@ export default function WorkHub() {
   })()
   const activas = metas.filter((m) => m.status !== 'hecha')
   const proxima = activas.filter((m) => m.due).sort((a, b) => a.due.localeCompare(b.due))[0]
-  const horasSemana = db.sessions.filter((x) => x.area === 'work' && x.date >= semana[0]).reduce((a, x) => a + x.seconds, 0)
+  const horasSemana = db.sessions.filter((x) => x.area === 'work' && x.date >= semana[0] && (foco === 'todo' || (foco === 'general' ? !x.refId : x.refId === foco))).reduce((a, x) => a + x.seconds, 0)
 
   return (
     <>
       <div className="page-head">
         <div>
           <div className="eyebrow">Trabajo{db.settings.orgName ? ` · ${db.settings.orgName}` : ''}</div>
-          <h2>Trabajo</h2>
+          <h2>{actual ? actual.name : foco === 'general' ? 'Trabajo · general' : 'Trabajo'}</h2>
+          {actual?.org && <p>{actual.org}</p>}
         </div>
+        {actual && <a className="btn" href={`#/trabajo/${actual.id}`}><Icon name="chevronR" size={13} /> Ficha del proyecto</a>}
+      </div>
+
+      {/* El proyecto que miras: todo lo de abajo es de él. */}
+      <div className="row wrap" style={{ gap: 6, marginBottom: 16 }}>
+        <button className={`chip${foco === 'todo' ? ' on' : ''}`} onClick={() => setFoco('todo')}>Todo</button>
+        <button className={`chip${foco === 'general' ? ' on' : ''}`} onClick={() => setFoco('general')}>General</button>
+        {db.projects.map((p) => (
+          <button key={p.id} className={`chip${foco === p.id ? ' on' : ''}`} onClick={() => setFoco(p.id)}>
+            <span className="dot" style={{ background: p.color }} />{p.name}
+          </button>
+        ))}
+        <button className="chip" onClick={() => setProyecto(emptyProject(db.projects.length, db.settings.orgName))}><Icon name="plus" size={10} /> Proyecto</button>
       </div>
 
       <div className="fila fila-4">
@@ -72,21 +100,21 @@ export default function WorkHub() {
         <div className="stat">
           <div className="eyebrow">Ideas por mirar</div>
           <div className="value num">{notas.filter((n) => n.kind === 'idea' && !n.done).length}</div>
-          <div className="delta dim">{notas.filter((n) => n.kind === 'nota').length} notas guardadas</div>
+          <div className="delta dim">{((k) => `${k} ${k === 1 ? 'nota guardada' : 'notas guardadas'}`)(notas.filter((n) => n.kind === 'nota').length)}</div>
         </div>
         <div className="stat">
           <div className="eyebrow">Horas esta semana</div>
           <div className="value num">{(horasSemana / 3600).toFixed(1)}<span>h</span></div>
-          <div className="delta dim">{log.filter((e) => e.date >= semana[0]).length} entradas en el diario</div>
+          <div className="delta dim">{((k) => `${k} ${k === 1 ? 'entrada' : 'entradas'} en el diario`)(log.filter((e) => e.date >= semana[0]).length)}</div>
         </div>
       </div>
 
       <div className="fila fila-3 fila-alta" style={{ '--resto': '420px' }}>
-        <Diario />
-        <Metas />
-        <Notas />
+        <Diario foco={foco} />
+        <Metas foco={foco} />
+        <Notas foco={foco} />
       </div>
-      <Proyectos onEdit={setProyecto} />
+      {foco === 'todo' && <Proyectos onEdit={setProyecto} onElegir={setFoco} />}
 
       {proyecto && <ProjectForm project={proyecto} onClose={() => setProyecto(null)} />}
     </>
@@ -95,14 +123,16 @@ export default function WorkHub() {
 
 /* ------------------------------------------------------------------ diario */
 
-function Diario() {
+function Diario({ foco }) {
   const { db, update } = useStore()
   const [texto, setTexto] = useState('')
   const [fecha, setFecha] = useState(today())
-  const [proj, setProj] = useState('')
+  const [elegido, setProj] = useState('')
+  // Mirando un proyecto, lo que apuntas es de ese proyecto.
+  const proj = foco !== 'todo' && foco !== 'general' ? foco : foco === 'general' ? '' : elegido
   const [editando, setEditando] = useState(null)
   const [q, setQ] = useState('')
-  const log = db.workLog || []
+  const log = (db.workLog || []).filter((x) => encaja(foco, x))
 
   const porDia = useMemo(() => {
     const term = q.trim().toLowerCase()
@@ -135,7 +165,7 @@ function Diario() {
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) guardar() }} />
       <div className="row wrap" style={{ gap: 6, marginTop: 6 }}>
         <input className="input" type="date" style={{ maxWidth: 150, padding: '4px 8px' }} value={fecha} onChange={(e) => setFecha(e.target.value || today())} />
-        {db.projects.length > 0 && (
+        {db.projects.length > 0 && foco === 'todo' && (
           <select className="select" style={{ maxWidth: 170, padding: '4px 8px' }} value={proj} onChange={(e) => setProj(e.target.value)}>
             <option value="">Sin proyecto</option>
             {db.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -157,7 +187,7 @@ function Diario() {
                 const p = nombreProyecto(e.projectId)
                 return (
                   <div key={e.id} className="row" style={{ gap: 6, alignItems: 'flex-start' }}>
-                    {p && <span className="dot" style={{ background: p.color, marginTop: 6 }} title={p.name} />}
+                    {p && foco === 'todo' && <span className="dot" style={{ background: p.color, marginTop: 6 }} title={p.name} />}
                     <div style={{ flex: 1, fontSize: 13, whiteSpace: 'pre-wrap', cursor: 'pointer' }} onClick={() => setEditando(e)}>{e.text}</div>
                   </div>
                 )
@@ -191,13 +221,14 @@ function Diario() {
 
 /* ------------------------------------------------------------------- metas */
 
-const nuevaMeta = () => ({ id: uid('wg'), title: '', why: '', due: '', status: 'activa', milestones: [], createdAt: Date.now() })
+const nuevaMeta = (projectId = null) => ({ id: uid('wg'), title: '', why: '', due: '', status: 'activa', milestones: [], projectId, createdAt: Date.now() })
+const proyectoDe = (foco) => (foco !== 'todo' && foco !== 'general' ? foco : null)
 
-function Metas() {
+function Metas({ foco }) {
   const { db, update } = useStore()
   const [meta, setMeta] = useState(null)
   const [verHechas, setVerHechas] = useState(false)
-  const metas = (db.workGoals || []).filter((m) => verHechas || m.status !== 'hecha')
+  const metas = (db.workGoals || []).filter((m) => encaja(foco, m) && (verHechas || m.status !== 'hecha'))
     .sort((a, b) => (a.status === 'hecha') - (b.status === 'hecha') || (a.due || 'z').localeCompare(b.due || 'z'))
 
   const toggleHito = (m, hid) => update((d) => {
@@ -214,7 +245,7 @@ function Metas() {
           {(db.workGoals || []).some((m) => m.status === 'hecha') && (
             <button className={`chip tiny${verHechas ? ' on' : ''}`} onClick={() => setVerHechas(!verHechas)}>hechas</button>
           )}
-          <button className="btn sm" onClick={() => setMeta(nuevaMeta())}><Icon name="plus" size={12} /></button>
+          <button className="btn sm" onClick={() => setMeta(nuevaMeta(proyectoDe(foco)))}><Icon name="plus" size={12} /></button>
         </div>
       </div>
       {metas.length ? (
@@ -227,6 +258,7 @@ function Metas() {
             return (
               <div key={m.id} style={{ opacity: m.status === 'hecha' ? 0.55 : 1 }}>
                 <div className="row" style={{ gap: 6, cursor: 'pointer' }} onClick={() => setMeta(m)}>
+                  {foco === 'todo' && m.projectId && <span className="dot" style={{ background: db.projects.find((p) => p.id === m.projectId)?.color }} />}
                   <strong style={{ fontSize: 13, flex: 1 }}>{m.title}</strong>
                   {dias !== null && m.status !== 'hecha' && (
                     <span className="badge" style={{ color: dias < 0 ? 'var(--accent)' : dias <= 7 ? 'var(--amber)' : '' }}>
@@ -297,6 +329,15 @@ function MetaForm({ meta, onClose }) {
             </div>
           </div>
         </div>
+        {db.projects.length > 0 && (
+          <div className="field">
+            <label>Proyecto</label>
+            <select className="select" value={m.projectId || ''} onChange={(e) => setM({ ...m, projectId: e.target.value || null })}>
+              <option value="">General (sin proyecto)</option>
+              {db.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
         <div className="field"><label>Por qué importa</label><textarea className="textarea" value={m.why || ''} onChange={(e) => setM({ ...m, why: e.target.value })} /></div>
         <div className="field">
           <label>Pasos</label>
@@ -319,14 +360,14 @@ function MetaForm({ meta, onClose }) {
 
 /* ---------------------------------------------------------- ideas y notas */
 
-function Notas() {
+function Notas({ foco }) {
   const { db, update, toast } = useStore()
   const [tipo, setTipo] = useState('idea')
   const [texto, setTexto] = useState('')
   const [filtro, setFiltro] = useState('todo')
   const [abierta, setAbierta] = useState(null)
   const notas = (db.workNotes || [])
-    .filter((n) => filtro === 'todo' || n.kind === filtro)
+    .filter((n) => encaja(foco, n) && (filtro === 'todo' || n.kind === filtro))
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.done ? 1 : 0) - (b.done ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0))
 
   const guardar = () => {
@@ -335,14 +376,14 @@ function Notas() {
     const [titulo, ...resto] = t.split('\n')
     update((d) => {
       d.workNotes ||= []
-      d.workNotes.push({ id: uid('wn'), kind: tipo, title: titulo.slice(0, 120), body: resto.join('\n').trim(), pinned: false, done: false, createdAt: Date.now() })
+      d.workNotes.push({ id: uid('wn'), kind: tipo, title: titulo.slice(0, 120), body: resto.join('\n').trim(), pinned: false, done: false, projectId: proyectoDe(foco), createdAt: Date.now() })
     })
     setTexto('')
   }
 
   const aTarea = (n) => {
     update((d) => {
-      d.tasks.unshift({ ...newTask({ area: 'work', title: n.title }), notes: n.body || '' })
+      d.tasks.unshift({ ...newTask({ area: 'work', title: n.title, refId: n.projectId || null }), notes: n.body || '' })
       const x = d.workNotes.find((y) => y.id === n.id)
       if (x) x.done = true
     })
@@ -376,7 +417,9 @@ function Notas() {
             </div>
             {n.body && <div className="dim" style={{ fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 60, overflow: 'hidden' }}>{n.body}</div>}
             <div className="row" style={{ gap: 6 }}>
-              <span className="dim" style={{ fontSize: 10.5 }}>{n.kind} · {fmtDate(iso(new Date(n.createdAt)))}</span>
+              <span className="dim" style={{ fontSize: 10.5 }}>
+                {n.kind}{foco === 'todo' && n.projectId ? ` · ${db.projects.find((p) => p.id === n.projectId)?.name || ''}` : ''} · {fmtDate(iso(new Date(n.createdAt)))}
+              </span>
               <div className="spacer" />
               {n.kind === 'idea' && !n.done && <button className="btn sm ghost" onClick={() => aTarea(n)}>→ tarea</button>}
             </div>
@@ -396,6 +439,12 @@ function Notas() {
         }>
           <div className="stack">
             <input className="input" value={abierta.title} onChange={(e) => setAbierta({ ...abierta, title: e.target.value })} />
+            {db.projects.length > 0 && (
+              <select className="select" value={abierta.projectId || ''} onChange={(e) => setAbierta({ ...abierta, projectId: e.target.value || null })}>
+                <option value="">General (sin proyecto)</option>
+                {db.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
             <textarea className="textarea" style={{ minHeight: 160 }} value={abierta.body || ''} onChange={(e) => setAbierta({ ...abierta, body: e.target.value })} />
           </div>
         </Modal>
@@ -406,7 +455,7 @@ function Notas() {
 
 /* -------------------------------------------------------------- proyectos */
 
-function Proyectos({ onEdit }) {
+function Proyectos({ onEdit, onElegir }) {
   const { db } = useStore()
   return (
     <div className="card" style={{ marginTop: 16 }}>
@@ -417,15 +466,19 @@ function Proyectos({ onEdit }) {
             const st = projectStats(db, p.id)
             const ultima = [...(db.workLog || [])].filter((e) => e.projectId === p.id).sort((a, b) => b.date.localeCompare(a.date))[0]
             return (
-              <a key={p.id} className="note-card" href={`#/trabajo/${p.id}`} style={{ textDecoration: 'none', borderLeft: `3px solid ${p.color}` }}>
+              <button key={p.id} className="note-card" onClick={() => onElegir(p.id)} style={{ textAlign: 'left', borderLeft: `3px solid ${p.color}` }}>
                 <strong style={{ fontSize: 13 }}>{p.name}</strong>
                 <span className="dim" style={{ fontSize: 11.5 }}>{p.org || '—'}</span>
                 <div className="row" style={{ gap: 12, fontSize: 11.5 }}>
                   <span className="mono">{dur(st.week)} esta semana</span>
                   {st.open.length > 0 && <span className="badge hot">{st.open.length} pendientes</span>}
                 </div>
-                <span className="dim" style={{ fontSize: 11 }}>{ultima ? `último apunte: ${fmtDate(ultima.date)}` : 'sin apuntes en el diario'}</span>
-              </a>
+                <span className="dim" style={{ fontSize: 11 }}>
+                  {(db.workGoals || []).filter((m) => m.projectId === p.id && m.status !== 'hecha').length} metas ·{' '}
+                  {(db.workNotes || []).filter((n) => n.projectId === p.id && !n.done).length} ideas y notas ·{' '}
+                  {ultima ? `diario: ${fmtDate(ultima.date)}` : 'sin diario'}
+                </span>
+              </button>
             )
           })}
         </div>

@@ -200,6 +200,15 @@ export default function Calendar() {
         if (tr.date === date && tr.done)
           out.push({ kind: 'training', label: tr.type || 'Entreno', color: AREAS.sport.color, detail: `RPE ${tr.rpe || '—'}`, href: '#/atletismo' })
 
+      for (const c of db.competitions || []) {
+        if (c.date !== date) continue
+        out.push({
+          kind: 'competition', label: `🏁 ${c.name || 'Competición'}`, color: AREAS.sport.color, start: c.time || '', important: true,
+          detail: [c.place, (c.results || []).map((r) => `${r.event}${r.mark ? ' ' + r.mark : ''}`).join(' · ')].filter(Boolean).join(' · ') || 'Competición',
+          href: '#/atletismo',
+        })
+      }
+
       for (const vd of db.volunteerDays || []) {
         if (vd.date !== date) continue
         const ent = (db.volunteering || []).find((x) => x.id === vd.volunteerId)

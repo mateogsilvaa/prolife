@@ -171,6 +171,27 @@ export function eventosDeseados(db, { ajustes = {}, desde = null, hasta = null }
         ...(e.start
           ? { start: hora(e.date, e.start, tz), end: hora(e.date, e.end || masMinutos(e.start, 90), tz) }
           : { start: diaEntero(e.date), end: diaSiguiente(e.date) }),
+        // Aviso en el móvil: el día antes (a las 20:00 si es de día entero) y,
+        // si tiene hora, dos horas antes. No depende de que el ordenador esté
+        // encendido: lo da Google Calendar.
+        reminders: { useDefault: false, overrides: e.start ? [{ method: 'popup', minutes: 1440 }, { method: 'popup', minutes: 120 }] : [{ method: 'popup', minutes: 240 }] },
+      })
+    }
+  }
+
+  // Competiciones, con aviso el día antes: llega al móvil aunque el ordenador esté apagado.
+  if (on.competitions !== false) {
+    for (const c of db.competitions || []) {
+      if (!c.date || !enVentana(c.date)) continue
+      const pruebas = (c.results || []).map((r) => `${r.event}${r.mark ? ' ' + r.mark : ''}`).join(' · ')
+      pon(`competicion:${c.id}`, {
+        summary: `🏁 ${c.name || 'Competición'}`,
+        location: c.place || '',
+        description: [pruebas, c.notes].filter(Boolean).join('\n'),
+        ...(c.time
+          ? { start: hora(c.date, c.time, tz), end: hora(c.date, masMinutos(c.time, 180), tz) }
+          : { start: diaEntero(c.date), end: diaSiguiente(c.date) }),
+        reminders: { useDefault: false, overrides: c.time ? [{ method: 'popup', minutes: 1440 }, { method: 'popup', minutes: 120 }] : [{ method: 'popup', minutes: 240 }] },
       })
     }
   }
@@ -249,7 +270,7 @@ function rruleDe(ev, tz) {
 /* ------------------------------------------------------------ reconciliar */
 
 /** Los campos que gobierna prolife. Lo demás del evento es de Google y no se mira. */
-const NUESTROS = ['summary', 'location', 'description', 'start', 'end', 'recurrence']
+const NUESTROS = ['summary', 'location', 'description', 'start', 'end', 'recurrence', 'reminders']
 
 const igual = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 
@@ -260,6 +281,12 @@ const distinto = (quiero, hay) =>
       // el desfase a la hora: se comparan las dos piezas que sí son nuestras.
       return (quiero[k]?.date || '') !== (hay[k]?.date || '') ||
         (quiero[k]?.dateTime || '').slice(0, 19) !== (hay[k]?.dateTime || '').slice(0, 19)
+    }
+    // Los avisos solo se miran en los eventos a los que prolife les pone avisos.
+    if (k === 'reminders') {
+      if (!quiero.reminders) return false
+      const norm = (r) => JSON.stringify({ d: !!r?.useDefault, o: [...(r?.overrides || [])].map((x) => `${x.method}:${x.minutes}`).sort() })
+      return norm(quiero.reminders) !== norm(hay.reminders)
     }
     return !igual(quiero[k] || (k === 'recurrence' ? undefined : ''), hay[k] || (k === 'recurrence' ? undefined : ''))
   })

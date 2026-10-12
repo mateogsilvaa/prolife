@@ -237,7 +237,7 @@ horaria: las clases del horario, los exámenes, los eventos y las entregas caen 
 ## En el móvil
 
 Por debajo de 640 px la columna lateral desaparece y manda una **barra de abajo** con cinco
-sitios —Hoy, Tareas, Agenda, Uni y *Más*—, que es donde llega el pulgar. Cinco y no diez:
+sitios —Hoy, Agenda, Entreno, Salud y *Más* (Tareas, Uni, Trabajo…)—, que es donde llega el pulgar. Cinco y no diez:
 cabe el nombre, el dedo acierta, y lo que no cabe está a un toque. En el mes del calendario
 los títulos no caben, así que las cosas se quedan en rayas del color de cada una: dicen
 «aquí hay algo» sin mentir sobre qué. Las franjas del sistema —la barra de gestos del
@@ -365,6 +365,56 @@ la conexión vive en el ordenador. Los datos viajan en el `db.json` como todo lo
 la tablet y la web también los ven. Si Garmin cambia su web interna, esto puede romperse: la
 app lo dice en Ajustes y en Salud en vez de quedarse callada.
 
+## Avisos
+
+**Ajustes → Avisos** decide qué te avisa la app y a qué hora (resumen de la mañana, repaso de
+la noche). Qué avisa:
+- **Entregas evaluables** la tarde antes, **exámenes** 3 días y 1 día antes, **competiciones**
+  2 días y 1 día antes (con lo que conviene hacer: bajar volumen, dormir pronto).
+- **Resumen de la mañana**: clases, entregas, exámenes, tareas que vencen, eventos y cómo
+  dormiste.
+- **Repaso de la noche**, solo si falta algo: asistencia sin marcar, el entreno de un día que
+  sueles entrenar, el diario de trabajo si lo usas.
+
+Dónde llegan:
+- **Ordenador**: notificaciones de Windows mientras prolife está abierta (también minimizada).
+- **iPhone**: avisos push en la web **añadida a la pantalla de inicio** (Apple no los deja de
+  otra forma). Se activan desde Ajustes → Avisos en el propio iPhone. Los manda el ordenador,
+  así que llegan cuando prolife está abierta allí.
+- **Siempre, aunque el ordenador esté apagado**: los exámenes, entregas y competiciones van a
+  Google Calendar con su recordatorio, y te avisa la app de calendario del móvil.
+- **Tablet**: la app programa sus propios avisos para los próximos días; suenan aunque esté
+  cerrada y el ordenador apagado.
+
+## Lo que dicen tus datos
+
+En **Salud** y en **Atletismo → Estadísticas**:
+- **Lecturas**: tu sueño frente a lo que necesita un deportista (8 h o más) y la deuda de la
+  semana, la regularidad del horario, el sueño profundo y REM, el pulso en reposo frente a tu
+  base, la recarga de la Body Battery, el estrés, la carga aguda frente a la crónica (ACWR) y
+  si tu CMJ está bajando.
+- **Qué se relaciona con qué**: cruza sueño, pulso, Body Battery, VFC, estrés, pasos, hora de
+  acostarte, carga, RPE, CMJ y molestias (también al día siguiente: la carga de hoy contra el
+  sueño de esta noche). De cada relación dice la fuerza, la diferencia real entre tus mejores
+  y peores días («durmiendo 7 h 30 o más tu CMJ es 42,4 cm; con 6 h 30 o menos, 39,8») y qué
+  hacer con ello. Con menos de 8 días con los dos datos no afirma nada.
+- **ECOs** (Equivalente de Carga Objetiva, Cejuela y Esteve-Lanao, 2011): la carga de cada
+  sesión por el tiempo en cada zona de pulso que da Garmin (×1, 2, 3, 4, 6), comparada con tu
+  RPE × minutos. Dice si tu percepción es fiable y qué sesiones te costaron más de lo que
+  fueron. Es una aproximación: el modelo original usa zonas por umbrales propios.
+- De Garmin se lee además la **VFC** de la noche (si el reloj la da), la SpO2 y el tiempo en
+  cada zona de pulso de cada actividad.
+
+## Competiciones y marcas
+
+**Atletismo → Competiciones**: apuntas las que vienen (salen en el calendario, en Hoy, en los
+avisos y en Google Calendar) y, después, las pruebas con su marca, viento, ronda y puesto. De
+ahí salen la **mejor marca personal (MMP)** y **de la temporada (MMT)** de cada prueba —las
+marcas con viento de más de +2,0 se enseñan pero no cuentan—, su progresión, y **qué influye
+en tus marcas**: cada marca como % de tu MMP cruzada con el sueño de la noche anterior, la
+Body Battery, la carga de la semana y tu último CMJ. Al guardar una competición con marcas se
+apunta también como entreno de competición.
+
 ## Atletismo
 
 Registro por sesión: si fuiste o no, tipo de entreno, duración, **RPE 1–10**, **CMJ pre y
@@ -396,11 +446,13 @@ el pulso en reposo y la Body Battery del reloj. Seis pestañas:
 
 ## Trabajo
 
-Una pantalla con todo a la vista:
-- **Diario**: dos líneas de qué hiciste cada día, con su proyecto si quieres. Se busca.
-- **Metas**: qué quieres conseguir, partido en pasos, con fecha y porcentaje.
-- **Ideas y notas**: lo que se te ocurre; una idea pasa a ser tarea con un toque.
-- **Proyectos**, en pequeño, con la última entrada del diario de cada uno.
+Arriba eliges qué miras: **todo**, lo **general** o **un proyecto**. Las metas, las ideas y
+notas y el diario son de un proyecto (o generales) y se filtran por eso; lo que apuntas cae en
+el proyecto que estás mirando. Desde la ficha de un proyecto, «Metas, ideas y diario» te lleva
+directo a lo suyo.
+- **Diario**: dos líneas de qué hiciste cada día. Se busca.
+- **Metas**: qué quieres conseguir, con pasos, fecha y porcentaje.
+- **Ideas y notas**: una idea pasa a ser tarea del proyecto con un toque.
 
 ## Atajos
 

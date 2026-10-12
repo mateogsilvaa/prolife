@@ -8,7 +8,7 @@ const num = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Nu
 const limpio = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined))
 
 /** Un registro pequeño por día. */
-export function resumirDia(fecha, resumen, sueno) {
+export function resumirDia(fecha, resumen, sueno, hrv) {
   const r = resumen || {}
   const dto = sueno?.dailySleepDTO || {}
   const s = limpio({
@@ -23,6 +23,11 @@ export function resumirDia(fecha, resumen, sueno) {
     restless: num(sueno?.restlessMomentsCount),
     respiration: num(dto.averageRespirationValue),
     stress: num(dto.avgSleepStress),
+    spo2: num(dto.averageSpO2Value),
+    spo2Min: num(dto.lowestSpO2Value),
+    bbGain: num(sueno?.bodyBatteryChange),
+    restingHr: num(sueno?.restingHeartRate),
+    need: num(dto.sleepNeed?.actual ?? dto.sleepNeed),
   })
   const dia = limpio({
     date: fecha,
@@ -47,12 +52,18 @@ export function resumirDia(fecha, resumen, sueno) {
       ? (num(r.moderateIntensityMinutes) || 0) + 2 * (num(r.vigorousIntensityMinutes) || 0)
       : null,
   })
+  // VFC nocturna: la media de anoche y el estado que calcula Garmin, si el reloj lo da.
+  const h = hrv?.hrvSummary
+  if (h) {
+    const v = limpio({ hrv: num(h.lastNightAvg), hrvWeek: num(h.weeklyAvg), hrvStatus: h.status || null })
+    Object.assign(dia, v)
+  }
   if (Object.keys(s).length) dia.sleep = s
   // Un día sin nada medido (el reloj no se llevó) no merece registro.
   return Object.keys(dia).length > 1 ? dia : null
 }
 
-export function resumirActividad(a) {
+export function resumirActividad(a, zonas) {
   const fecha = String(a.startTimeLocal || '').slice(0, 10)
   if (!a.activityId || !fecha) return null
   return limpio({
@@ -73,6 +84,10 @@ export function resumirActividad(a) {
     aerobicTE: num(a.aerobicTrainingEffect),
     anaerobicTE: num(a.anaerobicTrainingEffect),
     laps: num(a.lapCount),
+    // Segundos en cada zona de pulso de Garmin (1 a 5), para la carga ECOs.
+    zones: Array.isArray(zonas) && zonas.length
+      ? [1, 2, 3, 4, 5].map((k) => num(zonas.find((z) => Number(z.zoneNumber) === k)?.secsInZone) || 0)
+      : null,
   })
 }
 
@@ -81,7 +96,7 @@ export function resumirActividad(a) {
  * Lo que corre DENTRO de la página de Garmin: mismas cookies, mismo origen y
  * misma huella de navegador que si lo pidieras tú desde allí.
  */
-export const SCRIPT = (fechas) => `(async (fechas) => {
+export const SCRIPT = (fechas, conZonas = []) => `(async (fechas, conZonas) => {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content
   if (!csrf) return { sinSesion: true }
   const g = async (p) => {
@@ -99,15 +114,25 @@ export const SCRIPT = (fechas) => `(async (fechas) => {
     const dias = {}
     const fallos = []
     for (const d of fechas) {
-      const [resumen, sueno] = await Promise.all([
+      const [resumen, sueno, hrv] = await Promise.all([
         g('usersummary-service/usersummary/daily/' + encodeURIComponent(nombre) + '?calendarDate=' + d).catch((e) => { fallos.push(d + ' resumen: ' + e.message); return null }),
         g('sleep-service/sleep/dailySleepData?date=' + d + '&nonSleepBufferMinutes=60').catch((e) => { fallos.push(d + ' sueño: ' + e.message); return null }),
+        // No todos los relojes dan VFC (HRV): si no hay, se queda en null sin ruido.
+        g('hrv-service/hrv/' + d).catch(() => null),
       ])
-      dias[d] = { resumen, sueno }
+      dias[d] = { resumen, sueno, hrv }
     }
     const actividades = await g('activitylist-service/activities/search/activities?limit=60&start=0').catch((e) => { fallos.push('actividades: ' + e.message); return [] })
-    return { nombre, dias, actividades, fallos }
+    // El tiempo en cada zona de pulso: es lo que hace falta para la carga
+    // objetiva (ECOs). Solo de las que aún no lo tienen guardado.
+    const zonas = {}
+    for (const a of (actividades || []).slice(0, 60)) {
+      if (!a || !a.activityId || conZonas.includes(String(a.activityId))) continue
+      const z = await g('activity-service/activity/' + a.activityId + '/hrTimeInZones').catch(() => null)
+      if (Array.isArray(z)) zonas[a.activityId] = z
+    }
+    return { nombre, dias, actividades, zonas, fallos }
   } catch (e) {
     return String(e.message).startsWith('SIN_SESION') ? { sinSesion: true } : { error: e.message }
   }
-})(${JSON.stringify(fechas)})`
+})(${JSON.stringify(fechas)}, ${JSON.stringify(conZonas)})`

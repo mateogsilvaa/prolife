@@ -153,6 +153,7 @@ const apiServidor = {
   gcalLogout: () => req('/api/gcal/logout', { method: 'POST', body: {} }),
   gcalMostrar: (ids) => req('/api/gcal/mostrar', { method: 'POST', body: { ids } }),
   gcalSync: () => req('/api/gcal/sync', { method: 'POST', body: {} }),
+  avisoPrueba: () => req('/api/avisos/prueba', { method: 'POST', body: {} }),
   gcalEvents: (from, to) => req(`/api/gcal/events?from=${from}&to=${to}`),
 
   openUrl: (url) => req('/api/open', { method: 'POST', body: { url } }),

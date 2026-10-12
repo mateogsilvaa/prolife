@@ -11,6 +11,9 @@ import {
 } from '../lib/training.js'
 import { activitiesOn, activityLine, activityNote, wellnessOn, healthStats, hrs, bbDe } from '../lib/health.js'
 import { GymLog, TrackLog, GymTab, TrackTab } from '../components/Gym.jsx'
+import { CompetitionsTab } from '../components/Competitions.jsx'
+import { Correlaciones, EcosCard } from '../components/Insights.jsx'
+import { trainingEcos, zonesFor } from '../lib/ecos.js'
 import { isGymType, isTrackType, gymVolume, repsSummary, gymPRs, trackPRs, fmtTime, paceOf } from '../lib/gym.js'
 
 const blank = (date, types) => ({
@@ -24,6 +27,7 @@ const TABS = [
   ['gimnasio', 'Gimnasio'],
   ['series', 'Series'],
   ['estadisticas', 'Estadísticas'],
+  ['competiciones', 'Competiciones'],
   ['molestias', 'Molestias y lesiones'],
 ]
 
@@ -100,6 +104,7 @@ export default function Training() {
       {tab === 'gimnasio' && <GymTab onOpenTraining={setForm} />}
       {tab === 'series' && <TrackTab onOpenTraining={setForm} />}
       {tab === 'estadisticas' && <TrainingStatsPanel />}
+      {tab === 'competiciones' && <CompetitionsTab />}
       {tab === 'molestias' && <PainTab onOpenTraining={(id) => setForm(db.training.find((t) => t.id === id))} />}
 
       {form && <TrainingForm entry={form} onClose={() => setForm(null)} />}
@@ -451,6 +456,12 @@ export function TrainingDetail({ t }) {
         </div>
       )}
       {(t.reps || []).length > 0 && <div className="mono" style={{ fontSize: 12 }}>{repsSummary(t.reps)}</div>}
+      {zonesFor(db, t) && (
+        <div style={{ fontSize: 12 }}>
+          <span className="dim">Reloj:</span> {zonesFor(db, t).map((m, i) => `Z${i + 1} ${Math.round(m)}′`).join(' · ')}
+          {trainingEcos(db, t) != null && <> · <b>ECOs {trainingEcos(db, t)}</b></>}
+        </div>
+      )}
       {t.notes && <p style={{ margin: 0, fontSize: 13, whiteSpace: 'pre-wrap' }}>{t.notes}</p>}
       {(t.pains || []).map((p, i) => (
         <div key={i} className="notice" style={{ borderColor: PAIN_COLOR(p.level) }}>
@@ -515,6 +526,11 @@ export function TrainingStatsPanel() {
             {st.daysSinceLast !== null ? ` · último ${st.daysSinceLast === 0 ? 'hoy' : `hace ${st.daysSinceLast} d`}` : ''}
           </div>
         </div>
+      </div>
+
+      <div className="fila fila-21">
+        <Correlaciones />
+        <EcosCard />
       </div>
 
       <MarcasPersonales />
@@ -999,7 +1015,7 @@ export function TrainingForm({ entry, onClose }) {
                 </span>
               </div>
 
-              <div className="grid-3">
+              <div className="grid-3 compacto">
                 <div className="field"><label>Duración (min)</label><input className="input" type="number" min="0" step="5" value={t.minutes} onChange={(e) => set({ minutes: Number(e.target.value) })} /></div>
                 <div className="field"><label>CMJ pre (cm)</label><input className="input" type="number" step="0.1" value={t.cmjPre} placeholder="—" onChange={(e) => set({ cmjPre: e.target.value })} /></div>
                 <div className="field"><label>CMJ post (cm)</label><input className="input" type="number" step="0.1" value={t.cmjPost} placeholder="—" onChange={(e) => set({ cmjPost: e.target.value })} /></div>

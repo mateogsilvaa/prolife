@@ -98,6 +98,14 @@ export const EMPTY_DB = {
   workGoals: [],
   workNotes: [],
   /**
+   * Competiciones: fecha, sitio, pista cubierta o aire libre y, dentro, cada
+   * prueba con su marca. De aquí salen las mejores marcas personales y de la
+   * temporada.
+   */
+  competitions: [],
+  /** Avisos push: a qué aparatos (el iPhone, por ejemplo) se pueden mandar. */
+  pushSubs: [],
+  /**
    * Voluntariado: las entidades con las que colaboras y, aparte, cada jornada
    * que has hecho. Van separados porque lo que hay que justificar son las
    * jornadas —fecha, horas y fotos de ese día—, no la entidad.
@@ -150,7 +158,7 @@ function migrate(raw) {
     db.categories.push({ id: 'cat-volunteer', name: 'Voluntariado', color: '#7a5c9e', area: 'volunteer' })
   }
 
-  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'injuries', 'garminActivities', 'routines', 'workLog', 'workGoals', 'workNotes', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
+  for (const key of ['subjects', 'projects', 'tasks', 'exams', 'attendance', 'sessions', 'events', 'training', 'injuries', 'garminActivities', 'routines', 'workLog', 'workGoals', 'workNotes', 'competitions', 'pushSubs', 'volunteering', 'volunteerDays', 'terms', 'holidays']) {
     if (!Array.isArray(db[key])) db[key] = []
   }
 

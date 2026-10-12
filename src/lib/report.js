@@ -7,6 +7,8 @@ import { trainingStats, painSummary, loadOf, allPains, whereLabel, kindLabel, in
 import { kindLabel as examKind } from '../components/ExamEditor.jsx'
 import { healthStats, hasHealth, hrs, clockOf, activityLine } from './health.js'
 import { gymPRs, trackPRs, fmtTime, paceOf, gymVolume, repsSummary } from './gym.js'
+import { allResults, personalBests, fmtMark } from './competitions.js'
+import { correlations, readings } from './correlations.js'
 
 /**
  * El informe completo: todo lo que hay en la base, legible por una persona.
@@ -324,6 +326,31 @@ export function buildReport(db) {
       ]), { empty: 'Vacío.' })}
       <h3>Ideas y notas</h3>
       ${table(['Tipo', 'Título', 'Texto', 'Estado'], (db.workNotes || []).map((n) => [esc(n.kind), esc(n.title), esc(n.body).replace(/\n/g, '<br>'), n.done ? 'hecha' : '']), { empty: 'Ninguna.' })}
+    `)
+  }
+
+  /* ------------------------------------------------ competiciones y datos */
+  const pbsComp = personalBests(db)
+  if ((db.competitions || []).length) {
+    sec('competiciones', 'Competiciones y marcas', `
+      <h3>Mejores marcas</h3>
+      ${table(['Prueba', 'MMP', 'Fecha', 'MMT', 'Veces'], pbsComp.map((p) => [
+        esc(p.event), fmtMark(p.event, p.pb?.value), p.pb ? fecha(p.pb.date) : '—', fmtMark(p.event, p.sb?.value), p.n,
+      ]), { empty: 'Sin marcas.' })}
+      <h3>Todas las competiciones</h3>
+      ${table(['Fecha', 'Competición', 'Sitio', 'Pruebas'], [...db.competitions].sort((a, b) => b.date.localeCompare(a.date)).map((c) => [
+        fecha(c.date), esc(c.name) + (c.indoor ? ' (pista cubierta)' : ''), esc(c.place),
+        (c.results || []).map((r) => `${esc(r.event)} ${esc(r.mark || '')}${r.wind ? ` (${esc(r.wind)})` : ''}${r.position ? ` · ${esc(r.position)}º` : ''}`).join('<br>'),
+      ]))}
+    `)
+  }
+  const lect = readings(db)
+  const corr = correlations(db).filter((c) => c.r != null)
+  if (lect.length || corr.length) {
+    sec('datos', 'Lo que dicen tus datos', `
+      ${table(['', 'Lectura', 'Detalle'], lect.map((l) => [{ bien: '✓', ojo: '!', mal: '✗' }[l.tono], esc(l.titulo), esc(l.texto)]), { empty: 'Sin lecturas.' })}
+      <h3>Relaciones entre tus datos</h3>
+      ${table(['Relación', 'Fuerza', 'Días', 'Qué se ve', 'Qué significa'], corr.map((c) => [esc(c.que), esc(c.fuerza), c.n, esc(c.frase), esc(c.implica || '')]), { empty: 'Faltan datos.' })}
     `)
   }
 

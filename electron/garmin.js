@@ -240,22 +240,30 @@ async function hacerSincronizacion(puerto) {
         : 'La sesión de Garmin ha caducado: vuelve a entrar desde Ajustes.', true)
     }
 
-    const datos = await w.webContents.executeJavaScript(SCRIPT(fechas))
+    // Las actividades que ya tienen sus zonas guardadas no se vuelven a pedir.
+    let conZonas = []
+    try {
+      const actual = await fetch(`http://127.0.0.1:${puerto}/api/db`).then((r) => r.json())
+      conZonas = (actual.garminActivities || []).filter((a) => a.zones).map((a) => String(a.id))
+    } catch { /* sin eso se piden todas, solo tarda algo más */ }
+    const datos = await w.webContents.executeJavaScript(SCRIPT(fechas, conZonas))
     if (datos?.sinSesion) return fallo('La sesión de Garmin ha caducado: vuelve a entrar desde Ajustes.', true)
     if (datos?.error) return fallo('Garmin ha contestado: ' + datos.error)
 
     const at = Date.now()
     const ops = []
     let n = 0
-    for (const [fecha, { resumen, sueno }] of Object.entries(datos.dias || {})) {
-      const dia = resumirDia(fecha, resumen, sueno)
+    for (const [fecha, { resumen, sueno, hrv }] of Object.entries(datos.dias || {})) {
+      const dia = resumirDia(fecha, resumen, sueno, hrv)
       if (!dia) continue
       n++
       ops.push({ kind: 'cambio', op: 'fijar', ruta: ['wellness', fecha], valor: dia, id: `garmin-${fecha}`, at })
     }
     let actividades = 0
     for (const a of datos.actividades || []) {
-      const x = resumirActividad(a)
+      const previa = conZonas.includes(String(a.activityId))
+      const x = resumirActividad(a, (datos.zonas || {})[a.activityId])
+      if (x && !x.zones && previa) continue // ya está guardada con sus zonas: no pisarla sin ellas
       if (!x) continue
       actividades++
       ops.push({ kind: 'cambio', op: 'poner', ruta: ['garminActivities'], valor: x, id: `garmin-act-${x.id}`, at })

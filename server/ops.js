@@ -420,6 +420,7 @@ const NOMBRES = {
   workNotes: ['Nota', 'la nota'],
   competitions: ['Competición', 'la competición'],
   pushSubs: ['Avisos', 'el aparato'],
+  coach: ['Entrenador', 'los datos del entrenador'],
   attendance: ['Asistencia', 'la asistencia'],
   categories: ['Categoría', 'la categoría'],
   volunteering: ['Voluntariado', 'la entidad'],

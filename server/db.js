@@ -106,6 +106,13 @@ export const EMPTY_DB = {
   /** Avisos push: a qué aparatos (el iPhone, por ejemplo) se pueden mandar. */
   pushSubs: [],
   /**
+   * Lo que tiene de ti la app de tu entrenador (RB Team) además de los
+   * formularios: sesiones asignadas, bloques, tests, marcas… Lo escribe el
+   * servidor (`rbteam.js`); los formularios, series y molestias entran en
+   * `training`.
+   */
+  coach: {},
+  /**
    * Voluntariado: las entidades con las que colaboras y, aparte, cada jornada
    * que has hecho. Van separados porque lo que hay que justificar son las
    * jornadas —fecha, horas y fotos de ese día—, no la entidad.

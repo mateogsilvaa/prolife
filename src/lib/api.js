@@ -154,6 +154,9 @@ const apiServidor = {
   gcalMostrar: (ids) => req('/api/gcal/mostrar', { method: 'POST', body: { ids } }),
   gcalSync: () => req('/api/gcal/sync', { method: 'POST', body: {} }),
   avisoPrueba: () => req('/api/avisos/prueba', { method: 'POST', body: {} }),
+  rbEstado: () => req('/api/rbteam/estado'),
+  rbToken: (token) => req('/api/rbteam/token', { method: 'PUT', body: { token } }),
+  rbSync: () => req('/api/rbteam/sincronizar', { method: 'POST', body: {} }),
   gcalEvents: (from, to) => req(`/api/gcal/events?from=${from}&to=${to}`),
 
   openUrl: (url) => req('/api/open', { method: 'POST', body: { url } }),

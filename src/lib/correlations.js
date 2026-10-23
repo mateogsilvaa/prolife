@@ -45,6 +45,11 @@ export function dailyTable(db, dias = 150) {
     const total = s?.seconds || null
     const bb = bbDe(w)
     const cmj = ts.find((t) => n(t.cmjPre))
+    // Las caritas del formulario de RB Team (1 a 5), si ese día lo rellenaste.
+    const cara = (k) => {
+      const v = ts.map((t) => n(t.rb?.[k])).filter((x) => x != null)
+      return v.length ? media(v) : null
+    }
     const dolor = Math.max(0, ...(porFecha.get(date) || []).flatMap((t) => (t.pains || []).map((p) => Number(p.level) || 0)))
     filas.push({
       date,
@@ -63,6 +68,9 @@ export function dailyTable(db, dias = 150) {
       cmjPre: cmj ? n(cmj.cmjPre) : null,
       cmjCaida: cmj && n(cmj.cmjPost) ? ((n(cmj.cmjPost) - n(cmj.cmjPre)) / n(cmj.cmjPre)) * 100 : null,
       dolor: (porFecha.get(date) || []).length ? dolor : null,
+      energia: cara('energia'),
+      ganas: cara('ganas'),
+      sensaciones: cara('sensaciones'),
     })
   }
   // Carga aguda (7 días) y crónica (28 días): la relación entre las dos (ACWR)
@@ -120,6 +128,9 @@ export const VAR = {
   cmjPre: { label: 'tu CMJ previo', fmt: (v) => `${coma(v)} cm`, con: (v, a) => `con el CMJ en ${coma(v)} cm ${mas(a)}` },
   cmjCaida: { label: 'la caída del CMJ tras el entreno', fmt: (v) => `${coma(v)} %`, con: (v, a) => `con el CMJ variando ${coma(v)} % ${mas(a)}` },
   dolor: { label: 'las molestias (0–10)', fmt: (v) => coma(v), con: (v, a) => `con molestias de ${coma(v)} ${mas(a)}` },
+  energia: { label: 'la energía al llegar (1–5)', fmt: (v) => coma(v), con: (v, a) => `llegando con energía ${coma(v)} ${mas(a)}` },
+  ganas: { label: 'las ganas de entrenar (1–5)', fmt: (v) => coma(v), con: (v, a) => `con ganas ${coma(v)} ${mas(a)}` },
+  sensaciones: { label: 'las sensaciones al acabar (1–5)', fmt: (v) => coma(v), con: (v, a) => `con sensaciones ${coma(v)} ${mas(a)}` },
 }
 
 /**
@@ -145,6 +156,11 @@ const HIPOTESIS = [
   { x: 'estres', y: 'sueno', lag: 1, bueno: 1, que: 'El estrés del día y cómo duermes', implica: 'Los días de más estrés duermes distinto: en épocas de exámenes, cuida la noche.' },
   { x: 'pasos', y: 'sueno', lag: 1, bueno: 1, que: 'Los pasos del día y cómo duermes', implica: 'Moverte durante el día cambia tu sueño.' },
   { x: 'acostarse', y: 'bb', lag: 1, bueno: 1, que: 'La hora de acostarte y la Body Battery al despertar', implica: 'Acostarte tarde te deja con menos batería al día siguiente.' },
+  { x: 'sueno', y: 'energia', lag: 0, soloEntreno: true, bueno: 1, que: 'Lo que duermes y la energía con la que llegas a entrenar', implica: 'Llegas con más energía cuando duermes más: lo que apuntas en el formulario de tu entrenador lo confirma el reloj.' },
+  { x: 'bb', y: 'energia', lag: 0, soloEntreno: true, bueno: 1, que: 'Body Battery al despertar y tu energía al llegar', implica: 'Si las dos van juntas, la Body Battery de la mañana te dice ya cómo vas a llegar al entreno.' },
+  { x: 'energia', y: 'cmjPre', lag: 0, bueno: 1, que: 'La energía al llegar y tu CMJ', implica: 'Cómo te notas al llegar se ve en el salto: es un buen termómetro para decidir si apretar.' },
+  { x: 'carga7', y: 'ganas', lag: 0, soloEntreno: true, bueno: 1, que: 'La carga de la semana y las ganas de entrenar', implica: 'Si las ganas caen cuando acumulas carga, es una señal temprana de fatiga: antes que el CMJ o el pulso.' },
+  { x: 'rpe', y: 'sensaciones', lag: 0, soloEntreno: true, bueno: 1, que: 'Lo duro del entreno y las sensaciones con las que acabas', implica: 'Ver si las sesiones duras te dejan buenas o malas sensaciones ayuda a ajustar la intensidad.' },
   { x: 'acostarse', y: 'sueno', lag: 1, bueno: 1, que: 'La hora de acostarte y lo que duermes', implica: 'Cuanto más tarde te acuestas, menos duermes: tu hora de levantarte no se mueve.' },
 ]
 

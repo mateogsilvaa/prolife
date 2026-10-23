@@ -9,6 +9,7 @@ import { today } from '../lib/date.js'
 import { buildReport, reportName } from '../lib/report.js'
 import { GarminSettings } from '../components/Garmin.jsx'
 import { AvisosSettings } from '../components/Avisos.jsx'
+import { EntrenadorSettings } from '../components/Entrenador.jsx'
 
 /**
  * Los archivos que se han guardado en ESTE aparato para poder abrirlos sin el
@@ -178,6 +179,7 @@ export default function Settings() {
 
         <AvisosSettings />
         <GarminSettings />
+        <EntrenadorSettings />
 
         <div className="card">
           <div className="card-head"><h3>Atletismo</h3></div>

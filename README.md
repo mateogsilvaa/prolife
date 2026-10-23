@@ -415,6 +415,27 @@ en tus marcas**: cada marca como % de tu MMP cruzada con el sueño de la noche a
 Body Battery, la carga de la semana y tu último CMJ. Al guardar una competición con marcas se
 apunta también como entreno de competición.
 
+## Lo del entrenador (RB Team)
+
+**Ajustes → Entrenador**: pegas el token que te da tu entrenador desde su app (RB Team) y el
+ordenador trae tus datos al arrancar y cada hora, sin rellenar nada dos veces:
+
+- cada **formulario** pasa a ser el entreno de ese día: RPE, minutos, CMJ antes y después, y
+  la energía, las ganas y las sensaciones (1 a 5). Si ese día ya lo habías apuntado aquí, se
+  completa ese entreno (el tipo se empareja con los tuyos por parecido) en vez de duplicarlo;
+- los **tiempos de las series** entran como si los hubieras escrito; si ya tenías los tuyos,
+  mandan los tuyos;
+- las **molestias** van al entreno del día con su EVA (0–10), salvo que ya hubieras apuntado
+  esa zona ese día;
+- las **sesiones que te pone** salen en Hoy, en el calendario y en la semana de Atletismo, y el
+  **bloque** en el que estás («Preparación general · semana 3 de 4»);
+- lo demás (tests, marcas, gimnasio…) se guarda tal cual llega, en `db.coach`.
+
+Un registro que ya entró solo se vuelve a escribir si cambia en su app: lo que corrijas aquí
+no se pisa. El token se queda en la configuración de este ordenador (no viaja a Drive) y el
+entrenador puede retirarlo cuando quiera. La energía, las ganas y las sensaciones entran
+también en «Lo que dicen tus datos».
+
 ## Atletismo
 
 Registro por sesión: si fuiste o no, tipo de entreno, duración, **RPE 1–10**, **CMJ pre y

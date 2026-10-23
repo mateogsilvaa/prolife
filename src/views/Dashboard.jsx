@@ -15,6 +15,7 @@ import {
   weekSummary, weekProgress, classesOn, streak, upcomingExams, pendingDeliverables,
   attendanceBudget, classOccurrences, termWindow, isDeliverable,
 } from '../lib/stats.js'
+import { planDel, planTexto } from '../lib/coach.js'
 import { activeInjuries, injuryAge, whereLabel, painSummary, loadOf, typeColor } from '../lib/training.js'
 import { healthStats, hasHealth, hrs, clockOf, activitiesOn, activityLine, readiness } from '../lib/health.js'
 import { FasesBar } from './Health.jsx'
@@ -197,6 +198,7 @@ export function dayAgenda(db, date) {
   }
   const tr = db.training.find((t) => t.date === date && t.done)
   if (tr) out.push({ kind: 'training', label: tr.type, color: AREAS.sport.color, detail: `${tr.minutes} min · RPE ${tr.rpe}`, training: tr })
+  else for (const p of planDel(db, date)) out.push({ kind: 'coach', label: `📋 ${planTexto(p)}`, color: AREAS.sport.color, detail: 'Lo que te ha puesto el entrenador', href: '#/atletismo' })
   for (const c of db.competitions || []) {
     if (c.date !== date) continue
     out.push({

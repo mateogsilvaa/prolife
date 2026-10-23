@@ -6,6 +6,7 @@ import TaskEditor, { newTask } from '../components/TaskEditor.jsx'
 import ExamEditor, { newExam, kindLabel } from '../components/ExamEditor.jsx'
 import { useStore, uid, AREAS, PALETTE } from '../lib/store.jsx'
 import { api } from '../lib/api.js'
+import { planDel, planTexto } from '../lib/coach.js'
 import { slotActiveOn, holidayOn, classesBetween } from '../lib/stats.js'
 import { expandEvents, FREQ, repeatLabel } from '../lib/recurrence.js'
 import { startDrag } from '../lib/drag.js'
@@ -199,6 +200,10 @@ export default function Calendar() {
       for (const tr of db.training)
         if (tr.date === date && tr.done)
           out.push({ kind: 'training', label: tr.type || 'Entreno', color: AREAS.sport.color, detail: `RPE ${tr.rpe || '—'}`, href: '#/atletismo' })
+
+      if (!db.training.some((tr) => tr.date === date && tr.done)) {
+        for (const p of planDel(db, date)) out.push({ kind: 'coach', label: `📋 ${planTexto(p)}`, color: AREAS.sport.color, detail: 'Del entrenador', href: '#/atletismo' })
+      }
 
       for (const c of db.competitions || []) {
         if (c.date !== date) continue

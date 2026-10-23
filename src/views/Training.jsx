@@ -14,6 +14,7 @@ import { GymLog, TrackLog, GymTab, TrackTab } from '../components/Gym.jsx'
 import { CompetitionsTab } from '../components/Competitions.jsx'
 import { Correlaciones, EcosCard } from '../components/Insights.jsx'
 import { trainingEcos, zonesFor } from '../lib/ecos.js'
+import { cara, planDel, planTexto, bloqueActual, bloqueTexto } from '../lib/coach.js'
 import { isGymType, isTrackType, gymVolume, repsSummary, gymPRs, trackPRs, fmtTime, paceOf } from '../lib/gym.js'
 
 const blank = (date, types) => ({
@@ -158,6 +159,7 @@ function WeekTab({ byDate, onOpen, openDate }) {
     : null
 
   const maxLoad = Math.max(...history.map((h) => h.load), 1)
+  const bloque = bloqueActual(db)
 
   return (
     <>
@@ -194,19 +196,20 @@ function WeekTab({ byDate, onOpen, openDate }) {
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="card-head">
           <h3>Esta semana</h3>
-          <span className="dim" style={{ fontSize: 12 }}>Toca un día para registrar o editar</span>
+          <span className="dim" style={{ fontSize: 12 }}>{bloque ? <b>{bloqueTexto(bloque)}</b> : 'Toca un día para registrar o editar'}</span>
         </div>
         <div className="train-grid">
           {weekDays.map((d, i) => {
             const t = byDate.get(d)
             const future = d > today()
             const pain = (t?.pains || []).length > 0
+            const plan = planDel(db, d)
             return (
               <button
                 key={d}
                 className={`train-day${t?.done ? ' done' : ''}${future ? ' rest' : ''}`}
                 onClick={() => openDate(d)}
-                title={t ? `${t.type} · RPE ${t.rpe} · ${t.minutes} min` : 'Sin registrar'}
+                title={[t ? `${t.type} · RPE ${t.rpe} · ${t.minutes} min` : 'Sin registrar', ...plan.map((p) => `Entrenador: ${planTexto(p)}`)].join(' · ')}
               >
                 <span className="eyebrow">{DAYS[i]}</span>
                 <span className="n">{parseIso(d).getDate()}</span>
@@ -218,6 +221,7 @@ function WeekTab({ byDate, onOpen, openDate }) {
                 ) : t ? (
                   <span style={{ fontSize: 9 }}>descanso</span>
                 ) : null}
+                {!t?.done && plan.length > 0 && <span style={{ fontSize: 9 }}>📋 {plan.flatMap((p) => (p.bloques || []).map((b) => b.notacion)).join(' + ') || 'plan'}</span>}
                 {pain && <span style={{ fontSize: 9, color: 'var(--accent)' }}>⚠ molestia</span>}
               </button>
             )
@@ -456,6 +460,18 @@ export function TrainingDetail({ t }) {
         </div>
       )}
       {(t.reps || []).length > 0 && <div className="mono" style={{ fontSize: 12 }}>{repsSummary(t.reps)}</div>}
+      {t.rb && (t.rb.energia || t.rb.ganas || t.rb.sensaciones) && (
+        <div style={{ fontSize: 12 }}>
+          <span className="dim">Formulario RB Team:</span>{' '}
+          {[
+            t.rb.energia && `energía ${cara('energia', t.rb.energia).toLowerCase()}`,
+            t.rb.ganas && `ganas ${cara('ganas', t.rb.ganas).toLowerCase()}`,
+            t.rb.sensaciones && `sensaciones ${cara('sensaciones', t.rb.sensaciones).toLowerCase()}`,
+            t.rb.series,
+            t.rb.zapatillas,
+          ].filter(Boolean).join(' · ')}
+        </div>
+      )}
       {zonesFor(db, t) && (
         <div style={{ fontSize: 12 }}>
           <span className="dim">Reloj:</span> {zonesFor(db, t).map((m, i) => `Z${i + 1} ${Math.round(m)}′`).join(' · ')}

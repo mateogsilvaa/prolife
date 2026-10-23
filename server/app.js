@@ -20,6 +20,7 @@ import { comandoParaAbrir } from './abrir.js'
 import * as gcal from './gcal.js'
 import { sincronizar, AJUSTES_POR_DEFECTO } from './calsync.js'
 import webpush from 'web-push'
+import * as rbteam from './rbteam.js'
 import { avisosProgramados, resumenMatinal, repasoNocturno, ajustesAvisos, isoDe, horaDe } from './avisos.js'
 
 const KIND = {
@@ -306,10 +307,11 @@ export function createApp(opciones = {}) {
    * pero la app sigue abriendo contra la de la variable.
    */
   const publicCfg = (req, from = cfg) => {
-    const { token, ...rest } = from
+    const { token, rbToken, ...rest } = from
     return {
       ...rest,
       hasToken: !!token,
+      rbConectado: !!rbToken,
       sync: syncInfo(from.baseDir),
       here: isLocal(req),
       envDir: process.env.PROLIFE_DIR ? path.resolve(process.env.PROLIFE_DIR) : null,
@@ -550,6 +552,64 @@ export function createApp(opciones = {}) {
     }
     return { applied, skipped }
   }
+
+  /* -------------------------------------------------------- entrenador --- */
+
+  /**
+   * Lo que apuntas en la app de tu entrenador (RB Team) entra solo: cada hora
+   * y al rato de arrancar. El token vive en la configuración de este
+   * ordenador, nunca en la base (que viaja por Drive). Ver `rbteam.js`.
+   */
+  let rbEnCurso = null
+  function sincronizarRb() {
+    if (!cfg.rbToken) return Promise.resolve({ ok: false, error: 'Falta el token del entrenador' })
+    if (rbEnCurso) return rbEnCurso
+    rbEnCurso = (async () => {
+      try {
+        const datos = await rbteam.traer(cfg.rbToken)
+        const { ops, resumen } = rbteam.fusionar(loadDb(cfg.baseDir), datos)
+        if (ops.length) aplicarOps(ops)
+        const ultima = { at: Date.now(), ...resumen, recuentos: datos.recuentos || {} }
+        cfg = writeConfig({ rbUltima: ultima, rbError: '' })
+        return { ok: true, ...ultima }
+      } catch (e) {
+        cfg = writeConfig({ rbError: e.message, rbErrorAt: Date.now() })
+        return { ok: false, error: e.message }
+      } finally {
+        rbEnCurso = null
+      }
+    })()
+    return rbEnCurso
+  }
+  const relojRb = setInterval(() => { sincronizarRb().catch(() => {}) }, 3600_000)
+  relojRb.unref?.()
+  setTimeout(() => { if (cfg.rbToken) sincronizarRb().catch(() => {}) }, 25_000).unref?.()
+
+  const estadoRb = () => ({ conectado: !!cfg.rbToken, ultima: cfg.rbUltima || null, error: cfg.rbError || '' })
+  app.get('/api/rbteam/estado', (_req, res) => res.json(estadoRb()))
+  app.put(
+    '/api/rbteam/token',
+    wrap(async (req, res) => {
+      onlyHere(req)
+      const token = String(req.body?.token || '').trim()
+      if (!token) {
+        cfg = writeConfig({ rbToken: '', rbUltima: null, rbError: '' })
+        return res.json({ ok: true, ...estadoRb() })
+      }
+      // Se prueba antes de guardarlo: un token mal copiado se dice ahora, no
+      // dentro de una hora. Con 400 y no con el 401 de RB Team, que la
+      // interfaz tomaría por «falta la clave de la tablet».
+      try {
+        await rbteam.traer(token)
+      } catch (e) {
+        throw Object.assign(new Error(e.message), { status: 400 })
+      }
+      cfg = writeConfig({ rbToken: token, rbError: '' })
+      const r = await sincronizarRb()
+      res.json({ ...r, ...estadoRb() })
+    })
+  )
+  app.post('/api/rbteam/sincronizar', wrap(async (_req, res) => res.json({ ...(await sincronizarRb()), ...estadoRb() })))
 
   /* ------------------------------------------------------------- avisos --- */
 
